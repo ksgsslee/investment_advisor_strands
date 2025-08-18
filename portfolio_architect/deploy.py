@@ -13,7 +13,7 @@ from bedrock_agentcore_starter_toolkit import Runtime
 # 설정
 class Config:
     AGENT_NAME = "portfolio_architect"
-    ENTRYPOINT_FILE = "agent.py"
+    ENTRYPOINT_FILE = "portfolio_architect.py"
     REQUIREMENTS_FILE = "requirements.txt"
     MAX_DEPLOY_MINUTES = 10
     STATUS_CHECK_INTERVAL = 30

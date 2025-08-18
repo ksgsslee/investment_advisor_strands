@@ -1,6 +1,7 @@
 # Strands Agents
 strands-agents
 strands-agents-tools
+bedrock-agentcore-starter-toolkit
 
 # Data & Finance
 yfinance

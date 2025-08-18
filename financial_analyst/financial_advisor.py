@@ -118,7 +118,7 @@ async def financial_advisor(payload):
     """AgentCore Runtime 엔트리포인트"""
     user_input = payload.get("input_data")
     async for chunk in analyst.analyze_async(user_input):
-        yield chunk
+        pass
 
 if __name__ == "__main__":
     app.run()

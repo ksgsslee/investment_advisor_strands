@@ -31,49 +31,39 @@ def invoke_financial_advisor(input_data):
             qualifier="DEFAULT",
             payload=json.dumps({"input_data": input_data})
         )
-        
-        # 스트리밍 응답 처리
-        if "text/event-stream" in response.get("contentType", ""):
-            analysis_data = None
-            reflection_result = None
+
+        # 프로그레스 바 설정
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        # 응답 처리
+        analysis_data = None
+        reflection_result = None
+
+        for event in response["response"]:
+            data = json.loads(event.decode("utf-8"))
             
-            # 프로그레스 바 설정
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            # 분석 결과 처리
+            if "risk_profile" in data:
+                analysis_data = data
+                progress_bar.progress(0.5)
+                status_text.text("분석 완료, 검증 중...")
             
-            content = []
-            for i, line in enumerate(response["response"].iter_lines(chunk_size=1)):
-                if line:
-                    line = line.decode("utf-8")
-                    if line.startswith("data: "):
-                        data = line[6:]  # Remove "data: " prefix
-                        try:
-                            chunk_data = json.loads(data)
-                            if not analysis_data and "risk_profile" in str(chunk_data):
-                                analysis_data = chunk_data
-                                progress_bar.progress(0.5)
-                                status_text.text("분석 완료, 검증 중...")
-                            elif "reflection_result" in str(chunk_data):
-                                reflection_result = chunk_data
-                                progress_bar.progress(1.0)
-                                status_text.text("검증 완료")
-                        except json.JSONDecodeError:
-                            content.append(data)
-            
-            progress_bar.empty()
-            status_text.empty()
-            
-            return {
-                "analysis": analysis_data,
-                "reflection_result": reflection_result if reflection_result else " ".join(content),
-                "status": "success"
-            }
-        else:
-            return {
-                "status": "error",
-                "error": "스트리밍 응답이 아닙니다."
-            }
-            
+            # 검증 결과 처리
+            elif isinstance(data, str) and ("yes" in data.lower() or "no" in data.lower()):
+                reflection_result = data
+                progress_bar.progress(1.0)
+                status_text.text("검증 완료")
+
+        progress_bar.empty()
+        status_text.empty()
+
+        return {
+            "analysis": analysis_data,
+            "reflection_result": reflection_result,
+            "status": "success"
+        }
+
     except Exception as e:
         return {
             "status": "error",

@@ -245,3 +245,8 @@ reports/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# AgentCore Runtime
+.bedrock_agentcore.yaml
+Dockerfile
+.dockerignore

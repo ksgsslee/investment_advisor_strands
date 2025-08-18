@@ -1,3 +1,8 @@
+"""
+app.py
+Financial Advisor Streamlit 애플리케이션 (AgentCore Runtime 버전)
+"""
+
 import streamlit as st
 import json
 import os
@@ -23,6 +28,29 @@ except Exception as e:
 # AgentCore 클라이언트 설정
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 
+def display_financial_analysis(trace_container, analysis_data):
+    """재무 분석 결과 표시"""
+    sub_col1, sub_col2 = trace_container.columns(2)
+    
+    with sub_col1:
+        st.metric("**위험 성향**", analysis_data["risk_profile"])
+        st.markdown("**위험 성향 분석**")
+        st.info(analysis_data["risk_profile_reason"])
+    
+    with sub_col2:
+        st.metric("**필요 수익률**", f"{analysis_data['required_annual_return_rate']}%")
+        st.markdown("**수익률 분석**")
+        st.info(analysis_data["return_rate_reason"])
+
+def display_reflection_result(trace_container, reflection_content):
+    """Reflection 분석 결과 표시"""
+    if reflection_content.strip().lower().startswith("yes"):
+        trace_container.success("재무분석 검토 성공")
+    else:
+        trace_container.error("재무분석 검토 실패")
+        if "\n" in reflection_content:
+            trace_container.markdown(reflection_content.split("\n")[1])
+
 def invoke_financial_advisor(input_data):
     """AgentCore Runtime 호출"""
     try:
@@ -32,41 +60,40 @@ def invoke_financial_advisor(input_data):
             payload=json.dumps({"input_data": input_data})
         )
 
-        # 프로그레스 바 설정
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        # 응답을 표시할 컨테이너 생성
+        placeholder = st.container()
+        placeholder.markdown("🤖 **Financial Analyst (AgentCore)**")
 
-        # 응답 처리
+        # SSE 형식 응답 처리
         analysis_data = None
         reflection_result = None
 
-        # SSE 형식 응답 처리
         for line in response["response"].iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
                     event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
-                    print(event_data)
+                    
                     if event_data["type"] == "data":
                         if "analysis_data" in event_data:
                             analysis_data = json.loads(event_data["analysis_data"])
-                            progress_bar.progress(0.5)
-                            status_text.text("분석 완료, 검증 중...")
+                            # 분석 결과 즉시 표시
+                            placeholder.subheader("📌 재무 분석")
+                            display_financial_analysis(placeholder, analysis_data)
+                            
                         elif "reflection_result" in event_data:
                             reflection_result = event_data["reflection_result"]
-                            progress_bar.progress(1.0)
-                            status_text.text("검증 완료")
+                            # Reflection 결과 즉시 표시
+                            placeholder.subheader("")
+                            placeholder.subheader("📌 재무 분석 검토 (Reflection)")
+                            display_reflection_result(placeholder, reflection_result)
+                            
                     elif event_data["type"] == "error":
-                        progress_bar.empty()
-                        status_text.empty()
                         return {
                             "status": "error",
                             "error": event_data.get("error", "Unknown error")
                         }
                 except json.JSONDecodeError:
                     continue
-
-        progress_bar.empty()
-        status_text.empty()
 
         return {
             "analysis": analysis_data,
@@ -79,7 +106,7 @@ def invoke_financial_advisor(input_data):
             "status": "error",
             "error": str(e)
         }
-        
+
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
     st.markdown("""
@@ -160,7 +187,6 @@ if submitted:
     }
     
     st.divider()
-    placeholder = st.container()
     
     with st.spinner("AI 분석 중..."):
         try:
@@ -169,40 +195,6 @@ if submitted:
             if result['status'] == 'error':
                 st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
                 st.stop()
-            
-            # 분석 결과 표시
-            placeholder.markdown("🤖 **Financial Analyst (AgentCore)**")
-            placeholder.subheader("📌 재무 분석")
-            
-            analysis_data = result['analysis']
-            
-            # 결과 표시
-            sub_col1, sub_col2 = placeholder.columns(2)
-            with sub_col1:
-                st.metric("**위험 성향**", analysis_data["risk_profile"])
-                st.markdown("**위험 성향 분석**")
-                st.info(analysis_data["risk_profile_reason"])
-            
-            with sub_col2:
-                st.metric("**필요 수익률**", f"{analysis_data['required_annual_return_rate']}%")
-                st.markdown("**수익률 분석**")
-                st.info(analysis_data["return_rate_reason"])
-            
-            # Reflection 결과 표시
-            placeholder.subheader("")
-            placeholder.subheader("📌 재무 분석 검토 (Reflection)")
-            
-            reflection_content = result['reflection_result']
-            if isinstance(reflection_content, str):
-                if reflection_content.strip().lower().startswith("yes"):
-                    placeholder.success("재무분석 검토 성공")
-                else:
-                    placeholder.error("재무분석 검토 실패")
-                    lines = reflection_content.strip().split('\n')
-                    if len(lines) > 1:
-                        placeholder.markdown(lines[1])
-            else:
-                placeholder.json(reflection_content)
             
             # 상세 정보
             with st.expander("상세 분석 데이터 보기"):
@@ -215,12 +207,3 @@ if submitted:
         except Exception as e:
             st.error(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")
             
-            with st.expander("디버깅 정보"):
-                st.markdown("""
-                ### 🔧 문제 해결 방법
-                1. AgentCore Runtime이 정상적으로 배포되었는지 확인하세요
-                2. deployment_info.json 파일이 존재하는지 확인하세요
-                3. AWS 자격 증명이 올바르게 설정되어 있는지 확인하세요
-                4. 인터넷 연결을 확인하세요
-                """)
-                st.code(f"Error Details: {str(e)}")

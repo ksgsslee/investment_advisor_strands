@@ -106,9 +106,6 @@ class PortfolioArchitect:
             # 재무 분석 결과를 프롬프트로 구성
             analysis_str = json.dumps(financial_analysis, ensure_ascii=False, indent=2)
             
-            # 🎯 tool input 완료 추적을 위한 상태 관리
-            completed_tool_uses = {}  # {tool_use_id: complete_tool_use_data}
-            
             # 🎯 실시간 스트리밍으로 에이전트 실행
             async for event in self.architect_agent.stream_async(analysis_str):
                 # 텍스트 데이터 스트리밍
@@ -119,15 +116,6 @@ class PortfolioArchitect:
                         "complete": event.get("complete", False)
                     }
                 
-                # 🎯 tool input이 스트리밍 중일 때는 저장만 하고 yield하지 않음
-                if "current_tool_use" in event:
-                    tool_use = event["current_tool_use"]
-                    if tool_use and tool_use.get("name"):
-                        tool_use_id = tool_use.get("toolUseId")
-                        if tool_use_id:
-                            # 현재 tool_use 상태를 저장 (아직 yield하지 않음)
-                            completed_tool_uses[tool_use_id] = tool_use
-                
                 # 🎯 메시지가 추가될 때 완료된 tool_use 정보를 yield
                 if "message" in event:
                     message = event["message"]
@@ -137,15 +125,13 @@ class PortfolioArchitect:
                         for content in message.get("content", []):
                             if "toolUse" in content:
                                 tool_use = content["toolUse"]
-                                tool_use_id = tool_use.get("toolUseId")
-                                if tool_use_id and tool_use_id in completed_tool_uses:
-                                    # 🎯 이제 완료된 tool_use를 yield
-                                    yield {
-                                        "type": "tool_use_completed",
-                                        "tool_name": tool_use.get("name"),
-                                        "tool_use_id": tool_use_id,
-                                        "tool_input": tool_use.get("input", {})
-                                    }
+                                # 🎯 완료된 tool_use를 바로 yield
+                                yield {
+                                    "type": "tool_use",
+                                    "tool_name": tool_use.get("name"),
+                                    "tool_use_id": tool_use.get("toolUseId"),
+                                    "tool_input": tool_use.get("input", {})
+                                }
                     
                     # user 메시지에서 tool_result 처리
                     if message.get("role") == "user":
@@ -153,17 +139,17 @@ class PortfolioArchitect:
                             if "toolResult" in content:
                                 tool_result = content["toolResult"]
                                 yield {
-                                    "type": "tool_result_realtime",
+                                    "type": "tool_result",
                                     "tool_use_id": tool_result["toolUseId"],
                                     "status": tool_result["status"],
                                     "content": tool_result["content"]
                                 }
                 
-                # 최종 결과
+                # 최종 결과 - 스트리밍 완료 신호
                 if "result" in event:
                     yield {
-                        "type": "final_result",
-                        "result": str(event["result"])
+                        "type": "streaming_complete",
+                        "message": "텍스트 스트리밍 완료!"
                     }
 
         except Exception as e:
@@ -214,31 +200,29 @@ def test_portfolio_architect():
                     full_text += data
                     print(data, end="", flush=True)
                     
-                elif chunk["type"] == "tool_use_completed":
+                elif chunk["type"] == "streaming_complete":
+                    # 🎯 스트리밍 완료 시점 표시
+                    print(f"\n\n✅ {chunk['message']}")
+                    
+                elif chunk["type"] == "tool_use":
                     # 🎯 tool input이 완료된 후에만 출력
-                    print(f"\n\n🛠️ Tool Use (완료됨): {chunk['tool_name']}")
+                    print(f"\n\n🛠️ Tool Use: {chunk['tool_name']}")
                     print(f"   Tool Use ID: {chunk['tool_use_id']}")
-                    print(f"   Complete Input: {chunk['tool_input']}")
+                    print(f"   Input: {chunk['tool_input']}")
                     print("-" * 40)
                     
-                elif chunk["type"] == "tool_result_realtime":
-                    # 🎯 실시간 tool 결과 출력
-                    print(f"\n📊 Tool Result (실시간):")
+                elif chunk["type"] == "tool_result":
+                    # 🎯 tool 결과 출력
+                    print(f"\n📊 Tool Result:")
                     print(f"   Tool Use ID: {chunk['tool_use_id']}")
                     print(f"   Status: {chunk['status']}")
                     for content_item in chunk['content']:
                         if 'text' in content_item:
                             result_text = content_item['text']
-                            if len(result_text) > 200:
-                                print(f"   Result: {result_text[:200]}...")
-                            else:
-                                print(f"   Result: {result_text}")
+                            print(f"   Result: {result_text}")
                     print("-" * 40)
                     
-                elif chunk["type"] == "final_result":
-                    print(f"\n\n✅ 최종 결과:")
-                    print(chunk["result"])
-                    
+                
                 elif chunk["type"] == "error":
                     print(f"\n❌ 오류 발생: {chunk['error']}")
                     

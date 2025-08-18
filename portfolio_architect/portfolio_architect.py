@@ -119,6 +119,7 @@ class PortfolioArchitect:
                 # 🎯 메시지가 추가될 때 완료된 tool_use 정보를 yield
                 if "message" in event:
                     message = event["message"]
+                    print(message)
                     
                     # assistant 메시지에서 완료된 tool_use 찾기
                     if message.get("role") == "assistant":

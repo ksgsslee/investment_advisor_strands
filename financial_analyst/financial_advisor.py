@@ -16,7 +16,7 @@ class FinancialAnalyst:
         self.analyst_agent = Agent(
             name="financial_analyst",
             model=BedrockModel(
-                model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
                 temperature=0.1,
                 max_tokens=2000
             ),
@@ -27,7 +27,7 @@ class FinancialAnalyst:
         self.reflection_agent = Agent(
             name="reflection_validator",
             model=BedrockModel(
-                model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
                 temperature=0.1,
                 max_tokens=2000
             ),
@@ -58,7 +58,11 @@ class FinancialAnalyst:
 "risk_profile_reason": "위험 성향 평가에 대한 상세한 설명",
 "required_annual_return_rate": 필요 연간 수익률 (소수점 둘째 자리까지의 백분율),
 "return_rate_reason": "필요 연간 수익률 계산 과정과 그 의미에 대한 상세한 설명"
-}"""
+}
+
+출력시 다음 사항을 주의하세요
+- 추가적인 설명이나 텍스트는 포함하지 마세요.
+- JSON 앞뒤에 백틱(```) 또는 따옴표를 붙이지 말고 순수한 JSON 형식만 출력하세요."""
     
     def _get_reflection_prompt(self) -> str:
         return """당신은 재무 분석 결과를 검토하는 전문가입니다. 주어진 재무 분석 결과를 바탕으로 분석의 적절성을 평가해야 합니다.

@@ -1,6 +1,6 @@
 # Strands Agents
 strands-agents
-strands-tools
+strands-agents-tools
 
 # Data & Finance
 yfinance

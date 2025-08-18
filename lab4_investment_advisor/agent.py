@@ -7,12 +7,21 @@ from typing import Dict, Any
 from strands import Agent
 from strands.multiagent import GraphBuilder
 from strands.models.anthropic import AnthropicModel
+import sys
+import os
+
+# 상위 디렉토리의 config 모듈 import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import MODELS, ANTHROPIC_API_KEY
 
 # Lab 1, 2, 3 import
-from agents.lab1_financial_analyst import FinancialAnalyst
-from agents.lab2_portfolio_architect import PortfolioArchitect
-from agents.lab3_risk_manager import RiskManager
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lab1_financial_analyst'))
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lab2_portfolio_architect'))
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lab3_risk_manager'))
+
+from lab1_financial_analyst.agent import FinancialAnalyst
+from lab2_portfolio_architect.agent import PortfolioArchitect
+from lab3_risk_manager.agent import RiskManager
 
 
 class ReportGenerator:
@@ -101,17 +110,15 @@ class InvestmentAdvisor:
         self.risk_manager = RiskManager()
         self.report_generator = ReportGenerator()
         
-        # Graph 구성
+        # Graph 구성 (현재는 순차 실행으로 구현)
         self.graph = self._build_graph()
     
     def _build_graph(self):
         """Multi-Agent Graph 구성"""
-        builder = GraphBuilder()
-        
-        # 각 단계를 노드로 추가 (실제로는 함수를 래핑한 에이전트로 구성)
         # 현재 Strands Agent에서는 함수를 직접 노드로 사용할 수 없으므로
         # 각 단계를 순차적으로 실행하는 방식으로 구현
-        return None  # Graph 패턴은 추후 구현
+        # 추후 Graph 패턴으로 개선 예정
+        return None
     
     def _reflection_success_condition(self, state) -> bool:
         """Reflection 성공 조건 확인"""

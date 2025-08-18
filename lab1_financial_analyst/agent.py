@@ -7,6 +7,11 @@ from typing import Dict, Any
 from strands import Agent
 from strands.multiagent import Swarm
 from strands.models.anthropic import AnthropicModel
+import sys
+import os
+
+# 상위 디렉토리의 config 모듈 import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import MODELS, ANTHROPIC_API_KEY
 
 

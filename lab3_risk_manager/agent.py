@@ -9,6 +9,11 @@ from strands import Agent
 from strands.models.anthropic import AnthropicModel
 from strands.tools import tool
 from strands_tools import workflow
+import sys
+import os
+
+# 상위 디렉토리의 config 모듈 import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import MODELS, ANTHROPIC_API_KEY
 
 

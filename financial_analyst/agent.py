@@ -1,12 +1,11 @@
 """
-Lab 1: Financial Analyst with Reflection Pattern
+agent.py
 재무 분석가 + Reflection 패턴 구현
 """
 import json
 from typing import Dict, Any
 from strands import Agent
-from strands.multiagent import Swarm
-from strands.models.anthropic import AnthropicModel
+from strands.models.bedrock import BedrockModel
 import sys
 import os
 
@@ -18,36 +17,27 @@ from config import MODELS, ANTHROPIC_API_KEY
 class FinancialAnalyst:
     def __init__(self):
         # 재무 분석가 에이전트
-        self.analyst_model = AnthropicModel(
-            model_id=MODELS["financial_analyst"]["model"],
-            api_key=ANTHROPIC_API_KEY,
-            temperature=MODELS["financial_analyst"]["temperature"],
-            max_tokens=MODELS["financial_analyst"]["max_tokens"]
-        )
-        
         self.analyst_agent = Agent(
             name="financial_analyst",
-            model=self.analyst_model,
+            model=BedrockModel(
+                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                temperature=0.1,
+                max_tokens=2000
+            ),
             system_prompt=self._get_analyst_prompt()
         )
         
         # Reflection 에이전트
-        self.reflection_model = AnthropicModel(
-            model_id=MODELS["reflection"]["model"],
-            api_key=ANTHROPIC_API_KEY,
-            temperature=MODELS["reflection"]["temperature"],
-            max_tokens=MODELS["reflection"]["max_tokens"]
-        )
-        
         self.reflection_agent = Agent(
             name="reflection_validator",
-            model=self.reflection_model,
+            model=BedrockModel(
+                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                temperature=0.1,
+                max_tokens=2000
+            ),
             system_prompt=self._get_reflection_prompt()
         )
         
-        # Swarm으로 Reflection 패턴 구현
-        self.swarm = Swarm([self.analyst_agent, self.reflection_agent])
-    
     def _get_analyst_prompt(self) -> str:
         return """당신은 재무분석 전문가입니다. 주어진 사용자 정보를 바탕으로 위험 성향을 평가하고 필요 연간 수익률을 계산하여 재무 분석 결과를 출력해야 합니다.
 

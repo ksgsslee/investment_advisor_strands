@@ -14,7 +14,7 @@ from bedrock_agentcore_starter_toolkit import Runtime
 # 설정
 class Config:
     AGENT_NAME = "financial_advisor"
-    ENTRYPOINT_FILE = ".py"
+    ENTRYPOINT_FILE = "financial_advisor.py"
     REQUIREMENTS_FILE = "requirements.txt"
     MAX_DEPLOY_MINUTES = 10
     STATUS_CHECK_INTERVAL = 30
@@ -46,10 +46,6 @@ def configure_runtime(role_arn, region):
         requirements_file=str(CURRENT_DIR / Config.REQUIREMENTS_FILE),
         region=region,
         agent_name=Config.AGENT_NAME,
-        environment_variables={
-            "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
-            "AWS_DEFAULT_REGION": region
-        }
     )
     return runtime
 
@@ -105,10 +101,6 @@ def main():
     
     if missing_files:
         print(f"파일 누락: {', '.join(missing_files)}")
-        return 1
-    
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        print("ANTHROPIC_API_KEY 환경 변수가 설정되지 않았습니다.")
         return 1
     
     success = deploy()

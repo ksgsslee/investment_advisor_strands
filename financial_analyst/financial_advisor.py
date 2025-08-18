@@ -97,7 +97,7 @@ class FinancialAnalyst:
             async for chunk in self.analyst_agent.stream_async(analysis_prompt):
                 if "data" in chunk:
                     yield chunk["data"]
-            
+
             # Reflection 검증
             analysis_data = json.loads(str(chunk["data"]))
             reflection_prompt = f"다음 재무 분석 결과를 검증해주세요:\n{json.dumps(analysis_data, ensure_ascii=False)}"

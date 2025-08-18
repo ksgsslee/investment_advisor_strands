@@ -87,73 +87,38 @@ class FinancialAnalyst:
 - 모든 기준이 충족되면 반드시 "yes"만 출력하고 추가 설명을 하지 마세요.
 - 하나라도 미충족 시 "no"를 출력하고, 그 다음 줄에 미충족 이유를 간단히 설명하세요."""
     
-    def analyze(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        재무 분석 수행 (Reflection 패턴 적용)
-        """
+    async def analyze_async(self, user_input):
+        """비동기 재무 분석 수행"""
         try:
-            # 1단계: 재무 분석 수행
             user_input_str = json.dumps(user_input, ensure_ascii=False)
             analysis_prompt = f"사용자 정보를 분석해주세요:\n{user_input_str}"
             
-            # Swarm을 통해 분석가가 먼저 분석 수행
-            analysis_result = self.analyst_agent(analysis_prompt)
+            # 분석 수행 및 스트리밍
+            async for chunk in self.analyst_agent.stream_async(analysis_prompt):
+                if "data" in chunk:
+                    yield chunk["data"]
             
-            # JSON 파싱 시도
-            try:
-                analysis_data = json.loads(str(analysis_result))
-            except json.JSONDecodeError:
-                # JSON 파싱 실패 시 텍스트에서 JSON 추출 시도
-                result_text = str(analysis_result)
-                start_idx = result_text.find('{')
-                end_idx = result_text.rfind('}') + 1
-                if start_idx != -1 and end_idx != -1:
-                    json_str = result_text[start_idx:end_idx]
-                    analysis_data = json.loads(json_str)
-                else:
-                    raise ValueError("JSON 형식을 찾을 수 없습니다.")
-            
-            # 2단계: Reflection 검증 수행
+            # Reflection 검증
+            analysis_data = json.loads(str(chunk["data"]))
             reflection_prompt = f"다음 재무 분석 결과를 검증해주세요:\n{json.dumps(analysis_data, ensure_ascii=False)}"
-            reflection_result = self.reflection_agent(reflection_prompt)
             
-            reflection_text = str(reflection_result).strip().lower()
-            is_valid = reflection_text.startswith('yes')
-            
-            return {
-                "analysis": analysis_data,
-                "reflection_result": str(reflection_result),
-                "is_valid": is_valid,
-                "status": "success" if is_valid else "validation_failed"
-            }
-            
+            async for reflection_chunk in self.reflection_agent.stream_async(reflection_prompt):
+                if "data" in reflection_chunk:
+                    yield reflection_chunk["data"]
+                    
         except Exception as e:
-            return {
-                "analysis": None,
-                "reflection_result": f"Error: {str(e)}",
-                "is_valid": False,
-                "status": "error",
-                "error": str(e)
-            }
+            yield json.dumps({"error": str(e), "status": "error"})
 
 
-# 테스트용 함수
-def test_financial_analyst():
-    """테스트 함수"""
-    analyst = FinancialAnalyst()
-    
-    test_input = {
-        "total_investable_amount": 50000000,
-        "age": 35,
-        "stock_investment_experience_years": 10,
-        "target_amount": 70000000
-    }
-    
-    result = analyst.analyze(test_input)
-    print("=== Lab 1: Financial Analyst Result ===")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return result
+# AgentCore Runtime 엔트리포인트
+analyst = FinancialAnalyst()
 
+@app.entrypoint
+async def financial_advisor(payload):
+    """AgentCore Runtime 엔트리포인트"""
+    user_input = payload.get("input_data")
+    async for chunk in analyst.analyze_async(user_input):
+        yield chunk
 
 if __name__ == "__main__":
-    test_financial_analyst()
+    app.run()

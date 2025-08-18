@@ -2,7 +2,6 @@
 deploy.py
 AgentCore Runtime 배포 스크립트
 """
-
 import sys
 import os
 import time
@@ -77,7 +76,6 @@ def deploy():
         
         if success:
             print(f"배포 완료: {agent_arn}")
-            # 배포 정보 저장
             deployment_info = {
                 "agent_arn": agent_arn,
                 "region": region,

@@ -1,18 +1,14 @@
 """
-agent.py
-재무 분석가 + Reflection 패턴 구현
+financial_advisor.py
+재무 분석가 + Reflection 패턴 구현 (AgentCore Runtime 버전)
 """
 import json
 from typing import Dict, Any
 from strands import Agent
 from strands.models.bedrock import BedrockModel
-import sys
-import os
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-# 상위 디렉토리의 config 모듈 import
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import MODELS, ANTHROPIC_API_KEY
-
+app = BedrockAgentCoreApp()
 
 class FinancialAnalyst:
     def __init__(self):
@@ -62,11 +58,7 @@ class FinancialAnalyst:
 "risk_profile_reason": "위험 성향 평가에 대한 상세한 설명",
 "required_annual_return_rate": 필요 연간 수익률 (소수점 둘째 자리까지의 백분율),
 "return_rate_reason": "필요 연간 수익률 계산 과정과 그 의미에 대한 상세한 설명"
-}
-
-출력시 다음 사항을 주의하세요
-- 추가적인 설명이나 텍스트는 포함하지 마세요.
-- JSON 앞뒤에 백틱(```) 또는 따옴표를 붙이지 말고 순수한 JSON 형식만 출력하세요."""
+}"""
     
     def _get_reflection_prompt(self) -> str:
         return """당신은 재무 분석 결과를 검토하는 전문가입니다. 주어진 재무 분석 결과를 바탕으로 분석의 적절성을 평가해야 합니다.
@@ -91,24 +83,27 @@ class FinancialAnalyst:
         """비동기 재무 분석 수행"""
         try:
             user_input_str = json.dumps(user_input, ensure_ascii=False)
-            analysis_prompt = f"사용자 정보를 분석해주세요:\n{user_input_str}"
-            
+
             # 분석 수행 및 스트리밍
-            async for chunk in self.analyst_agent.stream_async(analysis_prompt):
-                if "data" in chunk:
-                    yield chunk["data"]
+            analysis_data = self.analyst_agent(user_input_str)
+            yield {
+                "type": "data", 
+                "analysis_data": analysis_data
+            }
 
             # Reflection 검증
-            analysis_data = json.loads(str(chunk["data"]))
-            reflection_prompt = f"다음 재무 분석 결과를 검증해주세요:\n{json.dumps(analysis_data, ensure_ascii=False)}"
-            
-            async for reflection_chunk in self.reflection_agent.stream_async(reflection_prompt):
-                if "data" in reflection_chunk:
-                    yield reflection_chunk["data"]
-                    
-        except Exception as e:
-            yield json.dumps({"error": str(e), "status": "error"})
+            reflection_result = self.reflection_agent(analysis_data)
+            yield {
+                "type": "data", 
+                "reflection_result": reflection_result
+            }
 
+        except Exception as e:
+            yield {
+                "type": "error",
+                "error": str(e),
+                "status": "error"
+            }
 
 # AgentCore Runtime 엔트리포인트
 analyst = FinancialAnalyst()
@@ -118,7 +113,7 @@ async def financial_advisor(payload):
     """AgentCore Runtime 엔트리포인트"""
     user_input = payload.get("input_data")
     async for chunk in analyst.analyze_async(user_input):
-        pass
+        yield chunk
 
 if __name__ == "__main__":
     app.run()

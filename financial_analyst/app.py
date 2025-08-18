@@ -42,18 +42,24 @@ def invoke_financial_advisor(input_data):
 
         for event in response["response"]:
             data = json.loads(event.decode("utf-8"))
+            print(data)
             
-            # 분석 결과 처리
-            if "risk_profile" in data:
-                analysis_data = data
-                progress_bar.progress(0.5)
-                status_text.text("분석 완료, 검증 중...")
-            
-            # 검증 결과 처리
-            elif isinstance(data, str) and ("yes" in data.lower() or "no" in data.lower()):
-                reflection_result = data
-                progress_bar.progress(1.0)
-                status_text.text("검증 완료")
+            if data.get("type") == "data":
+                if "analysis_data" in data:
+                    analysis_data = data["analysis_data"]
+                    progress_bar.progress(0.5)
+                    status_text.text("분석 완료, 검증 중...")
+                elif "reflection_result" in data:
+                    reflection_result = data["reflection_result"]
+                    progress_bar.progress(1.0)
+                    status_text.text("검증 완료")
+            elif data.get("type") == "error":
+                progress_bar.empty()
+                status_text.empty()
+                return {
+                    "status": "error",
+                    "error": data.get("error", "Unknown error")
+                }
 
         progress_bar.empty()
         status_text.empty()

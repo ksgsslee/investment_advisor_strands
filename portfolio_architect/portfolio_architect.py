@@ -63,25 +63,33 @@ class PortfolioArchitect:
                 temperature=0.3,
                 max_tokens=3000
             ),
-            system_prompt=self._get_system_prompt(),
             callback_handler=None,
+            system_prompt=self._get_system_prompt(),
             tools=[get_available_products, get_product_data]
         )
     
     def _get_system_prompt(self) -> str:
-        return """당신은 전문 투자 설계사입니다. 고객의 재무 분석 결과를 바탕으로 구체적인 투자 포트폴리오를 제안해야 합니다.
+        return """당신은 전문 투자 설계사입니다. 고객의 재무 분석 결과를 바탕으로 구체적인 투자 포트폴리오를 제안해야 합니다. 
+
+재무 분석 결과가 다음과 같은 JSON 형식으로 제공됩니다:
+{
+  "risk_profile": <위험 성향>,
+  "risk_profile_reason": <위험 성향 평가 근거>,
+  "required_annual_return_rate": <필요 연간 수익률>,
+  "return_rate_reason": <필요 수익률 계산 근거 및 설명>
+}
 
 당신의 작업:
 1. 재무 분석 결과를 신중히 검토하고 해석하세요.
-2. "get_available_products" 도구를 호출하여 사용 가능한 투자 상품 목록을 얻으세요.
+2. "get_available_products" 액션을 호출하여 사용 가능한 투자 상품 목록을 얻으세요. 각 상품은 "ticker: 설명" 형식으로 제공됩니다.
 3. 얻은 투자 상품 목록 중 분산 투자를 고려하여 고객의 재무 분석 결과와 가장 적합한 3개의 상품을 선택하세요.
-4. 선택한 각 투자 상품에 대해 "get_product_data" 도구를 호출하여 최근 가격 데이터를 얻으세요.
-5. 얻은 가격 데이터를 분석하여 최종 포트폴리오 비율을 결정하세요.
+4. 선택한 각 투자 상품에 대해 "get_product_data" 액션을 동시에 호출하여 최근 가격 데이터를 얻으세요.
+5. 얻은 가격 데이터를 분석하여 최종 포트폴리오 비율을 결정하세요. 이때 고객의 재무 분석 결과를 균형있게 고려하세요.
 6. 포트폴리오 구성 근거를 상세히 설명하세요.
 
 다음 JSON 형식으로 응답해주세요:
 {
-  "portfolio_allocation": {"ticker1": 비율1, "ticker2": 비율2, "ticker3": 비율3},
+  "portfolio_allocation": {투자 상품별 배분 비율} (예: {"ticker1": 50, "ticker2": 30, "ticker3": 20}),
   "strategy": "투자 전략 설명",
   "reason": "포트폴리오 구성 근거"
 }
@@ -89,21 +97,17 @@ class PortfolioArchitect:
 응답 시 다음 사항을 고려하세요:
 - 제안한 포트폴리오가 고객의 투자 목표 달성에 어떻게 도움이 될 것인지 논리적으로 설명하세요.
 - 각 자산의 배분 비율은 반드시 정수로 표현하고, 총합이 100%가 되어야 합니다.
-- 포트폴리오 구성 근거를 작성할때는 반드시 "QQQ(미국 기술주)" 처럼 티커와 설명을 함께 제공하세요."""
+- 포트폴리오 구성 근거를 작성할때는 반드시 "QQQ(미국 기술주)" 처럼 티커와 설명을 함께 제공하세요.
+- JSON 앞뒤에 백틱(```) 또는 따옴표를 붙이지 말고 순수한 JSON 형식만 출력하세요."""
     
     async def design_portfolio_async(self, financial_analysis):
         """비동기 포트폴리오 설계 수행"""
         try:
             # 재무 분석 결과를 프롬프트로 구성
             analysis_str = json.dumps(financial_analysis, ensure_ascii=False, indent=2)
-            prompt = f"""다음 재무 분석 결과를 바탕으로 포트폴리오를 설계해주세요:
-
-{analysis_str}
-
-위 분석 결과를 고려하여 최적의 포트폴리오를 제안해주세요."""
             
             # 에이전트 실행 (도구 사용 포함)
-            result = self.architect_agent(prompt)
+            result = self.architect_agent(analysis_str)
             portfolio_data = str(result)
 
             yield {

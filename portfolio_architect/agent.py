@@ -1,20 +1,23 @@
 """
-Lab 2: Portfolio Architect with Tool Use Pattern
-포트폴리오 설계사 + Tool Use 패턴 구현
+portfolio_architect.py
+포트폴리오 설계사 + Tool Use 패턴 구현 (AgentCore Runtime 버전)
 """
 import json
 import yfinance as yf
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from strands import Agent
-from strands.models.anthropic import AnthropicModel
+from strands.models.bedrock import BedrockModel
 from strands.tools import tool
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 import sys
 import os
 
 # 상위 디렉토리의 config 모듈 import
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import MODELS, AVAILABLE_PRODUCTS, ANTHROPIC_API_KEY
+from config import AVAILABLE_PRODUCTS
+
+app = BedrockAgentCoreApp()
 
 
 @tool
@@ -52,16 +55,14 @@ def get_product_data(ticker: str) -> str:
 
 class PortfolioArchitect:
     def __init__(self):
-        self.model = AnthropicModel(
-            model_id=MODELS["portfolio_architect"]["model"],
-            api_key=ANTHROPIC_API_KEY,
-            temperature=MODELS["portfolio_architect"]["temperature"],
-            max_tokens=MODELS["portfolio_architect"]["max_tokens"]
-        )
-        
-        self.agent = Agent(
+        # 포트폴리오 설계사 에이전트
+        self.architect_agent = Agent(
             name="portfolio_architect",
-            model=self.model,
+            model=BedrockModel(
+                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                temperature=0.3,
+                max_tokens=3000
+            ),
             system_prompt=self._get_system_prompt(),
             tools=[get_available_products, get_product_data]
         )
@@ -89,10 +90,8 @@ class PortfolioArchitect:
 - 각 자산의 배분 비율은 반드시 정수로 표현하고, 총합이 100%가 되어야 합니다.
 - 포트폴리오 구성 근거를 작성할때는 반드시 "QQQ(미국 기술주)" 처럼 티커와 설명을 함께 제공하세요."""
     
-    def design_portfolio(self, financial_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        포트폴리오 설계 수행 (Tool Use 패턴 적용)
-        """
+    async def design_portfolio_async(self, financial_analysis):
+        """비동기 포트폴리오 설계 수행"""
         try:
             # 재무 분석 결과를 프롬프트로 구성
             analysis_str = json.dumps(financial_analysis, ensure_ascii=False, indent=2)
@@ -103,48 +102,31 @@ class PortfolioArchitect:
 위 분석 결과를 고려하여 최적의 포트폴리오를 제안해주세요."""
             
             # 에이전트 실행 (도구 사용 포함)
-            result = self.agent(prompt)
-            
-            # JSON 파싱 시도
-            try:
-                result_text = str(result)
-                # JSON 부분 추출
-                start_idx = result_text.find('{')
-                end_idx = result_text.rfind('}') + 1
-                
-                if start_idx != -1 and end_idx != -1:
-                    json_str = result_text[start_idx:end_idx]
-                    portfolio_data = json.loads(json_str)
-                    
-                    return {
-                        "portfolio": portfolio_data,
-                        "raw_response": result_text,
-                        "status": "success"
-                    }
-                else:
-                    return {
-                        "portfolio": None,
-                        "raw_response": result_text,
-                        "status": "json_parse_error",
-                        "error": "JSON 형식을 찾을 수 없습니다."
-                    }
-                    
-            except json.JSONDecodeError as e:
-                return {
-                    "portfolio": None,
-                    "raw_response": str(result),
-                    "status": "json_parse_error",
-                    "error": f"JSON 파싱 오류: {str(e)}"
-                }
-                
-        except Exception as e:
-            return {
-                "portfolio": None,
-                "raw_response": None,
-                "status": "error",
-                "error": str(e)
+            result = self.architect_agent(prompt)
+            portfolio_data = str(result)
+
+            yield {
+                "type": "data", 
+                "portfolio_data": portfolio_data
             }
 
+        except Exception as e:
+            yield {
+                "type": "error",
+                "error": str(e),
+                "status": "error"
+            }
+
+
+# AgentCore Runtime 엔트리포인트
+architect = PortfolioArchitect()
+
+@app.entrypoint
+async def portfolio_architect(payload):
+    """AgentCore Runtime 엔트리포인트"""
+    financial_analysis = payload.get("financial_analysis")
+    async for chunk in architect.design_portfolio_async(financial_analysis):
+        yield chunk
 
 # 테스트용 함수
 def test_portfolio_architect():
@@ -159,11 +141,9 @@ def test_portfolio_architect():
         "return_rate_reason": "필요 연간 수익률은 (70000000 - 50000000) / 50000000 * 100 = 40.00%입니다."
     }
     
-    result = architect.design_portfolio(test_financial_analysis)
-    print("=== Lab 2: Portfolio Architect Result ===")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return result
-
+    print("=== Lab 2: Portfolio Architect Test ===")
+    print(json.dumps(test_financial_analysis, ensure_ascii=False, indent=2))
+    return test_financial_analysis
 
 if __name__ == "__main__":
-    test_portfolio_architect()
+    app.run()

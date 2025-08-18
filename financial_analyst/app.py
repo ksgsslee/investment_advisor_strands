@@ -40,26 +40,30 @@ def invoke_financial_advisor(input_data):
         analysis_data = None
         reflection_result = None
 
-        for event in response["response"]:
-            data = json.loads(event.decode("utf-8"))
-            print(data)
-            
-            if data.get("type") == "data":
-                if "analysis_data" in data:
-                    analysis_data = data["analysis_data"]
-                    progress_bar.progress(0.5)
-                    status_text.text("분석 완료, 검증 중...")
-                elif "reflection_result" in data:
-                    reflection_result = data["reflection_result"]
-                    progress_bar.progress(1.0)
-                    status_text.text("검증 완료")
-            elif data.get("type") == "error":
-                progress_bar.empty()
-                status_text.empty()
-                return {
-                    "status": "error",
-                    "error": data.get("error", "Unknown error")
-                }
+        # SSE 형식 응답 처리
+        for line in response["response"].iter_lines(chunk_size=1):
+            if line and line.decode("utf-8").startswith("data: "):
+                try:
+                    event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
+                    print(event_data)
+                    if event_data["type"] == "data":
+                        if "analysis_data" in event_data:
+                            analysis_data = json.loads(event_data["analysis_data"])
+                            progress_bar.progress(0.5)
+                            status_text.text("분석 완료, 검증 중...")
+                        elif "reflection_result" in event_data:
+                            reflection_result = event_data["reflection_result"]
+                            progress_bar.progress(1.0)
+                            status_text.text("검증 완료")
+                    elif event_data["type"] == "error":
+                        progress_bar.empty()
+                        status_text.empty()
+                        return {
+                            "status": "error",
+                            "error": event_data.get("error", "Unknown error")
+                        }
+                except json.JSONDecodeError:
+                    continue
 
         progress_bar.empty()
         status_text.empty()
@@ -75,7 +79,7 @@ def invoke_financial_advisor(input_data):
             "status": "error",
             "error": str(e)
         }
-
+        
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
     st.markdown("""

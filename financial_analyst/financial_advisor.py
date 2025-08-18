@@ -16,7 +16,7 @@ class FinancialAnalyst:
         self.analyst_agent = Agent(
             name="financial_analyst",
             model=BedrockModel(
-                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
                 temperature=0.1,
                 max_tokens=2000
             ),
@@ -27,7 +27,7 @@ class FinancialAnalyst:
         self.reflection_agent = Agent(
             name="reflection_validator",
             model=BedrockModel(
-                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
                 temperature=0.1,
                 max_tokens=2000
             ),
@@ -85,14 +85,17 @@ class FinancialAnalyst:
             user_input_str = json.dumps(user_input, ensure_ascii=False)
 
             # 분석 수행 및 스트리밍
-            analysis_data = self.analyst_agent(user_input_str)
+            analyst_response = self.analyst_agent(user_input_str)
+            analysis_data = analyst_response.message['content'][0]['text']
+
             yield {
                 "type": "data", 
                 "analysis_data": analysis_data
             }
 
             # Reflection 검증
-            reflection_result = self.reflection_agent(analysis_data)
+            reflection_response = self.reflection_agent(analysis_data)
+            reflection_result = reflection_response.message['content'][0]['text']
             yield {
                 "type": "data", 
                 "reflection_result": reflection_result

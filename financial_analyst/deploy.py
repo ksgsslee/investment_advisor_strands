@@ -48,10 +48,10 @@ def configure_runtime(role_arn, region):
     )
     return runtime
 
-def deploy_and_wait(runtime):
+def deploy_and_wait(runtime, local=False):
     """배포 및 대기"""
     print("배포 중...")
-    launch_result = runtime.launch(auto_update_on_conflict=True)
+    launch_result = runtime.launch(auto_update_on_conflict=True, local=local)
     
     end_statuses = ['READY', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED']
     max_checks = (Config.MAX_DEPLOY_MINUTES * 60) // Config.STATUS_CHECK_INTERVAL

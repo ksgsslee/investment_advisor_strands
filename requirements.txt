@@ -1,0 +1,19 @@
+# Strands Agents
+strands-agents
+strands-tools
+
+# Data & Finance
+yfinance
+pandas
+numpy
+
+# Web Framework
+streamlit
+plotly
+
+# AWS (for future use)
+boto3
+
+# Utilities
+python-dotenv
+requests

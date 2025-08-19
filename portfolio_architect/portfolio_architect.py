@@ -1,4 +1,5 @@
 """
+portfolio_architect.py
 Portfolio Architect - AI 포트폴리오 설계사
 
 Gateway 배포 정보를 자동으로 로드하여 MCP 연동하는 포트폴리오 설계 AI 에이전트
@@ -226,29 +227,11 @@ class PortfolioArchitect:
 
 
 # AgentCore Runtime 전역 인스턴스
-architect = None
+architect = PortfolioArchitect()
 
 @app.entrypoint
 async def portfolio_architect(payload):
-    """
-    AgentCore Runtime 엔트리포인트
-    
-    Args:
-        payload (dict): 요청 페이로드 {"financial_analysis": {...}}
-        
-    Yields:
-        dict: 스트리밍 응답
-    """
-    global architect
-    if architect is None:
-        try:
-            architect = PortfolioArchitect()
-        except FileNotFoundError:
-            raise RuntimeError(
-                "Gateway 배포 정보를 찾을 수 없습니다.\n"
-                "먼저 'python gateway/deploy_gateway.py'를 실행하세요."
-            )
-    
+    """AgentCore Runtime 엔트리포인트"""
     financial_analysis = payload.get("financial_analysis")
     async for chunk in architect.design_portfolio_async(financial_analysis):
         yield chunk

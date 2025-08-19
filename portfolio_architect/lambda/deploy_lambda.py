@@ -116,6 +116,29 @@ def create_lambda_role():
         print("♻️ 기존 IAM 역할 사용")
         return response['Role']['Arn']
 
+def load_layer_info():
+    """
+    Layer 배포 정보 로드
+    
+    Returns:
+        str: Layer Version ARN (없으면 None)
+    """
+    # lambda_layer 폴더에서 배포 정보 찾기
+    layer_dir = Path(__file__).parent.parent / "lambda_layer"
+    info_file = layer_dir / "layer_deployment_info.json"
+    
+    if not info_file.exists():
+        print("ℹ️ Layer 정보 없음 - Layer 없이 배포")
+        return None
+    
+    with open(info_file, 'r') as f:
+        layer_info = json.load(f)
+    
+    layer_arn = layer_info.get('layer_version_arn')
+    print(f"📦 Layer 연결: {layer_arn}")
+    return layer_arn
+
+
 def deploy_lambda_function():
     """
     Lambda 함수 배포 메인 로직
@@ -142,6 +165,9 @@ def deploy_lambda_function():
     # 2. Lambda 실행용 IAM 역할 준비
     role_arn = create_lambda_role()
     
+    # 2.5. Layer 정보 로드
+    layer_arn = load_layer_info()
+    
     # 3. ZIP 파일을 메모리로 로드
     print("📤 Lambda 함수 업로드 중...")
     with open(zip_filename, 'rb') as zip_file:
@@ -162,16 +188,25 @@ def deploy_lambda_function():
     
     # 4-B. 새 Lambda 함수 생성
     print("🔨 새 Lambda 함수 생성 중...")
-    response = lambda_client.create_function(
-        FunctionName=Config.FUNCTION_NAME,
-        Runtime=Config.RUNTIME,                    # Python 3.12 런타임
-        Role=role_arn,                            # 실행 역할 ARN
-        Handler='lambda_function.lambda_handler',  # 진입점 함수
-        Code={'ZipFile': zip_content},            # 함수 코드 (ZIP 바이너리)
-        Description='Portfolio Architect - ETF data retrieval and portfolio analysis tool',
-        Timeout=Config.TIMEOUT,                   # 30초 타임아웃
-        MemorySize=Config.MEMORY_SIZE             # 256MB 메모리 (yfinance 사용을 위해)
-    )
+    
+    # Lambda 함수 설정 구성
+    function_config = {
+        'FunctionName': Config.FUNCTION_NAME,
+        'Runtime': Config.RUNTIME,                    # Python 3.12 런타임
+        'Role': role_arn,                            # 실행 역할 ARN
+        'Handler': 'lambda_function.lambda_handler',  # 진입점 함수
+        'Code': {'ZipFile': zip_content},            # 함수 코드 (ZIP 바이너리)
+        'Description': 'Portfolio Architect - ETF data retrieval and portfolio analysis tool',
+        'Timeout': Config.TIMEOUT,                   # 30초 타임아웃
+        'MemorySize': Config.MEMORY_SIZE             # 256MB 메모리 (yfinance 사용을 위해)
+    }
+    
+    # Layer가 있으면 추가
+    if layer_arn:
+        function_config['Layers'] = [layer_arn]
+        print(f"📦 Layer 연결됨: {layer_arn}")
+    
+    response = lambda_client.create_function(**function_config)
     function_arn = response['FunctionArn']
     print("✅ 새 Lambda 함수 생성 완료")
     

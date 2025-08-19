@@ -76,13 +76,13 @@ class PortfolioArchitect:
         """포트폴리오 설계사 초기화 - Gateway 정보 자동 로드"""
         # Gateway 정보 자동 로드
         self.gateway_info = load_gateway_info()
-        self.client_id = gateway_info['client_id']
-        self.client_secret = gateway_info['client_secret']
-        self.gateway_url = gateway_info['gateway_url'] + '/mcp'  # MCP 엔드포인트 추가
+        self.client_id = self.gateway_info['client_id']
+        self.client_secret = self.gateway_info['client_secret']
+        self.gateway_url = self.gateway_info['gateway_url']  # Gateway URL 그대로 사용
         
         # 토큰 URL 구성 (user_pool_id에서 추출)
-        user_pool_id = gateway_info['user_pool_id']
-        region = gateway_info['region']
+        user_pool_id = self.gateway_info['user_pool_id']
+        region = self.gateway_info['region']
         pool_domain = user_pool_id.replace("_", "").lower()
         self.token_url = f"https://{pool_domain}.auth.{region}.amazoncognito.com/oauth2/token"
         

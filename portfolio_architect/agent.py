@@ -15,8 +15,8 @@ from strands.tools.mcp.mcp_client import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-app = BedrockAgentCoreApp()
 
+app = BedrockAgentCoreApp()
 
  
 def fetch_access_token(client_id, client_secret, token_url):
@@ -60,22 +60,25 @@ class PortfolioArchitect:
         # MCP 클라이언트 생성
         self.mcp_client = MCPClient(lambda: create_streamable_http_transport(self.gateway_url, self.access_token))
         
-        with self.mcp_client:
-            tools = get_full_tools_list(self.mcp_client)
+        # 도구 목록 가져오기 (임시로 컨텍스트 열고 닫기)
+        with self.mcp_client as client:
+            # tools = get_full_tools_list(self.mcp_client)
+            # tools = get_full_tools_list(self.mcp_client)
+            tools = client.list_tools_sync()
             print(f"Found the following tools: {[tool.tool_name for tool in tools]}")
-        
-        # 포트폴리오 설계사 에이전트
-        self.architect_agent = Agent(
-            name="portfolio_architect",
-            model=BedrockModel(
-                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-                temperature=0.3,
-                max_tokens=3000
-            ),
-            callback_handler=None,
-            system_prompt=self._get_system_prompt(),
-            tools=tools
-        )
+
+            # 포트폴리오 설계사 에이전트 (MCP 도구들과 함께)
+            self.architect_agent = Agent(
+                name="portfolio_architect",
+                model=BedrockModel(
+                    model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                    temperature=0.3,
+                    max_tokens=3000
+                ),
+                callback_handler=None,
+                system_prompt=self._get_system_prompt(),
+                tools=tools
+            )
     
     def _get_system_prompt(self) -> str:
         return f"""당신은 전문 투자 설계사입니다. 고객의 재무 분석 결과를 바탕으로 구체적인 투자 포트폴리오를 제안해야 합니다. 
@@ -115,50 +118,51 @@ class PortfolioArchitect:
             # 재무 분석 결과를 프롬프트로 구성
             analysis_str = json.dumps(financial_analysis, ensure_ascii=False, indent=2)
             
-            # 🎯 실시간 스트리밍으로 에이전트 실행
-            async for event in self.architect_agent.stream_async(analysis_str):
-                # 텍스트 데이터 스트리밍
-                if "data" in event:
-                    yield {
-                        "type": "text_chunk",
-                        "data": event["data"],
-                        "complete": event.get("complete", False)
-                    }
-                
-                # 🎯 메시지가 추가될 때 완료된 tool_use 정보를 yield
-                if "message" in event:
-                    message = event["message"]
+            # 🎯 MCP 클라이언트 컨텍스트 내에서 에이전트 실행 (동기 컨텍스트 매니저 사용)
+            with self.mcp_client:
+                async for event in self.architect_agent.stream_async(analysis_str):
+                    # 텍스트 데이터 스트리밍
+                    if "data" in event:
+                        yield {
+                            "type": "text_chunk",
+                            "data": event["data"],
+                            "complete": event.get("complete", False)
+                        }
                     
-                    # assistant 메시지에서 완료된 tool_use 찾기
-                    if message.get("role") == "assistant":
-                        for content in message.get("content", []):
-                            if "toolUse" in content:
-                                tool_use = content["toolUse"]
-                                yield {
-                                    "type": "tool_use",
-                                    "tool_name": tool_use.get("name"),
-                                    "tool_use_id": tool_use.get("toolUseId"),
-                                    "tool_input": tool_use.get("input", {})
-                                }
+                    # 🎯 메시지가 추가될 때 완료된 tool_use 정보를 yield
+                    if "message" in event:
+                        message = event["message"]
+                        
+                        # assistant 메시지에서 완료된 tool_use 찾기
+                        if message.get("role") == "assistant":
+                            for content in message.get("content", []):
+                                if "toolUse" in content:
+                                    tool_use = content["toolUse"]
+                                    yield {
+                                        "type": "tool_use",
+                                        "tool_name": tool_use.get("name"),
+                                        "tool_use_id": tool_use.get("toolUseId"),
+                                        "tool_input": tool_use.get("input", {})
+                                    }
+                        
+                        # user 메시지에서 tool_result 처리
+                        if message.get("role") == "user":
+                            for content in message.get("content", []):
+                                if "toolResult" in content:
+                                    tool_result = content["toolResult"]
+                                    yield {
+                                        "type": "tool_result",
+                                        "tool_use_id": tool_result["toolUseId"],
+                                        "status": tool_result["status"],
+                                        "content": tool_result["content"]
+                                    }
                     
-                    # user 메시지에서 tool_result 처리
-                    if message.get("role") == "user":
-                        for content in message.get("content", []):
-                            if "toolResult" in content:
-                                tool_result = content["toolResult"]
-                                yield {
-                                    "type": "tool_result",
-                                    "tool_use_id": tool_result["toolUseId"],
-                                    "status": tool_result["status"],
-                                    "content": tool_result["content"]
-                                }
-                
-                # 최종 결과 - 스트리밍 완료 신호
-                if "result" in event:
-                    yield {
-                        "type": "streaming_complete",
-                        "message": "텍스트 스트리밍 완료!"
-                    }
+                    # 최종 결과 - 스트리밍 완료 신호
+                    if "result" in event:
+                        yield {
+                            "type": "streaming_complete",
+                            "message": "텍스트 스트리밍 완료!"
+                        }
 
         except Exception as e:
             yield {
@@ -254,7 +258,7 @@ if __name__ == "__main__":
         "client_id": "ovm4qu7tbjbn5hp8hvfecidvb",  # deploy_gateway.py 결과에서 가져온 값
         "client_secret": "1mhgbekbhk27c4vfoghsr1dtph7l595ohpg816l04raekfbmmker",    # deploy_gateway.py 결과에서 가져온 값
         "token_url": "https://us-west-2pgtmzk6id.auth.us-west-2.amazoncognito.com/oauth2/token",
-        "gateway_url": "https://your-gateway-url/mcp",  # deploy_gateway.py 결과에서 가져온 값 + /mcp
+        "gateway_url": "https://sample-gateway-jdhc1sux2q.gateway.bedrock-agentcore.us-west-2.amazonaws.com/mcp",  # deploy_gateway.py 결과에서 가져온 값 + /mcp
         "target_name": "sample-gateway-target"
     }
     

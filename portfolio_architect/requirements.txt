@@ -1,21 +1,4 @@
-# Lab 2: Gateway 기반 Portfolio Architect 의존성
+# Portfolio Architect Runtime 의존성
 
-# Core dependencies
-yfinance>=0.2.18
-boto3>=1.34.0
-strands>=0.1.0
-
-# AWS Bedrock AgentCore (실제 패키지명은 다를 수 있음)
-# bedrock-agentcore>=1.0.0
-
-# Data processing
-pandas>=2.0.0
-numpy>=1.24.0
-
-# Async support
-asyncio
-aiohttp>=3.8.0
-
-# Utilities
-python-dotenv>=1.0.0
-pyyaml>=6.0
+# Strands Agent 프레임워크 (boto3, requests 등 포함)
+strands-agents>=0.1.0

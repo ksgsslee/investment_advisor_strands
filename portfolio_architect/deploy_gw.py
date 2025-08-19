@@ -8,6 +8,47 @@ from utils import (
     get_or_create_m2m_client
 )
 
+
+def delete_existing_gateway(gateway_name, region):
+    """
+    기존 Gateway가 존재하는 경우 삭제합니다.
+    
+    동일한 이름의 Gateway가 이미 존재하는 경우, 새로운 Gateway 생성 전에
+    기존 Gateway를 삭제하여 이름 충돌을 방지합니다.
+    
+    Args:
+        gateway_name (str): 삭제할 Gateway 이름
+        region (str): AWS 리전
+    
+    Returns:
+        None
+    """
+    try:
+        # Bedrock AgentCore Gateway 클라이언트 생성
+        gateway_client = boto3.client('bedrock-agentcore-control', region_name=region)
+        
+        # 현재 존재하는 모든 Gateway 목록 조회
+        gateways = gateway_client.list_gateways().get('items', [])
+        
+        # 동일한 이름의 Gateway 검색 및 삭제
+        for gw in gateways:
+            if gw['name'] == gateway_name:
+                print(f"🗑️ Deleting existing gateway '{gateway_name}' (ID: {gw['gatewayId']})...")
+                gateway_client.delete_gateway(gatewayIdentifier=gw['gatewayId'])
+                
+                # Gateway 삭제 완료까지 대기 (AWS 리소스 정리 시간 필요)
+                time.sleep(3)
+                print(f"✅ Gateway '{gateway_name}' deleted successfully")
+                break
+        else:
+            print(f"ℹ️ No existing gateway found with name '{gateway_name}'")
+            
+    except Exception as e:
+        print(f"⚠️ Error while deleting existing gateway: {str(e)}")
+        # 삭제 실패해도 배포는 계속 진행 (Gateway가 없을 수도 있음)
+        pass
+
+
 def deploy_gateway(lambda_arn, gateway_name, region):
     """
     Gateway 배포 프로세스
@@ -23,6 +64,9 @@ def deploy_gateway(lambda_arn, gateway_name, region):
     try:
         print("Starting gateway deployment...")
         
+        # 기존 Gateway 삭제 (동일한 이름의 Gateway가 있다면 삭제)
+        delete_existing_gateway(gateway_name, region)
+
         # 1. IAM 역할 생성
         print("Creating IAM role...")
         iam_role = create_agentcore_gateway_role(gateway_name, region)

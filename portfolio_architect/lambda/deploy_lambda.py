@@ -118,24 +118,29 @@ def create_lambda_role():
 
 def load_layer_info():
     """
-    Layer 배포 정보 로드
+    Layer 배포 정보 로드 (필수)
     
     Returns:
-        str: Layer Version ARN (없으면 None)
+        str: Layer Version ARN
+        
+    Raises:
+        FileNotFoundError: Layer 배포 정보가 없을 때
     """
     # lambda_layer 폴더에서 배포 정보 찾기
     layer_dir = Path(__file__).parent.parent / "lambda_layer"
     info_file = layer_dir / "layer_deployment_info.json"
     
     if not info_file.exists():
-        print("ℹ️ Layer 정보 없음 - Layer 없이 배포")
         return None
     
     with open(info_file, 'r') as f:
         layer_info = json.load(f)
     
     layer_arn = layer_info.get('layer_version_arn')
-    print(f"📦 Layer 연결: {layer_arn}")
+    if not layer_arn:
+        return None
+        
+    print(f"📋 Layer 정보 로드: {layer_arn}")
     return layer_arn
 
 
@@ -165,8 +170,12 @@ def deploy_lambda_function():
     # 2. Lambda 실행용 IAM 역할 준비
     role_arn = create_lambda_role()
     
-    # 2.5. Layer 정보 로드
+    # 2.5. Layer 정보 로드 (필수)
     layer_arn = load_layer_info()
+    if not layer_arn:
+        print("⚠️ Layer가 없습니다. 먼저 Layer를 배포하세요:")
+        print("   cd ../lambda_layer && python deploy_layer.py")
+        raise RuntimeError("Layer 배포가 필요합니다.")
     
     # 3. ZIP 파일을 메모리로 로드
     print("📤 Lambda 함수 업로드 중...")
@@ -186,27 +195,21 @@ def deploy_lambda_function():
         print("⏳ 삭제 완료 대기 중...")
         time.sleep(5)
     
-    # 4-B. 새 Lambda 함수 생성
+    # 4-B. 새 Lambda 함수 생성 (Layer 필수 포함)
     print("🔨 새 Lambda 함수 생성 중...")
+    print(f"📦 Layer 연결: {layer_arn}")
     
-    # Lambda 함수 설정 구성
-    function_config = {
-        'FunctionName': Config.FUNCTION_NAME,
-        'Runtime': Config.RUNTIME,                    # Python 3.12 런타임
-        'Role': role_arn,                            # 실행 역할 ARN
-        'Handler': 'lambda_function.lambda_handler',  # 진입점 함수
-        'Code': {'ZipFile': zip_content},            # 함수 코드 (ZIP 바이너리)
-        'Description': 'Portfolio Architect - ETF data retrieval and portfolio analysis tool',
-        'Timeout': Config.TIMEOUT,                   # 30초 타임아웃
-        'MemorySize': Config.MEMORY_SIZE             # 256MB 메모리 (yfinance 사용을 위해)
-    }
-    
-    # Layer가 있으면 추가
-    if layer_arn:
-        function_config['Layers'] = [layer_arn]
-        print(f"📦 Layer 연결됨: {layer_arn}")
-    
-    response = lambda_client.create_function(**function_config)
+    response = lambda_client.create_function(
+        FunctionName=Config.FUNCTION_NAME,
+        Runtime=Config.RUNTIME,                    # Python 3.12 런타임
+        Role=role_arn,                            # 실행 역할 ARN
+        Handler='lambda_function.lambda_handler',  # 진입점 함수
+        Code={'ZipFile': zip_content},            # 함수 코드 (ZIP 바이너리)
+        Description='Portfolio Architect - ETF data retrieval and portfolio analysis tool',
+        Timeout=Config.TIMEOUT,                   # 30초 타임아웃
+        MemorySize=Config.MEMORY_SIZE,            # 256MB 메모리 (yfinance 사용을 위해)
+        Layers=[layer_arn]                        # Layer 필수 연결
+    )
     function_arn = response['FunctionArn']
     print("✅ 새 Lambda 함수 생성 완료")
     

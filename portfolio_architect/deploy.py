@@ -10,6 +10,11 @@ import json
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
+# 공통 utils 모듈 import
+utils_path = str(Path(__file__).parent.parent)
+sys.path.append(utils_path)
+from utils import create_agentcore_role
+
 
 # 설정 상수
 class Config:
@@ -69,11 +74,6 @@ def create_iam_role():
         - 기존 역할이 있으면 재사용
     """
     print("🔐 IAM 역할 생성 중...")
-    
-    # 공통 utils 모듈 import
-    utils_path = str(Path(__file__).parent.parent)
-    sys.path.append(utils_path)
-    from utils import create_agentcore_role
     
     # AgentCore Runtime용 IAM 역할 생성
     role_info = create_agentcore_role(Config.AGENT_NAME, Config.REGION)

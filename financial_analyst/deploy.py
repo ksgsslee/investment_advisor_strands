@@ -9,7 +9,11 @@ import json
 from pathlib import Path
 from boto3.session import Session
 from bedrock_agentcore_starter_toolkit import Runtime
+
+# 공통 utils 모듈 import
+sys.path.append(str(Path(__file__).parent.parent))
 from utils import create_agentcore_role
+
 
 # 설정
 class Config:

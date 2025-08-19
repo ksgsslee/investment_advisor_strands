@@ -1,6 +1,7 @@
 import boto3
 import json
 import time
+import requests
 from boto3.session import Session
 
 def create_agentcore_gateway_role(gateway_name, region):
@@ -231,18 +232,34 @@ def get_or_create_m2m_client(cognito, user_pool_id, client_name, resource_server
 
 
 def get_token(user_pool_id: str, client_id: str, client_secret: str, scope_string: str, REGION: str) -> dict:
+    """
+    Cognito OAuth2 토큰 획득
+    
+    Args:
+        user_pool_id (str): Cognito 사용자 풀 ID
+        client_id (str): 클라이언트 ID
+        client_secret (str): 클라이언트 시크릿
+        scope_string (str): OAuth2 스코프 문자열
+        REGION (str): AWS 리전
+    
+    Returns:
+        dict: 토큰 정보 또는 오류 메시지
+    """
     try:
+        # 사용자 풀 ID에서 언더스코어 제거 (도메인 URL용)
         user_pool_id_without_underscore = user_pool_id.replace("_", "")
         url = f"https://{user_pool_id_without_underscore}.auth.{REGION}.amazoncognito.com/oauth2/token"
+        
+        # OAuth2 토큰 요청 헤더 및 데이터 설정
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = {
             "grant_type": "client_credentials",
             "client_id": client_id,
             "client_secret": client_secret,
             "scope": scope_string,
-
         }
 
+        # 토큰 요청 및 응답 처리
         response = requests.post(url, headers=headers, data=data)
         response.raise_for_status()
         return response.json()

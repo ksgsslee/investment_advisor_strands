@@ -252,7 +252,7 @@ if __name__ == "__main__":
     # 설정값 정의 (deploy_gateway.py 실행 결과로 업데이트 필요)
     config = {
         "client_id": "ovm4qu7tbjbn5hp8hvfecidvb",  # deploy_gateway.py 결과에서 가져온 값
-        "client_secret": "<YOUR_CLIENT_SECRET>",    # deploy_gateway.py 결과에서 가져온 값
+        "client_secret": "1mhgbekbhk27c4vfoghsr1dtph7l595ohpg816l04raekfbmmker",    # deploy_gateway.py 결과에서 가져온 값
         "token_url": "https://us-west-2pgtmzk6id.auth.us-west-2.amazoncognito.com/oauth2/token",
         "gateway_url": "https://your-gateway-url/mcp",  # deploy_gateway.py 결과에서 가져온 값 + /mcp
         "target_name": "sample-gateway-target"

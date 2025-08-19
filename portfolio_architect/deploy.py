@@ -83,44 +83,25 @@ def create_iam_role():
     return role_arn
 
 
-def configure_runtime(role_arn, gateway_info):
+def configure_runtime(role_arn):
     """
     AgentCore Runtime 구성
     
     배포에 필요한 Runtime 설정을 구성합니다.
-    Gateway 정보를 환경변수로 설정하여 Runtime에서 사용할 수 있도록 합니다.
     
     Args:
         role_arn (str): Runtime 실행용 IAM 역할 ARN
-        gateway_info (dict): Gateway 배포 정보
         
     Returns:
         Runtime: 구성된 Runtime 객체
         
     Note:
-        - Gateway 정보를 환경변수로 주입
         - ECR 자동 생성 활성화
         - requirements.txt 기반 의존성 설치
+        - 환경변수는 deploy_and_wait에서 설정
     """
     print("🔧 Runtime 구성 중...")
     current_dir = Path(__file__).parent
-    
-    # Gateway 정보를 환경변수로 설정
-    environment_variables = {
-        "MCP_CLIENT_ID": gateway_info['client_id'],
-        "MCP_CLIENT_SECRET": gateway_info['client_secret'],
-        "MCP_GATEWAY_URL": gateway_info['gateway_url'],
-        "MCP_USER_POOL_ID": gateway_info['user_pool_id'],
-        "MCP_TARGET_ID": gateway_info.get('target_id', 'portfolio-architect-target'),
-        "AWS_REGION": gateway_info['region']
-    }
-    
-    print("🔐 환경변수 설정:")
-    for key, value in environment_variables.items():
-        if 'SECRET' in key:
-            print(f"   {key}: ***")
-        else:
-            print(f"   {key}: {value}")
     
     runtime = Runtime()
     runtime.configure(
@@ -129,28 +110,29 @@ def configure_runtime(role_arn, gateway_info):
         auto_create_ecr=True,                                   # ECR 자동 생성
         requirements_file=str(current_dir / Config.REQUIREMENTS_FILE),  # 의존성 파일
         region=Config.REGION,                                   # AWS 리전
-        agent_name=Config.AGENT_NAME,                          # Agent 이름
-        environment_variables=environment_variables              # Gateway 정보 환경변수
+        agent_name=Config.AGENT_NAME                           # Agent 이름
     )
     
     print("✅ Runtime 구성 완료")
     return runtime
 
 
-def deploy_and_wait(runtime):
+def deploy_and_wait(runtime, gateway_info):
     """
     Runtime 배포 및 상태 대기
     
     Runtime을 AWS에 배포하고 완료될 때까지 상태를 모니터링합니다.
-    Docker 이미지 빌드, ECR 업로드, 서비스 생성 등이 포함됩니다.
+    Gateway 정보를 환경변수로 설정하여 Runtime에서 사용할 수 있도록 합니다.
     
     Args:
         runtime (Runtime): 구성된 Runtime 객체
+        gateway_info (dict): Gateway 배포 정보
         
     Returns:
         tuple: (성공 여부, Agent ARN, 최종 상태)
         
     Note:
+        - Gateway 정보를 환경변수로 주입
         - 최대 15분 대기 (30초 간격으로 체크)
         - 기존 배포가 있으면 자동 업데이트
         - READY 상태가 되면 배포 완료
@@ -160,8 +142,18 @@ def deploy_and_wait(runtime):
     print("   - ECR 업로드")
     print("   - 서비스 생성/업데이트")
     
-    # 배포 시작 (기존 배포 충돌 시 자동 업데이트)
-    launch_result = runtime.launch(auto_update_on_conflict=True)
+    # Gateway 정보를 환경변수로 설정
+    env_vars = {
+        "MCP_CLIENT_ID": gateway_info['client_id'],
+        "MCP_CLIENT_SECRET": gateway_info['client_secret'],
+        "MCP_GATEWAY_URL": gateway_info['gateway_url'],
+        "MCP_USER_POOL_ID": gateway_info['user_pool_id'],
+        "MCP_TARGET_ID": gateway_info.get('target_id', 'portfolio-architect-target'),
+        "AWS_REGION": gateway_info['region']
+    }
+    
+    # 배포 시작 (환경변수와 함께)
+    launch_result = runtime.launch(auto_update_on_conflict=True, env_vars=env_vars)
     
     # 배포 완료 상태 목록
     end_statuses = ['READY', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED']
@@ -290,10 +282,10 @@ def main():
         role_arn = create_iam_role()
         
         # 4. Runtime 구성
-        runtime = configure_runtime(role_arn, gateway_info)
+        runtime = configure_runtime(role_arn)
         
         # 5. 배포 및 대기
-        success, agent_arn, status = deploy_and_wait(runtime)
+        success, agent_arn, status = deploy_and_wait(runtime, gateway_info)
         
         if success:
             # 6. 배포 정보 저장

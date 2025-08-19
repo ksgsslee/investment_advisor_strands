@@ -228,3 +228,24 @@ def get_or_create_m2m_client(cognito, user_pool_id, client_name, resource_server
         created["UserPoolClient"]["ClientId"], 
         created["UserPoolClient"]["ClientSecret"]
     )
+
+
+def get_token(user_pool_id: str, client_id: str, client_secret: str, scope_string: str, REGION: str) -> dict:
+    try:
+        user_pool_id_without_underscore = user_pool_id.replace("_", "")
+        url = f"https://{user_pool_id_without_underscore}.auth.{REGION}.amazoncognito.com/oauth2/token"
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": scope_string,
+
+        }
+
+        response = requests.post(url, headers=headers, data=data)
+        response.raise_for_status()
+        return response.json()
+
+    except requests.exceptions.RequestException as err:
+        return {"error": str(err)}

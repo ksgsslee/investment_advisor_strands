@@ -1,316 +1,268 @@
 """
-Lab 2: Gateway 기반 Portfolio Architect Agent
-Tool Use Pattern + AgentCore Gateway + Identity 구현
+portfolio_architect.py
+포트폴리오 설계사 + MCP Gateway 연동 버전 (Guide Style)
 """
 import json
-import asyncio
+import os
+import sys
+import requests
+import logging
+from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from strands import Agent
 from strands.models.bedrock import BedrockModel
-import boto3
-import os
+from strands.tools.mcp.mcp_client import MCPClient
+from mcp.client.streamable_http import streamablehttp_client
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-class GatewayMCPClient:
-    """AgentCore Gateway MCP 클라이언트"""
-    
-    def __init__(self, gateway_id: str, region: str = "us-west-2"):
-        self.gateway_id = gateway_id
-        self.region = region
-        self.agentcore_client = boto3.client('bedrock-agentcore', region_name=region)
-    
-    async def list_tools(self) -> List[Dict[str, Any]]:
-        """Gateway에서 사용 가능한 도구 목록 조회"""
-        try:
-            response = self.agentcore_client.list_tools(gatewayId=self.gateway_id)
-            return response.get('tools', [])
-        except Exception as e:
-            print(f"도구 목록 조회 실패: {str(e)}")
-            return []
-    
-    async def invoke_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Gateway 도구 호출"""
-        try:
-            response = self.agentcore_client.invoke_tool(
-                gatewayId=self.gateway_id,
-                toolName=tool_name,
-                input=parameters
-            )
-            return response
-        except Exception as e:
-            print(f"도구 호출 실패 ({tool_name}): {str(e)}")
-            return {"error": str(e)}
+app = BedrockAgentCoreApp()
 
-class GatewayPortfolioArchitect:
-    """Gateway 기반 포트폴리오 설계사"""
-    
-    def __init__(self, gateway_id: str = None):
-        # Gateway 설정 로드
-        self.gateway_config = self._load_gateway_config()
-        self.gateway_id = gateway_id or self.gateway_config.get('gateway_id')
+
+ 
+def fetch_access_token(client_id, client_secret, token_url):
+    response = requests.post(
+        token_url,
+        data=f"grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}",
+        headers={'Content-Type': 'application/x-www-form-urlencoded'}
+    )
+    return response.json()['access_token']
+
+def create_streamable_http_transport(mcp_url: str, access_token: str):
+    return streamablehttp_client(mcp_url, headers={"Authorization": f"Bearer {access_token}"})
+
+def get_full_tools_list(client):
+    """List tools w/ support for pagination"""
+    more_tools = True
+    tools = []
+    pagination_token = None
+    while more_tools:
+        tmp_tools = client.list_tools_sync(pagination_token=pagination_token)
+        tools.extend(tmp_tools)
+        if tmp_tools.pagination_token is None:
+            more_tools = False
+        else:
+            more_tools = True 
+            pagination_token = tmp_tools.pagination_token
+    return tools
+
+class PortfolioArchitect:
+    def __init__(self, client_id, client_secret, token_url, gateway_url, target_name):
+        # 설정값 초기화 (모든 값 필수)
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.token_url = token_url
+        self.gateway_url = gateway_url
+        self.target_name = target_name
         
-        if not self.gateway_id:
-            raise ValueError("Gateway ID가 필요합니다. gateway_config.json을 확인하거나 gateway_id를 직접 제공하세요.")
+        # 액세스 토큰 획득
+        self.access_token = fetch_access_token(self.client_id, self.client_secret, self.token_url)
         
-        # Gateway MCP 클라이언트
-        self.gateway_client = GatewayMCPClient(self.gateway_id)
+        # MCP 클라이언트 생성
+        self.mcp_client = MCPClient(lambda: create_streamable_http_transport(self.gateway_url, self.access_token))
         
-        # Strands Agent 초기화
-        self.agent = Agent(
-            name="gateway_portfolio_architect",
+        with self.mcp_client:
+            tools = get_full_tools_list(self.mcp_client)
+            print(f"Found the following tools: {[tool.tool_name for tool in tools]}")
+        
+        # 포트폴리오 설계사 에이전트
+        self.architect_agent = Agent(
+            name="portfolio_architect",
             model=BedrockModel(
-                model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
                 temperature=0.3,
                 max_tokens=3000
             ),
+            callback_handler=None,
             system_prompt=self._get_system_prompt(),
-            tools=[]  # 동적으로 Gateway에서 로드
+            tools=tools
         )
-        
-        # 초기화 플래그
-        self._tools_initialized = False
-    
-    def _load_gateway_config(self) -> Dict[str, Any]:
-        """Gateway 설정 파일 로드"""
-        config_file = "gateway_config.json"
-        if os.path.exists(config_file):
-            with open(config_file, "r") as f:
-                return json.load(f)
-        return {}
     
     def _get_system_prompt(self) -> str:
-        return """당신은 전문 포트폴리오 설계사입니다. AgentCore Gateway를 통해 다양한 금융 데이터 소스에 접근할 수 있습니다.
+        return f"""당신은 전문 투자 설계사입니다. 고객의 재무 분석 결과를 바탕으로 구체적인 투자 포트폴리오를 제안해야 합니다. 
 
-사용 가능한 데이터 소스:
-1. **Yahoo Finance Lambda**: ETF 가격 데이터, 뉴스, 기본 정보
-2. **FRED Economic API**: 연방준비제도 경제 지표 (금리, 인플레이션, 실업률 등)
+재무 분석 결과가 다음과 같은 JSON 형식으로 제공됩니다:
+{{
+  "risk_profile": <위험 성향>,
+  "risk_profile_reason": <위험 성향 평가 근거>,
+  "required_annual_return_rate": <필요 연간 수익률>,
+  "return_rate_reason": <필요 수익률 계산 근거 및 설명>
+}}
 
-작업 순서:
-1. **경제 상황 분석**: FRED API로 현재 경제 지표 조회
-   - 연방기준금리 (FEDFUNDS)
-   - 인플레이션 (CPIAUCSL) 
-   - 실업률 (UNRATE)
-   - 10년 국채수익률 (DGS10)
+당신의 작업:
+1. 재무 분석 결과를 신중히 검토하고 해석하세요.
+2. "{self.target_name}___get_available_products" 액션을 호출하여 사용 가능한 투자 상품 목록을 얻으세요.
+3. 얻은 투자 상품 목록 중 분산 투자를 고려하여 고객의 재무 분석 결과와 가장 적합한 3개의 상품을 선택하세요.
+4. 선택한 각 투자 상품에 대해 "{self.target_name}___get_product_data" 액션을 동시에 호출하여 최근 가격 데이터를 얻으세요.
+5. 얻은 가격 데이터를 분석하여 최종 포트폴리오 비율을 결정하세요.
+6. 포트폴리오 구성 근거를 상세히 설명하세요.
 
-2. **ETF 선택**: 경제 상황에 적합한 ETF 3개 선택
-   - 금리 상승기: 금융주(XLF), 단기채(SHY), 기술주(QQQ) 축소
-   - 인플레이션 상승: 원자재(DBC), 금(GLD), 리츠(VNQ)
-   - 경기침체 우려: 장기채(TLT), 방어주(SPY), 금(GLD)
-   - 정상 성장: 균형 포트폴리오 (SPY, QQQ, AGG)
-
-3. **데이터 수집**: 선택한 ETF들의 상세 정보 수집
-   - 가격 데이터 및 변동성
-   - 최신 뉴스 및 시장 감정
-   - 기본 정보 (비용, 자산규모 등)
-
-4. **포트폴리오 구성**: 수집한 데이터를 바탕으로 최적 배분 결정
-
-응답 형식:
-{
-  "economic_analysis": {
-    "fed_rate": "현재 금리",
-    "inflation": "인플레이션율", 
-    "unemployment": "실업률",
-    "market_regime": "시장 상황 판단"
-  },
-  "selected_etfs": ["ETF1", "ETF2", "ETF3"],
-  "etf_analysis": {
-    "ETF1": {"price": 가격, "volatility": 변동성, "news_sentiment": "뉴스 요약"},
-    "ETF2": {...},
-    "ETF3": {...}
-  },
-  "portfolio_allocation": {
-    "ETF1": 비율,
-    "ETF2": 비율, 
-    "ETF3": 비율
-  },
+다음 JSON 형식으로 응답해주세요:
+{{
+  "portfolio_allocation": {{투자 상품별 배분 비율}} (예: {{"ticker1": 50, "ticker2": 30, "ticker3": 20}}),
   "strategy": "투자 전략 설명",
-  "reason": "포트폴리오 구성 근거 (경제 지표와 ETF 데이터 기반)"
-}
+  "reason": "포트폴리오 구성 근거"
+}}
 
-중요사항:
-- 반드시 경제 지표를 먼저 조회하여 시장 상황을 파악하세요
-- 각 ETF의 실제 데이터를 조회하여 근거 있는 배분을 결정하세요
-- 뉴스 정보를 활용하여 시장 감정을 반영하세요
-- 총 배분 비율은 반드시 100%가 되어야 합니다"""
+응답 시 다음 사항을 고려하세요:
+- 제안한 포트폴리오가 고객의 투자 목표 달성에 어떻게 도움이 될 것인지 논리적으로 설명하세요.
+- 각 자산의 배분 비율은 반드시 정수로 표현하고, 총합이 100%가 되어야 합니다.
+- 포트폴리오 구성 근거를 작성할때는 반드시 "QQQ(미국 기술주)" 처럼 티커와 설명을 함께 제공하세요.
+- JSON 앞뒤에 백틱(```) 또는 따옴표를 붙이지 말고 순수한 JSON 형식만 출력하세요."""
     
-    async def initialize_gateway_tools(self):
-        """Gateway에서 도구들을 동적으로 로드"""
-        if self._tools_initialized:
-            return
-        
-        print("🔍 Gateway에서 사용 가능한 도구 조회 중...")
-        
-        available_tools = await self.gateway_client.list_tools()
-        
-        if not available_tools:
-            print("⚠️ Gateway에서 도구를 찾을 수 없습니다.")
-            return
-        
-        print(f"✅ {len(available_tools)}개 도구 발견:")
-        
-        for tool_info in available_tools:
-            tool_name = tool_info.get('name', 'unknown')
-            tool_description = tool_info.get('description', '')
-            
-            print(f"  - {tool_name}: {tool_description}")
-            
-            # Gateway 도구를 Strands Agent 도구로 래핑
-            wrapped_tool = self._create_gateway_tool_wrapper(tool_info)
-            self.agent.add_tool(wrapped_tool)
-        
-        self._tools_initialized = True
-        print("✅ 모든 도구가 Agent에 등록되었습니다.")
-    
-    def _create_gateway_tool_wrapper(self, tool_info: Dict[str, Any]):
-        """Gateway 도구를 Strands Agent 도구로 래핑"""
-        tool_name = tool_info.get('name')
-        tool_description = tool_info.get('description', '')
-        
-        async def gateway_tool_func(**kwargs):
-            """Gateway 도구 호출 함수"""
-            print(f"🔧 도구 호출: {tool_name} with {kwargs}")
-            
-            result = await self.gateway_client.invoke_tool(tool_name, kwargs)
-            
-            if 'error' in result:
-                return f"도구 호출 실패: {result['error']}"
-            
-            # 결과를 JSON 문자열로 반환
-            return json.dumps(result, ensure_ascii=False, indent=2)
-        
-        # 함수 메타데이터 설정
-        gateway_tool_func.__name__ = tool_name
-        gateway_tool_func.__doc__ = tool_description
-        
-        # Strands tool 데코레이터 적용
-        from strands.tools import tool
-        return tool(gateway_tool_func)
-    
-    async def design_portfolio(self, financial_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """포트폴리오 설계 실행"""
+    async def design_portfolio_async(self, financial_analysis):
+        """실시간 스트리밍 포트폴리오 설계 수행"""
         try:
-            # Gateway 도구 초기화
-            await self.initialize_gateway_tools()
+            # 재무 분석 결과를 프롬프트로 구성
+            analysis_str = json.dumps(financial_analysis, ensure_ascii=False, indent=2)
             
-            if not self._tools_initialized:
-                return {
-                    "status": "error",
-                    "error": "Gateway 도구 초기화 실패"
-                }
-            
-            # 재무 분석을 바탕으로 포트폴리오 설계 요청
-            prompt = f"""
-            사용자 재무 분석 결과:
-            {json.dumps(financial_analysis, ensure_ascii=False, indent=2)}
-            
-            위 정보를 바탕으로 다음 단계를 수행하여 최적의 포트폴리오를 설계해주세요:
-            
-            1. 먼저 FRED API로 현재 경제 지표들을 조회하세요
-            2. 경제 상황을 분석하여 적합한 ETF 3개를 선택하세요
-            3. 선택한 ETF들의 가격 데이터와 뉴스를 수집하세요
-            4. 수집한 데이터를 바탕으로 최종 포트폴리오 배분을 결정하세요
-            
-            모든 단계에서 실제 데이터를 조회하고 근거를 제시해주세요.
-            """
-            
-            print("🤖 포트폴리오 설계 시작...")
-            print("📊 경제 지표 조회 → ETF 선택 → 데이터 수집 → 포트폴리오 구성")
-            
-            # Agent 실행
-            result = await self.agent.run_async(prompt)
-            
-            return {
-                "status": "success",
-                "portfolio": self._parse_agent_result(result),
-                "raw_response": str(result),
-                "gateway_id": self.gateway_id
-            }
-            
+            # 🎯 실시간 스트리밍으로 에이전트 실행
+            async for event in self.architect_agent.stream_async(analysis_str):
+                # 텍스트 데이터 스트리밍
+                if "data" in event:
+                    yield {
+                        "type": "text_chunk",
+                        "data": event["data"],
+                        "complete": event.get("complete", False)
+                    }
+                
+                # 🎯 메시지가 추가될 때 완료된 tool_use 정보를 yield
+                if "message" in event:
+                    message = event["message"]
+                    
+                    # assistant 메시지에서 완료된 tool_use 찾기
+                    if message.get("role") == "assistant":
+                        for content in message.get("content", []):
+                            if "toolUse" in content:
+                                tool_use = content["toolUse"]
+                                yield {
+                                    "type": "tool_use",
+                                    "tool_name": tool_use.get("name"),
+                                    "tool_use_id": tool_use.get("toolUseId"),
+                                    "tool_input": tool_use.get("input", {})
+                                }
+                    
+                    # user 메시지에서 tool_result 처리
+                    if message.get("role") == "user":
+                        for content in message.get("content", []):
+                            if "toolResult" in content:
+                                tool_result = content["toolResult"]
+                                yield {
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_result["toolUseId"],
+                                    "status": tool_result["status"],
+                                    "content": tool_result["content"]
+                                }
+                
+                # 최종 결과 - 스트리밍 완료 신호
+                if "result" in event:
+                    yield {
+                        "type": "streaming_complete",
+                        "message": "텍스트 스트리밍 완료!"
+                    }
+
         except Exception as e:
-            print(f"❌ 포트폴리오 설계 실패: {str(e)}")
-            return {
-                "status": "error",
+            yield {
+                "type": "error",
                 "error": str(e),
-                "gateway_id": self.gateway_id
-            }
-    
-    def _parse_agent_result(self, result: Any) -> Dict[str, Any]:
-        """Agent 결과 파싱"""
-        try:
-            result_str = str(result)
-            
-            # JSON 부분 추출 시도
-            start_idx = result_str.find('{')
-            end_idx = result_str.rfind('}') + 1
-            
-            if start_idx != -1 and end_idx != -1:
-                json_str = result_str[start_idx:end_idx]
-                return json.loads(json_str)
-            
-            # JSON 파싱 실패 시 기본 구조 반환
-            return {
-                "portfolio_allocation": {"SPY": 60, "AGG": 30, "GLD": 10},
-                "strategy": "기본 균형 포트폴리오",
-                "reason": "Agent 결과 파싱 실패로 기본 포트폴리오 제공"
-            }
-            
-        except Exception as e:
-            print(f"결과 파싱 실패: {str(e)}")
-            return {
-                "portfolio_allocation": {"SPY": 60, "AGG": 30, "GLD": 10},
-                "strategy": "기본 균형 포트폴리오", 
-                "reason": f"결과 파싱 오류: {str(e)}"
+                "status": "error"
             }
 
-# 테스트 함수
-async def test_gateway_portfolio_architect():
-    """Gateway 포트폴리오 설계사 테스트"""
-    print("🧪 Gateway Portfolio Architect 테스트 시작")
+
+# AgentCore Runtime 엔트리포인트
+architect = None
+
+@app.entrypoint
+async def portfolio_architect(payload):
+    """AgentCore Runtime 엔트리포인트"""
+    global architect
+    if architect is None:
+        # 런타임에서는 환경변수에서 설정값 로드
+        config = {
+            "client_id": os.getenv("MCP_CLIENT_ID", "ovm4qu7tbjbn5hp8hvfecidvb"),
+            "client_secret": os.getenv("MCP_CLIENT_SECRET", "<YOUR_CLIENT_SECRET>"),
+            "token_url": os.getenv("MCP_TOKEN_URL", "https://us-west-2pgtmzk6id.auth.us-west-2.amazoncognito.com/oauth2/token"),
+            "gateway_url": os.getenv("MCP_GATEWAY_URL", "https://your-gateway-url/mcp"),
+            "target_name": os.getenv("MCP_TARGET_NAME", "sample-gateway-target")
+        }
+        architect = PortfolioArchitect(**config)
     
-    # 테스트 재무 분석 데이터
-    test_financial_analysis = {
-        "age": 35,
-        "risk_tolerance": "aggressive",
-        "investment_amount": 50000000,
-        "target_return": 40.0,
-        "risk_profile": "공격적",
-        "risk_profile_reason": "나이가 젊고 투자 경험이 많음",
-        "required_annual_return_rate": 40.0,
-        "return_rate_reason": "목표 달성을 위한 높은 수익률 필요"
-    }
+    financial_analysis = payload.get("financial_analysis")
+    async for chunk in architect.design_portfolio_async(financial_analysis):
+        yield chunk
+
+# 테스트용 함수
+def test_portfolio_architect(config):
+    """테스트 함수"""
+    import asyncio
     
-    try:
-        # Gateway 설정 확인
-        if not os.path.exists("gateway_config.json"):
-            print("❌ gateway_config.json 파일이 없습니다.")
-            print("먼저 gateway_deploy.py를 실행하여 Gateway를 배포하세요.")
-            return
+    async def run_test():
+        # config는 필수
+        architect = PortfolioArchitect(**config)
         
-        architect = GatewayPortfolioArchitect()
+        # Lab 1의 예시 결과를 사용
+        test_financial_analysis = {
+            "risk_profile": "공격적",
+            "risk_profile_reason": "나이가 35세로 젊고, 주식 투자 경험이 10년으로 상당히 많으며, 총 투자 가능 금액이 5000만원으로 상당히 높은 편입니다.",
+            "required_annual_return_rate": 40.00,
+            "return_rate_reason": "필요 연간 수익률은 (70000000 - 50000000) / 50000000 * 100 = 40.00%입니다."
+        }
         
-        print("📊 입력 데이터:")
+        print("=== Lab 2: Portfolio Architect Test (MCP Version) ===")
+        print("📥 입력 데이터:")
         print(json.dumps(test_financial_analysis, ensure_ascii=False, indent=2))
+        print("\n🤖 포트폴리오 설계 시작...")
         
-        print("\n🚀 포트폴리오 설계 실행...")
-        result = await architect.design_portfolio(test_financial_analysis)
-        
-        print("\n✅ 결과:")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        
-        if result['status'] == 'success':
-            print("\n🎉 Gateway 기반 포트폴리오 설계 성공!")
-        else:
-            print(f"\n❌ 설계 실패: {result.get('error')}")
-        
-    except Exception as e:
-        print(f"❌ 테스트 실패: {str(e)}")
-
-def main():
-    """메인 함수"""
-    print("🤖 Lab 2: Gateway 기반 Portfolio Architect")
+        try:
+            full_text = ""
+            async for chunk in architect.design_portfolio_async(test_financial_analysis):
+                if chunk["type"] == "text_chunk":
+                    data = chunk["data"]
+                    full_text += data
+                    print(data, end="", flush=True)
+                    
+                elif chunk["type"] == "streaming_complete":
+                    print(f"\n\n✅ {chunk['message']}")
+                    
+                elif chunk["type"] == "tool_use":
+                    print(f"\n\n🛠️ Tool Use: {chunk['tool_name']}")
+                    print(f"   Tool Use ID: {chunk['tool_use_id']}")
+                    print(f"   Input: {chunk['tool_input']}")
+                    print("-" * 40)
+                    
+                elif chunk["type"] == "tool_result":
+                    print(f"\n📊 Tool Result:")
+                    print(f"   Tool Use ID: {chunk['tool_use_id']}")
+                    print(f"   Status: {chunk['status']}")
+                    for content_item in chunk['content']:
+                        if 'text' in content_item:
+                            result_text = content_item['text']
+                            print(f"   Result: {result_text}")
+                    print("-" * 40)
+                    
+                elif chunk["type"] == "error":
+                    print(f"\n❌ 오류 발생: {chunk['error']}")
+                    
+        except Exception as e:
+            print(f"\n❌테스트 실행 중 오류: {str(e)}")
     
-    # 비동기 테스트 실행
-    asyncio.run(test_gateway_portfolio_architect())
+    # 비동기 함수 실행
+    asyncio.run(run_test())
 
 if __name__ == "__main__":
-    main()
+    # 설정값 정의 (deploy_gateway.py 실행 결과로 업데이트 필요)
+    config = {
+        "client_id": "ovm4qu7tbjbn5hp8hvfecidvb",  # deploy_gateway.py 결과에서 가져온 값
+        "client_secret": "<YOUR_CLIENT_SECRET>",    # deploy_gateway.py 결과에서 가져온 값
+        "token_url": "https://us-west-2pgtmzk6id.auth.us-west-2.amazoncognito.com/oauth2/token",
+        "gateway_url": "https://your-gateway-url/mcp",  # deploy_gateway.py 결과에서 가져온 값 + /mcp
+        "target_name": "sample-gateway-target"
+    }
+    
+    print("🔧 설정값을 사용합니다.")
+    print("   deploy_gateway.py 실행 결과로 config 값들을 업데이트하세요.")
+    
+    # 테스트 실행
+    test_portfolio_architect(config)
+    
+    # AgentCore 앱 실행
+    app.run()

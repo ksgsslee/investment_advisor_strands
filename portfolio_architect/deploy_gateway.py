@@ -1,3 +1,8 @@
+"""
+deploy_gateway.py
+AgentCore Gateway 배포 스크립트
+"""
+
 import boto3
 import time
 import json

@@ -244,29 +244,25 @@ async def portfolio_architect(payload):
     
     # Runtime 환경에서 지연 초기화
     if architect is None:
-        try:
-            # 로컬 환경: JSON 파일에서 로드
-            architect = PortfolioArchitect()
-        except FileNotFoundError:
-            # Runtime 환경: 환경변수에서 Gateway 정보 구성
-            gateway_info = {
-                "client_id": os.getenv("MCP_CLIENT_ID"),
-                "client_secret": os.getenv("MCP_CLIENT_SECRET"), 
-                "gateway_url": os.getenv("MCP_GATEWAY_URL"),
-                "user_pool_id": os.getenv("MCP_USER_POOL_ID"),
-                "region": os.getenv("AWS_REGION", "us-west-2"),
-                "target_id": os.getenv("MCP_TARGET_ID", "portfolio-architect-target")
-            }
-            
-            # 필수 환경변수 확인
-            required_vars = ["MCP_CLIENT_ID", "MCP_CLIENT_SECRET", "MCP_GATEWAY_URL", "MCP_USER_POOL_ID"]
-            missing_vars = [var for var in required_vars if not os.getenv(var)]
-            
-            if missing_vars:
-                raise RuntimeError(f"필수 환경변수 누락: {', '.join(missing_vars)}")
-            
-            architect = PortfolioArchitect(gateway_info)
-    
+        # 필수 환경변수 확인
+        required_vars = ["MCP_CLIENT_ID", "MCP_CLIENT_SECRET", "MCP_GATEWAY_URL", "MCP_USER_POOL_ID"]
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
+        
+        if missing_vars:
+            raise RuntimeError(f"필수 환경변수 누락: {', '.join(missing_vars)}")
+
+        # Runtime 환경: 환경변수에서 Gateway 정보 구성
+        gateway_info = {
+            "client_id": os.getenv("MCP_CLIENT_ID"),
+            "client_secret": os.getenv("MCP_CLIENT_SECRET"), 
+            "gateway_url": os.getenv("MCP_GATEWAY_URL"),
+            "user_pool_id": os.getenv("MCP_USER_POOL_ID"),
+            "region": os.getenv("AWS_REGION", "us-west-2"),
+            "target_id": os.getenv("MCP_TARGET_ID", "portfolio-architect-target")
+        }
+        
+        architect = PortfolioArchitect(gateway_info)
+
     financial_analysis = payload.get("financial_analysis")
     async for chunk in architect.design_portfolio_async(financial_analysis):
         yield chunk

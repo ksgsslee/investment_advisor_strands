@@ -15,6 +15,8 @@ import boto3
 import time
 import json
 from pathlib import Path
+import copy
+from target_config import TARGET_CONFIGURATION
 from utils import (
     create_agentcore_gateway_role,
     get_or_create_resource_server,
@@ -197,54 +199,27 @@ def deploy_gateway():
     )
     print(f"✅ Gateway 생성 완료: {gateway['gatewayId']}")
     
-    # 6. Gateway Target 생성 (Lambda 함수를 MCP 도구로 노출)
+    # 6. Target 설정 로드
+    target_config = copy.deepcopy(TARGET_CONFIGURATION)
+    tool_count = len(target_config["mcp"]["lambda"]["toolSchema"]["inlinePayload"])
+    print(f"📋 Target 설정 로드: {tool_count}개 도구")
+    
+    # Lambda ARN을 설정에 추가
+    target_config['mcp']['lambda']['lambdaArn'] = lambda_arn
+    
+    # 7. Gateway Target 생성 (Lambda 함수를 MCP 도구로 노출)
     print("🎯 Gateway Target 생성 중...")
     target = gateway_client.create_gateway_target(
         gatewayIdentifier=gateway['gatewayId'],
         name=Config.TARGET_NAME,
-        targetConfiguration={
-            'mcp': {
-                'lambda': {
-                    'lambdaArn': lambda_arn,  # 연결할 Lambda 함수
-                    'toolSchema': {
-                        'inlinePayload': [
-                            # ETF 상품 목록 조회 도구
-                            {
-                                'name': 'get_available_products',
-                                'description': 'Retrieve list of available ETF products for portfolio construction',
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {},
-                                    "required": []
-                                }
-                            },
-                            # ETF 가격 데이터 조회 도구
-                            {
-                                "name": "get_product_data",
-                                "description": "Get recent price data for selected ETF ticker symbol",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "ticker": {
-                                            "type": "string",
-                                            "description": "ETF ticker symbol to retrieve price data for"
-                                        }
-                                    },
-                                    "required": ["ticker"]
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        },
+        targetConfiguration=target_config,
         credentialProviderConfigurations=[{
             'credentialProviderType': 'GATEWAY_IAM_ROLE'  # Gateway IAM 역할 사용
         }]
     )
     print(f"✅ Gateway Target 생성 완료: {target['targetId']}")
     
-    # 7. 배포 결과 구성
+    # 8. 배포 결과 구성
     result = {
         'lambda_arn': lambda_arn,
         'role_arn': role_arn,

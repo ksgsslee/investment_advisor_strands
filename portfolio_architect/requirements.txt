@@ -1,4 +1,2 @@
-# Portfolio Architect Runtime 의존성
-
-# Strands Agent 프레임워크 (boto3, requests 등 포함)
-strands-agents>=0.1.0
+strands-agents
+bedrock-agentcore

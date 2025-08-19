@@ -1,4 +1,5 @@
 """
+deploy_lambda.py
 Portfolio Architect Lambda 함수 배포 스크립트
 
 이 스크립트는 포트폴리오 설계를 위한 Lambda 함수를 AWS에 배포합니다.

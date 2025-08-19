@@ -20,7 +20,7 @@ def create_lambda_zip():
 def create_lambda_role():
     """Lambda 실행 역할 생성"""
     iam = boto3.client('iam')
-    role_name = 'lambda-portfolio-architect-role'
+    role_name = 'agentcore-portfolio-architect-role'
     
     # 신뢰 정책
     trust_policy = {
@@ -61,11 +61,10 @@ def create_lambda_role():
         print(f"Using existing role: {role_arn}")
         return role_arn
 
-def deploy_lambda_function():
+def deploy_lambda_function(function_name, region):
     """Lambda 함수 배포"""
-    lambda_client = boto3.client('lambda', region_name='us-west-2')
-    function_name = 'lambda-portfolio-architect'
-    
+    lambda_client = boto3.client('lambda', region_name=region)
+
     # ZIP 파일 생성
     zip_filename = create_lambda_zip()
     
@@ -80,7 +79,7 @@ def deploy_lambda_function():
         # Lambda 함수 생성
         response = lambda_client.create_function(
             FunctionName=function_name,
-            Runtime='python3.9',
+            Runtime='python3.12',
             Role=role_arn,
             Handler='lambda_function.lambda_handler',
             Code={'ZipFile': zip_content},
@@ -118,6 +117,9 @@ def deploy_lambda_function():
 
 if __name__ == "__main__":
     print("🚀 Deploying Lambda function...")
-    function_arn = deploy_lambda_function()
+    
+    function_name = 'agentcore-portfolio-architect'
+    function_arn = deploy_lambda_function(function_name, "us-west-2")
+    
     print(f"✅ Lambda function deployed successfully!")
     print(f"Function ARN: {function_arn}")

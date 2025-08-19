@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from boto3.session import Session
 from bedrock_agentcore_starter_toolkit import Runtime
+from utils import create_agentcore_role
 
 # 설정
 class Config:
@@ -18,11 +19,8 @@ class Config:
     MAX_DEPLOY_MINUTES = 10
     STATUS_CHECK_INTERVAL = 30
     REGION = "us-west-2"
+    CURRENT_DIR = Path(__file__).parent.resolve()
 
-# 경로 설정
-CURRENT_DIR = Path(__file__).parent.resolve()
-sys.path.append(str(CURRENT_DIR.parent))
-from utils import create_agentcore_role
 
 def setup_environment():
     """환경 설정"""
@@ -39,10 +37,10 @@ def configure_runtime(role_arn, region):
     """Runtime 구성"""
     runtime = Runtime()
     runtime.configure(
-        entrypoint=str(CURRENT_DIR / Config.ENTRYPOINT_FILE),
+        entrypoint=str(Config.CURRENT_DIR / Config.ENTRYPOINT_FILE),
         execution_role=role_arn,
         auto_create_ecr=True,
-        requirements_file=str(CURRENT_DIR / Config.REQUIREMENTS_FILE),
+        requirements_file=str(Config.CURRENT_DIR / Config.REQUIREMENTS_FILE),
         region=region,
         agent_name=Config.AGENT_NAME,
     )
@@ -81,7 +79,7 @@ def deploy():
                 "region": region,
                 "status": status
             }
-            with open(CURRENT_DIR / "deployment_info.json", "w") as f:
+            with open(Config.CURRENT_DIR / "deployment_info.json", "w") as f:
                 json.dump(deployment_info, f)
             return True
         else:
@@ -95,7 +93,7 @@ def deploy():
 def main():
     """메인 함수"""
     required_files = [Config.ENTRYPOINT_FILE, Config.REQUIREMENTS_FILE]
-    missing_files = [f for f in required_files if not (CURRENT_DIR / f).exists()]
+    missing_files = [f for f in required_files if not (Config.CURRENT_DIR / f).exists()]
     
     if missing_files:
         print(f"파일 누락: {', '.join(missing_files)}")

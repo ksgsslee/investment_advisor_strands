@@ -30,20 +30,6 @@ def fetch_access_token(client_id, client_secret, token_url):
 def create_streamable_http_transport(mcp_url: str, access_token: str):
     return streamablehttp_client(mcp_url, headers={"Authorization": f"Bearer {access_token}"})
 
-def get_full_tools_list(client):
-    """List tools w/ support for pagination"""
-    more_tools = True
-    tools = []
-    pagination_token = None
-    while more_tools:
-        tmp_tools = client.list_tools_sync(pagination_token=pagination_token)
-        tools.extend(tmp_tools)
-        if tmp_tools.pagination_token is None:
-            more_tools = False
-        else:
-            more_tools = True 
-            pagination_token = tmp_tools.pagination_token
-    return tools
 
 class PortfolioArchitect:
     def __init__(self, client_id, client_secret, token_url, gateway_url, target_name):
@@ -258,7 +244,7 @@ if __name__ == "__main__":
         "client_id": "ovm4qu7tbjbn5hp8hvfecidvb",  # deploy_gateway.py 결과에서 가져온 값
         "client_secret": "1mhgbekbhk27c4vfoghsr1dtph7l595ohpg816l04raekfbmmker",    # deploy_gateway.py 결과에서 가져온 값
         "token_url": "https://us-west-2pgtmzk6id.auth.us-west-2.amazoncognito.com/oauth2/token",
-        "gateway_url": "https://sample-gateway-jdhc1sux2q.gateway.bedrock-agentcore.us-west-2.amazonaws.com/mcp",  # deploy_gateway.py 결과에서 가져온 값 + /mcp
+        "gateway_url": "https://sample-gateway-9uaw5knrtz.gateway.bedrock-agentcore.us-west-2.amazonaws.com/mcp",  # deploy_gateway.py 결과에서 가져온 값 + /mcp
         "target_name": "sample-gateway-target"
     }
     

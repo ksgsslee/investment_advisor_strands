@@ -109,39 +109,6 @@ def create_agentcore_gateway_role(gateway_name, region):
     return agentcore_gateway_iam_role
 
 
-def get_or_create_resource_server(cognito, user_pool_id, resource_server_id, resource_server_name, scopes):
-    """
-    Cognito 리소스 서버 조회 또는 생성
-    
-    Args:
-        cognito: Cognito 클라이언트
-        user_pool_id (str): Cognito 사용자 풀 ID
-        resource_server_id (str): 리소스 서버 식별자
-        resource_server_name (str): 리소스 서버 이름
-        scopes (list): 스코프 목록
-    
-    Returns:
-        str: 리소스 서버 ID
-    """
-    try:
-        # 기존 리소스 서버 조회
-        cognito.describe_resource_server(
-            UserPoolId=user_pool_id,
-            Identifier=resource_server_id
-        )
-        return resource_server_id
-    except cognito.exceptions.ResourceNotFoundException:
-        print('Creating new resource server...')
-        # 새 리소스 서버 생성
-        cognito.create_resource_server(
-            UserPoolId=user_pool_id,
-            Identifier=resource_server_id,
-            Name=resource_server_name,
-            Scopes=scopes
-        )
-        return resource_server_id
-
-
 def get_or_create_user_pool(cognito, user_pool_name, region):
     """
     Cognito 사용자 풀 조회 또는 생성
@@ -183,6 +150,39 @@ def get_or_create_user_pool(cognito, user_pool_name, region):
     print(f"Created domain: {domain_prefix}")
     
     return user_pool_id
+
+
+def get_or_create_resource_server(cognito, user_pool_id, resource_server_id, resource_server_name, scopes):
+    """
+    Cognito 리소스 서버 조회 또는 생성
+    
+    Args:
+        cognito: Cognito 클라이언트
+        user_pool_id (str): Cognito 사용자 풀 ID
+        resource_server_id (str): 리소스 서버 식별자
+        resource_server_name (str): 리소스 서버 이름
+        scopes (list): 스코프 목록
+    
+    Returns:
+        str: 리소스 서버 ID
+    """
+    try:
+        # 기존 리소스 서버 조회
+        cognito.describe_resource_server(
+            UserPoolId=user_pool_id,
+            Identifier=resource_server_id
+        )
+        return resource_server_id
+    except cognito.exceptions.ResourceNotFoundException:
+        print('Creating new resource server...')
+        # 새 리소스 서버 생성
+        cognito.create_resource_server(
+            UserPoolId=user_pool_id,
+            Identifier=resource_server_id,
+            Name=resource_server_name,
+            Scopes=scopes
+        )
+        return resource_server_id
 
 
 def get_or_create_m2m_client(cognito, user_pool_id, client_name, resource_server_id):

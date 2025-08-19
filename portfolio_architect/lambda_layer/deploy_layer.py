@@ -44,21 +44,28 @@ def get_or_create_s3_bucket():
         print(f"♻️ 기존 S3 버킷 사용: {bucket_name}")
         return bucket_name
         
-    except s3_client.exceptions.NoSuchBucket:
-        # 버킷이 없으면 생성
-        print(f"📦 S3 버킷 생성 중: {bucket_name}")
+    except s3_client.exceptions.ClientError as e:
+        error_code = e.response['Error']['Code']
         
-        if Config.REGION == 'us-east-1':
-            s3_client.create_bucket(Bucket=bucket_name)
+        if error_code == '404':
+            # 버킷이 없으면 생성
+            print(f"📦 S3 버킷 생성 중: {bucket_name}")
+            
+            if Config.REGION == 'us-east-1':
+                s3_client.create_bucket(Bucket=bucket_name)
+            else:
+                s3_client.create_bucket(
+                    Bucket=bucket_name,
+                    CreateBucketConfiguration={'LocationConstraint': Config.REGION}
+                )
+            
+            print(f"✅ S3 버킷 생성 완료: {bucket_name}")
+            return bucket_name
         else:
-            s3_client.create_bucket(
-                Bucket=bucket_name,
-                CreateBucketConfiguration={'LocationConstraint': Config.REGION}
-            )
-        
-        print(f"✅ S3 버킷 생성 완료: {bucket_name}")
-        return bucket_name
-        
+            # 다른 에러 (권한 없음 등)
+            print(f"❌ S3 버킷 접근 실패: {str(e)}")
+            raise
+            
     except Exception as e:
         print(f"❌ S3 버킷 처리 실패: {str(e)}")
         raise
@@ -113,12 +120,7 @@ def deploy_lambda_layer():
             f"Layer ZIP 파일을 찾을 수 없습니다: {zip_file}\n"
             "yfinance.zip 파일을 현재 디렉토리에 넣어주세요."
         )
-    
-    # 파일 크기 확인
-    file_size = zip_file.stat().st_size
-    file_size_mb = file_size / (1024 * 1024)
-    print(f"📦 Layer ZIP 파일: {zip_file} ({file_size_mb:.1f}MB)")
-    
+
     try:
         # S3를 통한 업로드 (모든 크기 지원)
         print("📤 S3를 통한 업로드 중...")
@@ -202,11 +204,7 @@ def main():
         print("🎉 Layer 배포 성공!")
         print(f"📄 배포 정보: {info_file}")
         print("=" * 50)
-        
-        print("\n📋 다음 단계:")
-        print("1. Lambda 함수에 Layer 연결")
-        print("2. Lambda 함수 재배포")
-        
+
         return layer_version_arn
         
     except Exception as e:

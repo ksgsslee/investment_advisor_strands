@@ -83,26 +83,44 @@ def create_iam_role():
     return role_arn
 
 
-def configure_runtime(role_arn):
+def configure_runtime(role_arn, gateway_info):
     """
     AgentCore Runtime 구성
     
     배포에 필요한 Runtime 설정을 구성합니다.
-    Docker 이미지 빌드 및 ECR 업로드 설정을 포함합니다.
+    Gateway 정보를 환경변수로 설정하여 Runtime에서 사용할 수 있도록 합니다.
     
     Args:
         role_arn (str): Runtime 실행용 IAM 역할 ARN
+        gateway_info (dict): Gateway 배포 정보
         
     Returns:
         Runtime: 구성된 Runtime 객체
         
     Note:
+        - Gateway 정보를 환경변수로 주입
         - ECR 자동 생성 활성화
         - requirements.txt 기반 의존성 설치
-        - 서버리스 환경에서 실행
     """
     print("🔧 Runtime 구성 중...")
     current_dir = Path(__file__).parent
+    
+    # Gateway 정보를 환경변수로 설정
+    environment_variables = {
+        "MCP_CLIENT_ID": gateway_info['client_id'],
+        "MCP_CLIENT_SECRET": gateway_info['client_secret'],
+        "MCP_GATEWAY_URL": gateway_info['gateway_url'],
+        "MCP_USER_POOL_ID": gateway_info['user_pool_id'],
+        "MCP_TARGET_ID": gateway_info.get('target_id', 'portfolio-architect-target'),
+        "AWS_REGION": gateway_info['region']
+    }
+    
+    print("🔐 환경변수 설정:")
+    for key, value in environment_variables.items():
+        if 'SECRET' in key:
+            print(f"   {key}: ***")
+        else:
+            print(f"   {key}: {value}")
     
     runtime = Runtime()
     runtime.configure(
@@ -112,6 +130,7 @@ def configure_runtime(role_arn):
         requirements_file=str(current_dir / Config.REQUIREMENTS_FILE),  # 의존성 파일
         region=Config.REGION,                                   # AWS 리전
         agent_name=Config.AGENT_NAME,                          # Agent 이름
+        environment_variables=environment_variables              # Gateway 정보 환경변수
     )
     
     print("✅ Runtime 구성 완료")
@@ -271,7 +290,7 @@ def main():
         role_arn = create_iam_role()
         
         # 4. Runtime 구성
-        runtime = configure_runtime(role_arn)
+        runtime = configure_runtime(role_arn, gateway_info)
         
         # 5. 배포 및 대기
         success, agent_arn, status = deploy_and_wait(runtime)

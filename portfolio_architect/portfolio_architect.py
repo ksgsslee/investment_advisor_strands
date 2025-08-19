@@ -73,10 +73,18 @@ def create_streamable_http_transport(mcp_url: str, access_token: str):
 class PortfolioArchitect:
     """AI 포트폴리오 설계사 - MCP Gateway 연동"""
     
-    def __init__(self):
-        """포트폴리오 설계사 초기화 - Gateway 정보 자동 로드"""
-        # Gateway 정보 자동 로드
-        self.gateway_info = load_gateway_info()
+    def __init__(self, gateway_info=None):
+        """
+        포트폴리오 설계사 초기화
+        
+        Args:
+            gateway_info (dict, optional): Gateway 정보. None이면 파일에서 자동 로드
+        """
+        # Gateway 정보 로드
+        if gateway_info is None:
+            self.gateway_info = load_gateway_info()
+        else:
+            self.gateway_info = gateway_info
         self.client_id = self.gateway_info['client_id']
         self.client_secret = self.gateway_info['client_secret']
         self.gateway_url = self.gateway_info['gateway_url']  # Gateway URL 그대로 사용
@@ -226,12 +234,39 @@ class PortfolioArchitect:
 
 
 
-# AgentCore Runtime 전역 인스턴스
-architect = PortfolioArchitect()
+# AgentCore Runtime 전역 인스턴스 (지연 초기화)
+architect = None
 
 @app.entrypoint
 async def portfolio_architect(payload):
     """AgentCore Runtime 엔트리포인트"""
+    global architect
+    
+    # Runtime 환경에서 지연 초기화
+    if architect is None:
+        try:
+            # 로컬 환경: JSON 파일에서 로드
+            architect = PortfolioArchitect()
+        except FileNotFoundError:
+            # Runtime 환경: 환경변수에서 Gateway 정보 구성
+            gateway_info = {
+                "client_id": os.getenv("MCP_CLIENT_ID"),
+                "client_secret": os.getenv("MCP_CLIENT_SECRET"), 
+                "gateway_url": os.getenv("MCP_GATEWAY_URL"),
+                "user_pool_id": os.getenv("MCP_USER_POOL_ID"),
+                "region": os.getenv("AWS_REGION", "us-west-2"),
+                "target_id": os.getenv("MCP_TARGET_ID", "portfolio-architect-target")
+            }
+            
+            # 필수 환경변수 확인
+            required_vars = ["MCP_CLIENT_ID", "MCP_CLIENT_SECRET", "MCP_GATEWAY_URL", "MCP_USER_POOL_ID"]
+            missing_vars = [var for var in required_vars if not os.getenv(var)]
+            
+            if missing_vars:
+                raise RuntimeError(f"필수 환경변수 누락: {', '.join(missing_vars)}")
+            
+            architect = PortfolioArchitect(gateway_info)
+    
     financial_analysis = payload.get("financial_analysis")
     async for chunk in architect.design_portfolio_async(financial_analysis):
         yield chunk

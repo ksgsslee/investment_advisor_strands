@@ -12,7 +12,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any
+import uuid
 
 # 상위 디렉토리 경로 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,7 +20,7 @@ from config import AVAILABLE_PRODUCTS
 
 # 페이지 설정
 st.set_page_config(page_title="Portfolio Architect")
-st.title("📈 Portfolio Architect (AgentCore Version)")
+st.title("🤖 Portfolio Architect")
 
 # 배포 정보 로드
 CURRENT_DIR = Path(__file__).parent.resolve()
@@ -36,192 +36,211 @@ except Exception as e:
 # AgentCore 클라이언트 설정
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 
-def display_portfolio_analysis(container, portfolio_data):
-    """포트폴리오 분석 결과를 깔끔하게 표시"""
-    if not portfolio_data:
-        container.warning("포트폴리오 데이터가 없습니다.")
-        return
-    
+# Functions
+def display_available_products(trace_container, products_data):
+    """Display available investment products in table format"""
     try:
-        # 이미 파싱된 딕셔너리인지 확인
-        if isinstance(portfolio_data, dict):
-            portfolio = portfolio_data
+        if isinstance(products_data, str):
+            products = json.loads(products_data)
         else:
-            # 문자열에서 JSON 추출
-            portfolio = extract_portfolio_from_text(str(portfolio_data))
-            if not portfolio:
-                container.error("포트폴리오 데이터 파싱 실패")
-                return
+            products = products_data
         
-        container.markdown("## 🎯 포트폴리오 설계 결과")
+        df = pd.DataFrame(
+            [[ticker, desc] for ticker, desc in products.items()],
+            columns=['티커', '설명']
+        )
         
-        # 포트폴리오 배분 표시
-        allocation = portfolio.get('portfolio_allocation', {})
-        if not allocation:
-            container.warning("포트폴리오 배분 데이터를 찾을 수 없습니다.")
-            return
+        trace_container.markdown("**사용 가능한 투자 상품**")
+        trace_container.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "티커": st.column_config.TextColumn(width="small"),
+                "설명": st.column_config.TextColumn(width="large")
+            }
+        )
+    except Exception as e:
+        trace_container.error(f"상품 목록 표시 오류: {str(e)}")
+
+def display_product_data(trace_container, data):
+    """Display price history charts for investment products"""
+    try:
+        if isinstance(data, str):
+            price_data = json.loads(data)
+        else:
+            price_data = data
         
-        # 2열 레이아웃
-        col1, col2 = container.columns([1, 1])
-        
-        with col1:
-            st.markdown("### 📊 자산 배분")
+        for ticker, prices in price_data.items():
+            df = pd.DataFrame.from_dict(prices, orient='index', columns=['Price'])
+            df.index = pd.to_datetime(df.index)
+            df = df.sort_index()
             
-            # 배분 테이블 생성
-            allocation_data = []
-            for ticker, ratio in allocation.items():
-                description = AVAILABLE_PRODUCTS.get(ticker, "설명 없음")
-                allocation_data.append({
-                    "ETF": ticker,
-                    "비율": f"{ratio}%",
-                    "설명": description
-                })
-            
-            df = pd.DataFrame(allocation_data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        
-        with col2:
-            st.markdown("### 📈 배분 차트")
-            
-            # 파이 차트
-            fig = px.pie(
-                values=list(allocation.values()),
-                names=list(allocation.keys()),
-                title="",
-                color_discrete_sequence=px.colors.qualitative.Set3
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index,
+                    y=df['Price'],
+                    mode='lines',
+                    name=ticker,
+                    line=dict(width=2)
+                )
             )
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(showlegend=False, height=300)
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # 전략 및 근거 (전체 폭)
-        container.markdown("### 💡 투자 전략")
-        strategy = portfolio.get('strategy', '전략 정보가 없습니다.')
-        container.info(strategy)
-        
-        container.markdown("### 📋 구성 근거")
-        reason = portfolio.get('reason', '구성 근거가 없습니다.')
-        container.success(reason)
-        
-        # 요약 정보
-        total_allocation = sum(allocation.values())
-        container.markdown(f"**총 배분 비율:** {total_allocation}% | **선택된 ETF 수:** {len(allocation)}개")
             
+            fig.update_layout(
+                title=f"{ticker} 가격 추이",
+                xaxis_title="날짜",
+                yaxis_title="가격 ($)",
+                height=400,
+                showlegend=True,
+                hovermode='x unified'
+            )
+            
+            trace_container.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        container.error(f"포트폴리오 표시 중 오류: {str(e)}")
-        if portfolio_data:
-            with container.expander("원본 데이터 보기"):
-                st.text(str(portfolio_data))
+        trace_container.error(f"가격 데이터 표시 오류: {str(e)}")
 
-def process_streaming_response(response):
-    """스트리밍 응답을 실시간으로 처리하고 UI 업데이트"""
+def create_pie_chart(data, chart_title=""):
+    """Create a pie chart for portfolio allocation"""
+    fig = go.Figure(data=[go.Pie(
+        labels=list(data.keys()),
+        values=list(data.values()),
+        hole=.3,
+        textinfo='label+percent',
+        marker=dict(colors=px.colors.qualitative.Set3)
+    )])
     
-    # UI 컨테이너들 생성
-    status_container = st.container()
-    progress_container = st.container()
-    content_container = st.container()
-    
-    # 상태 추적 변수들
-    accumulated_text = ""
-    current_tool = None
-    portfolio_result = None
-    
-    # 진행 상황 표시
-    progress_bar = progress_container.progress(0)
-    status_text = status_container.empty()
-    content_text = content_container.empty()
-    
+    fig.update_layout(
+        title=chart_title,
+        showlegend=True,
+        width=400,
+        height=400
+    )
+    return fig
+
+def display_portfolio_suggestion(place_holder, input_content):
+    """Display portfolio suggestion results"""
     try:
-        for line in response["response"].iter_lines(chunk_size=1):
-            if not line or not line.decode("utf-8").startswith("data: "):
-                continue
-                
-            try:
-                event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
-                event_type = event_data.get("type")
-                
-                if event_type == "text_chunk":
-                    # 텍스트 청크 누적
-                    chunk_data = event_data.get("data", "")
-                    accumulated_text += chunk_data
-                    
-                    # 실시간 텍스트 업데이트 (너무 자주 업데이트하지 않도록 조절)
-                    if len(accumulated_text) % 50 == 0 or event_data.get("complete", False):
-                        content_text.markdown(f"**AI 응답:** {accumulated_text}")
-                
-                elif event_type == "tool_use":
-                    # 도구 사용 시작
-                    tool_name = event_data.get("tool_name", "Unknown")
-                    current_tool = tool_name
-                    status_text.info(f"🔧 도구 실행 중: {tool_name}")
-                    progress_bar.progress(0.3)
-                
-                elif event_type == "tool_result":
-                    # 도구 실행 결과
-                    if current_tool:
-                        status_text.success(f"✅ 도구 완료: {current_tool}")
-                        progress_bar.progress(0.6)
-                        current_tool = None
-                
-                elif event_type == "streaming_complete":
-                    # 스트리밍 완료
-                    message = event_data.get("message", "완료")
-                    status_text.success(f"🎉 {message}")
-                    progress_bar.progress(1.0)
-                    
-                    # 최종 결과에서 JSON 포트폴리오 추출
-                    portfolio_result = extract_portfolio_from_text(accumulated_text)
-                    break
-                    
-                elif event_type == "error":
-                    status_text.error(f"❌ 오류: {event_data.get('error', 'Unknown error')}")
-                    return {"status": "error", "error": event_data.get("error")}
-                    
-            except json.JSONDecodeError:
-                continue
+        if isinstance(input_content, str):
+            # JSON 추출
+            start_idx = input_content.find('{')
+            end_idx = input_content.rfind('}') + 1
+            if start_idx != -1 and end_idx != -1:
+                json_str = input_content[start_idx:end_idx]
+                data = json.loads(json_str)
+            else:
+                place_holder.error("포트폴리오 데이터를 찾을 수 없습니다.")
+                return
+        else:
+            data = input_content
         
-        # 최종 결과 표시
-        if portfolio_result:
-            content_container.empty()  # 기존 텍스트 지우기
-            display_portfolio_analysis(content_container, portfolio_result)
+        sub_col1, sub_col2 = place_holder.columns([1, 1])
         
-        return {
-            "status": "success",
-            "portfolio_data": portfolio_result,
-            "full_response": accumulated_text
-        }
+        with sub_col1:
+            st.markdown("**포트폴리오**")
+            fig = create_pie_chart(
+                data["portfolio_allocation"],
+                "포트폴리오 자산 배분"
+            )
+            st.plotly_chart(fig)
+        
+        with sub_col2:
+            st.markdown("**투자 전략**")
+            st.info(data["strategy"])
+        
+        place_holder.markdown("**상세 근거**")
+        place_holder.write(data["reason"])
         
     except Exception as e:
-        status_text.error(f"❌ 스트리밍 처리 중 오류: {str(e)}")
-        return {"status": "error", "error": str(e)}
-
-def extract_portfolio_from_text(text):
-    """텍스트에서 JSON 포트폴리오 데이터 추출"""
-    try:
-        # JSON 블록 찾기
-        start_idx = text.find('{')
-        end_idx = text.rfind('}') + 1
-        
-        if start_idx != -1 and end_idx != -1:
-            json_str = text[start_idx:end_idx]
-            return json.loads(json_str)
-    except:
-        pass
-    return None
+        place_holder.error(f"포트폴리오 표시 오류: {str(e)}")
+        place_holder.text(str(input_content))
 
 def invoke_portfolio_architect(financial_analysis):
-    """AgentCore Runtime 호출"""
+    """AgentCore Runtime 호출 (기존 Bedrock Agent 스타일 유지)"""
     try:
-        st.markdown("### 📈 Portfolio Architect 실행 중...")
-        
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=AGENT_ARN,
             qualifier="DEFAULT",
             payload=json.dumps({"financial_analysis": financial_analysis})
         )
         
-        # 스트리밍 응답 처리
-        return process_streaming_response(response)
+        # 응답을 표시할 컨테이너 생성
+        placeholder = st.container()
+        placeholder.subheader("Bedrock Reasoning")
+        
+        output_text = ""
+        function_name = ""
+        
+        # SSE 형식 응답 처리
+        for line in response["response"].iter_lines(chunk_size=1):
+            if line and line.decode("utf-8").startswith("data: "):
+                try:
+                    event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
+                    event_type = event_data.get("type")
+                    
+                    if event_type == "text_chunk":
+                        # 텍스트 청크 누적 (기존 방식과 동일)
+                        chunk_data = event_data.get("data", "")
+                        output_text += chunk_data
+                    
+                    elif event_type == "tool_use":
+                        # 도구 사용 시작 (기존 trace 방식과 유사하게 처리)
+                        tool_name = event_data.get("tool_name", "")
+                        if "get_available_products" in tool_name:
+                            function_name = "get_available_products"
+                        elif "get_product_data" in tool_name:
+                            function_name = "get_product_data"
+                        
+                        with placeholder.chat_message("ai"):
+                            st.markdown(f"🔧 {tool_name} 실행 중...")
+                    
+                    elif event_type == "tool_result":
+                        # 도구 실행 결과 표시
+                        if function_name == "get_available_products":
+                            tool_content = event_data.get("content", [{}])
+                            if tool_content and len(tool_content) > 0:
+                                result_text = tool_content[0].get("text", "{}")
+                                # JSON에서 실제 데이터 추출
+                                try:
+                                    parsed_result = json.loads(result_text)
+                                    if "response" in parsed_result and "payload" in parsed_result["response"]:
+                                        body = parsed_result["response"]["payload"]["body"]
+                                        display_available_products(placeholder, body)
+                                except:
+                                    display_available_products(placeholder, result_text)
+                        
+                        elif function_name == "get_product_data":
+                            tool_content = event_data.get("content", [{}])
+                            if tool_content and len(tool_content) > 0:
+                                result_text = tool_content[0].get("text", "{}")
+                                # JSON에서 실제 데이터 추출
+                                try:
+                                    parsed_result = json.loads(result_text)
+                                    if "response" in parsed_result and "payload" in parsed_result["response"]:
+                                        body = parsed_result["response"]["payload"]["body"]
+                                        display_product_data(placeholder, body)
+                                except:
+                                    display_product_data(placeholder, result_text)
+                        
+                        function_name = ""
+                    
+                    elif event_type == "streaming_complete":
+                        # 스트리밍 완료
+                        break
+                        
+                except json.JSONDecodeError:
+                    continue
+        
+        # 최종 포트폴리오 결과 표시
+        placeholder.divider()
+        placeholder.markdown("🤖 **Portfolio Architect**")
+        placeholder.subheader("📌 포트폴리오 설계")
+        display_portfolio_suggestion(placeholder, output_text)
+        
+        return {
+            "status": "success",
+            "output_text": output_text
+        }
         
     except Exception as e:
         return {
@@ -248,72 +267,33 @@ with st.expander("아키텍처", expanded=True):
     """)
 
 # 입력 폼
-st.markdown("**재무 분석 결과 입력**")
-col1, col2 = st.columns(2)
+st.markdown("**재무 분석 결과 입력(🤖 Financial Analyst)**")
 
-with col1:
-    risk_profile = st.selectbox(
-        "위험 성향",
-        ["매우 보수적", "보수적", "중립적", "공격적", "매우 공격적"],
-        index=3
-    )
-    
-    required_return = st.number_input(
-        "필요 연간 수익률 (%)",
-        min_value=0.0,
-        max_value=100.0,
-        value=40.0,
-        step=0.1
-    )
+financial_analysis = st.text_area(
+    "JSON 형식",
+    value='{"risk_profile": "공격적", "risk_profile_reason": "나이가 35세로 젊고, 주식 투자 경험이 10년으로 상당히 많으며, 총 투자 가능 금액이 5000만원으로 상당히 높은 편입니다.", "required_annual_return_rate": 40.0, "return_rate_reason": "필요 연간 수익률은 (70000000 - 50000000) / 50000000 * 100 = 40.00%입니다."}',
+    height=200
+)
 
-with col2:
-    risk_reason = st.text_area(
-        "위험 성향 평가 근거",
-        value="나이가 35세로 젊고, 주식 투자 경험이 10년으로 상당히 많으며, 총 투자 가능 금액이 5000만원으로 상당히 높은 편입니다.",
-        height=100
-    )
-    
-    return_reason = st.text_area(
-        "수익률 계산 근거",
-        value="필요 연간 수익률은 (70000000 - 50000000) / 50000000 * 100 = 40.00%입니다.",
-        height=100
-    )
+submitted = st.button("분석 시작", use_container_width=True)
 
-submitted = st.button("포트폴리오 설계 시작", use_container_width=True)
-
-if submitted:
-    financial_analysis = {
-        "risk_profile": risk_profile,
-        "risk_profile_reason": risk_reason,
-        "required_annual_return_rate": required_return,
-        "return_rate_reason": return_reason
-    }
-    
+if submitted and financial_analysis:
     st.divider()
     
-    try:
-        result = invoke_portfolio_architect(financial_analysis)
-        
-        if result['status'] == 'error':
-            st.error(f"❌ 설계 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
-        else:
-            st.success("✅ 포트폴리오 설계가 완료되었습니다!")
+    with st.spinner("AI is processing..."):
+        try:
+            result = invoke_portfolio_architect(financial_analysis)
             
-            # 상세 정보 (선택적으로 보기)
-            with st.expander("🔍 상세 분석 데이터 보기"):
-                col1, col2 = st.columns(2)
+            if result['status'] == 'error':
+                st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
+            else:
+                # 상세 정보
+                with st.expander("상세 분석 데이터 보기"):
+                    st.subheader("📥 입력 데이터")
+                    st.json(json.loads(financial_analysis) if isinstance(financial_analysis, str) else financial_analysis)
+                    
+                    st.subheader("📊 완전한 설계 결과")
+                    st.json(result)
                 
-                with col1:
-                    st.markdown("**� 입 력 데이터**")
-                    st.json(financial_analysis)
-                
-                with col2:
-                    st.markdown("**📤 AI 응답 데이터**")
-                    if result.get('full_response'):
-                        st.text_area("전체 응답", result['full_response'], height=200)
-                    else:
-                        st.json(result.get('portfolio_data', {}))
-                
-    except Exception as e:
-        st.error(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")
-        st.exception(e)
+        except Exception as e:
+            st.error(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")

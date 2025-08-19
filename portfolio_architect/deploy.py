@@ -206,7 +206,7 @@ def save_deployment_info(agent_arn, gateway_info):
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
-    info_file = current_dir / "runtime_deployment_info.json"
+    info_file = current_dir / "deployment_info.json"
     with open(info_file, 'w') as f:
         json.dump(deployment_info, f, indent=2)
     

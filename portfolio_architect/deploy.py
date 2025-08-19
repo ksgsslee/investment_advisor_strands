@@ -19,7 +19,7 @@ from utils import create_agentcore_role
 # 설정 상수
 class Config:
     """Runtime 배포 설정"""
-    AGENT_NAME = "portfolio-architect"
+    AGENT_NAME = "portfolio_architect"
     ENTRYPOINT_FILE = "portfolio_architect.py"
     REQUIREMENTS_FILE = "requirements.txt"
     MAX_DEPLOY_MINUTES = 15

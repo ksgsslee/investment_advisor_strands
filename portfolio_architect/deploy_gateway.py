@@ -1,12 +1,48 @@
-
 import boto3
-import json
 import time
-from bedrock_agentcore_starter_toolkit.operations.gateway.client import GatewayClient
+import json
+from utils import (
+    create_agentcore_gateway_role,
+    get_or_create_resource_server,
+    get_or_create_user_pool,
+    get_or_create_m2m_client
+)
 
-def deploy_gateway_with_toolkit(lambda_arn, gateway_name="portfolio-architect-gateway", region="us-west-2"):
+
+def delete_existing_gateway(gateway_name, region):
+    """기존 Gateway 삭제 (Target들 먼저 삭제)"""
+    try:
+        gateway_client = boto3.client('bedrock-agentcore-control', region_name=region)
+        gateways = gateway_client.list_gateways().get('items', [])
+
+        for gw in gateways:
+            if gw['name'] == gateway_name:
+                gateway_id = gw['gatewayId']
+                print(f"🗑️ Deleting existing gateway...")
+                
+                # Target들 먼저 삭제
+                targets = gateway_client.list_gateway_targets(gatewayIdentifier=gateway_id).get('items', [])
+                for target in targets:
+                    gateway_client.delete_gateway_target(
+                        gatewayIdentifier=gateway_id,
+                        targetId=target['targetId']
+                    )
+                
+                time.sleep(3)  # Target 삭제 대기
+                
+                # Gateway 삭제
+                gateway_client.delete_gateway(gatewayIdentifier=gateway_id)
+                time.sleep(3)  # Gateway 삭제 대기
+                break
+                
+    except Exception as e:
+        print(f"⚠️ Error: {str(e)}")
+        pass
+
+
+def deploy_gateway(lambda_arn, gateway_name, region):
     """
-    bedrock_agentcore_starter_toolkit을 사용한 Gateway 배포
+    Gateway 배포 프로세스
     
     Args:
         lambda_arn (str): Lambda 함수 ARN
@@ -17,112 +53,137 @@ def deploy_gateway_with_toolkit(lambda_arn, gateway_name="portfolio-architect-ga
         dict: 배포 결과 정보
     """
     try:
-        print(f"Starting gateway deployment with toolkit: {gateway_name}")
+        print("Starting gateway deployment...")
         
-        # 1. GatewayClient 초기화
-        client = GatewayClient(region_name=region)
+        # 기존 Gateway 삭제 (동일한 이름의 Gateway가 있다면 삭제)
+        delete_existing_gateway(gateway_name, region)
+
+        # 1. IAM 역할 생성
+        print("Creating IAM role...")
+        iam_role = create_agentcore_gateway_role(gateway_name, region)
+        role_arn = iam_role['Role']['Arn']
+        print(f"Created role: {role_arn}")
+        time.sleep(10)  # IAM 역할 전파 대기
         
-        # 2. Cognito OAuth 자동 설정
-        print("Setting up Cognito OAuth...")
-        cognito_result = client.create_oauth_authorizer_with_cognito(gateway_name)
+        # 2. Cognito 설정
+        cognito = boto3.client('cognito-idp', region_name=region)
         
-        # 3. Gateway 생성
-        print("Creating MCP Gateway...")
-        gateway = client.create_mcp_gateway(
-            name=gateway_name,
-            role_arn=None,  # 자동으로 생성됨
-            authorizer_config=cognito_result["authorizer_config"],
-            enable_semantic_search=False
+        # 사용자 풀 생성
+        print("Setting up Cognito...")
+        user_pool_id = get_or_create_user_pool(cognito, f"{gateway_name}-pool", region)
+        
+        # 리소스 서버 생성
+        resource_server_id = f"{gateway_name}-server"
+        resource_server_name = f"{gateway_name} Resource Server"
+        scopes = [
+            {"ScopeName": "gateway:read", "ScopeDescription": "Read access"},
+            {"ScopeName": "gateway:write", "ScopeDescription": "Write access"}
+        ]
+        resource_server_id = get_or_create_resource_server(
+            cognito, 
+            user_pool_id, 
+            resource_server_id, 
+            resource_server_name, 
+            scopes
         )
         
-        # 4. Lambda Target 추가
-        print("Adding Lambda target...")
-        target_config = {
-            'lambdaArn': lambda_arn,
-            'toolSchema': {
-                'inlinePayload': [
-                    {
-                        'name': 'get_available_products',
-                        'description': '사용 가능한 투자 상품 목록을 조회합니다.',
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {},
-                            "required": []
-                        }
-                    },
-                    {
-                        "name": "get_product_data",
-                        "description": "선택한 투자 상품의 최근 가격 데이터를 조회합니다.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "ticker": {
-                                    "type": "string",
-                                    "description": "조회할 투자 상품의 티커"
-                                }
-                            },
-                            "required": ["ticker"]
-                        }
-                    }
-                ]
+        # M2M 클라이언트 생성
+        client_id, client_secret = get_or_create_m2m_client(
+            cognito,
+            user_pool_id,
+            f"{gateway_name}-client",
+            resource_server_id
+        )
+        
+        # 3. Gateway 생성
+        print("Creating Gateway...")
+        gateway_client = boto3.client('bedrock-agentcore-control', region_name=region)
+        
+        auth_config = {
+            'customJWTAuthorizer': {
+                'allowedClients': [client_id],
+                'discoveryUrl': f'https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/openid-configuration'
             }
         }
         
-        lambda_target = client.create_mcp_gateway_target(
-            gateway=gateway,
-            name=f"{gateway_name}-lambda-target",
-            target_type="lambda",
-            target_payload=target_config,
-            credentials=[{
+        gateway = gateway_client.create_gateway(
+            name=gateway_name,
+            roleArn=role_arn,
+            protocolType='MCP',
+            authorizerType='CUSTOM_JWT',
+            authorizerConfiguration=auth_config,
+            description=f'Gateway for {gateway_name}'
+        )
+        
+        # 4. Gateway Target 생성
+        print("Creating Gateway Target...")
+        target = gateway_client.create_gateway_target(
+            gatewayIdentifier=gateway['gatewayId'],
+            name=f"{gateway_name}-target",
+            targetConfiguration={
+                'mcp': {
+                    'lambda': {
+                        'lambdaArn': lambda_arn,
+                        'toolSchema': {
+                            'inlinePayload': [
+                                {
+                                    'name': 'get_available_products',
+                                    'description': '사용 가능한 투자 상품 목록을 조회합니다.',
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {},
+                                        "required": []
+                                    }
+                                },
+                                {
+                                    "name": "get_product_data",
+                                    "description": "선택한 투자 상품의 최근 가격 데이터를 조회합니다.",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "ticker": {
+                                                "type": "string",
+                                                "description": "조회할 투자 상품의 티커"
+                                            }
+                                        },
+                                        "required": ["ticker"]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            credentialProviderConfigurations=[{
                 'credentialProviderType': 'GATEWAY_IAM_ROLE'
             }]
-
         )
-
-        # 5. 결과 정리
+        
         result = {
-            'gateway_id': gateway.gateway_id,
-            'gateway_url': gateway.get_mcp_url(),
-            'client_id': cognito_result['client_info']['client_id'],
-            'client_secret': cognito_result['client_info']['client_secret'],
-            'scope': cognito_result['client_info']['scope'],
-            'target_id': target['targetId'],
-            'lambda_arn': lambda_arn
+            'role_arn': role_arn,
+            'user_pool_id': user_pool_id,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'gateway_id': gateway['gatewayId'],
+            'gateway_url': gateway['gatewayUrl'],
+            'target': target
         }
         
-        print("\n✅ Gateway deployment completed successfully!")
-        print(f"🔗 MCP Endpoint: {gateway.get_mcp_url()}")
-        print(f"🔑 OAuth Credentials:")
-        print(f"   Client ID: {cognito_result['client_info']['client_id']}")
-        print(f"   Scope: {cognito_result['client_info']['scope']}")
-        print(f"🎯 Target ID: {target['targetId']}")
-        
-        # 결과를 파일로 저장
-        with open('gateway_deployment_info.json', 'w') as f:
-            json.dump(result, f, indent=2)
-        print(f"📄 Deployment info saved to gateway_deployment_info.json")
-        
+        print("\nGateway deployment completed successfully!")
+        print(f"Gateway URL: {gateway['gatewayUrl']}")
         return result
         
     except Exception as e:
-        print(f"❌ Deployment failed: {str(e)}")
+        print(f"Deployment failed: {str(e)}")
         raise
 
 
 if __name__ == "__main__":
     # 설정값
     LAMBDA_ARN = "arn:aws:lambda:us-west-2:905418397079:function:lambda-portfolio-architect"
-    GATEWAY_NAME = "portfolio-architect-gateway"
+    GATEWAY_NAME = "sample-gateway"
     REGION = "us-west-2"
     
     # 배포 실행
-    try:
-        result = deploy_gateway_with_toolkit(LAMBDA_ARN, GATEWAY_NAME, REGION)
-        print(f"\n🎉 Deployment successful!")
-        print(f"📋 Summary:")
-        for key, value in result.items():
-            print(f"   {key}: {value}")
-            
-    except Exception as e:
-        print(f"💥 Deployment failed: {e}")
-        exit(1)
+    result = deploy_gateway(LAMBDA_ARN, GATEWAY_NAME, REGION)
+    print(f"Deployment result: {json.dumps(result, indent=2)}")

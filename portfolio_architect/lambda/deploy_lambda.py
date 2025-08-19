@@ -20,7 +20,7 @@ from pathlib import Path
 class Config:
     """배포 설정 상수"""
     FUNCTION_NAME = 'agentcore-portfolio-architect'
-    ROLE_NAME = 'agentcore-portfolio-architect-role'
+    ROLE_NAME = 'lambda-portfolio-architect-role'
     REGION = 'us-west-2'
     RUNTIME = 'python3.12'
     TIMEOUT = 30

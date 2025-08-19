@@ -25,7 +25,7 @@ def create_agentcore_role(agent_name, region):
         - 기존 역할이 있으면 삭제 후 재생성
     """
     iam_client = boto3.client('iam')
-    agentcore_role_name = f'agentcore-{agent_name}-role'
+    agentcore_role_name = f'agentcore-runtime-{agent_name}-role'
     account_id = boto3.client("sts").get_caller_identity()["Account"]
     
     # Runtime 실행에 필요한 권한 정책

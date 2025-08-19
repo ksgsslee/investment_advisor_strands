@@ -232,8 +232,6 @@ class PortfolioArchitect:
             }
 
 
-
-
 # AgentCore Runtime 전역 인스턴스 (지연 초기화)
 architect = None
 

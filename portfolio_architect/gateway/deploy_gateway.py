@@ -185,7 +185,7 @@ def deploy_gateway(lambda_arn, gateway_name, region):
 
 if __name__ == "__main__":
     # 설정값
-    LAMBDA_ARN = "arn:aws:lambda:us-west-2:905418397079:function:lambda-portfolio-architect"
+    LAMBDA_ARN = "arn:aws:lambda:us-west-2:905418397079:function:agentcore-porfolio-architect"
     GATEWAY_NAME = "sample-gateway"
     REGION = "us-west-2"
     

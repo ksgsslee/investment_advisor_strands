@@ -116,7 +116,7 @@ class FinancialAnalyst:
 analyst = FinancialAnalyst()
 
 @app.entrypoint
-async def financial_advisor(payload):
+async def financial_analyst(payload):
     """AgentCore Runtime 엔트리포인트"""
     user_input = payload.get("input_data")
     async for chunk in analyst.analyze_async(user_input):

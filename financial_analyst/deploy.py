@@ -17,8 +17,8 @@ from utils import create_agentcore_role
 
 # 설정
 class Config:
-    AGENT_NAME = "financial_advisor"
-    ENTRYPOINT_FILE = "financial_advisor.py"
+    AGENT_NAME = "financial_analyst"
+    ENTRYPOINT_FILE = "financial_analyst.py"
     REQUIREMENTS_FILE = "requirements.txt"
     MAX_DEPLOY_MINUTES = 10
     STATUS_CHECK_INTERVAL = 30

@@ -223,7 +223,9 @@ class PortfolioArchitect:
             }
 
 
-# AgentCore Runtime 엔트리포인트
+
+
+# AgentCore Runtime 전역 인스턴스
 architect = None
 
 @app.entrypoint
@@ -239,90 +241,18 @@ async def portfolio_architect(payload):
     """
     global architect
     if architect is None:
-        # Gateway 정보를 환경변수 또는 파일에서 로드
         try:
             architect = PortfolioArchitect()
         except FileNotFoundError:
-            # 배포 환경에서는 환경변수 사용하도록 에러 발생
             raise RuntimeError(
                 "Gateway 배포 정보를 찾을 수 없습니다.\n"
-                "로컬 환경: 'python gateway/deploy_gateway.py' 실행\n"
-                "배포 환경: 환경변수 설정 필요"
+                "먼저 'python gateway/deploy_gateway.py'를 실행하세요."
             )
     
     financial_analysis = payload.get("financial_analysis")
     async for chunk in architect.design_portfolio_async(financial_analysis):
         yield chunk
 
-def test_portfolio_architect():
-    """테스트 함수 - Gateway 정보 자동 로드"""
-    import asyncio
-    
-    async def run_test():
-        try:
-            # Gateway 정보 자동 로드하여 초기화
-            architect = PortfolioArchitect()
-            
-            # 테스트용 재무 분석 데이터
-            test_financial_analysis = {
-                "risk_profile": "공격적",
-                "risk_profile_reason": "나이가 35세로 젊고, 주식 투자 경험이 10년으로 상당히 많으며, 총 투자 가능 금액이 5000만원으로 상당히 높은 편입니다.",
-                "required_annual_return_rate": 40.00,
-                "return_rate_reason": "필요 연간 수익률은 (70000000 - 50000000) / 50000000 * 100 = 40.00%입니다."
-            }
-            
-            print("=" * 60)
-            print("🎯 Portfolio Architect 테스트 시작")
-            print("=" * 60)
-            print("📥 입력 데이터:")
-            print(json.dumps(test_financial_analysis, ensure_ascii=False, indent=2))
-            print("\n🤖 포트폴리오 설계 시작...")
-            print("-" * 60)
-            
-            full_text = ""
-            async for chunk in architect.design_portfolio_async(test_financial_analysis):
-                if chunk["type"] == "text_chunk":
-                    data = chunk["data"]
-                    full_text += data
-                    print(data, end="", flush=True)
-                    
-                elif chunk["type"] == "streaming_complete":
-                    print(f"\n\n✅ {chunk['message']}")
-                    
-                elif chunk["type"] == "tool_use":
-                    print(f"\n\n🛠️ 도구 사용: {chunk['tool_name']}")
-                    if chunk['tool_input']:
-                        print(f"   입력: {chunk['tool_input']}")
-                    print("-" * 40)
-                    
-                elif chunk["type"] == "tool_result":
-                    print(f"\n📊 도구 결과:")
-                    print(f"   상태: {chunk['status']}")
-                    print("-" * 40)
-                    
-                elif chunk["type"] == "error":
-                    print(f"\n❌ 오류 발생: {chunk['error']}")
-                    
-        except Exception as e:
-            print(f"\n❌ 테스트 실행 중 오류: {str(e)}")
-    
-    asyncio.run(run_test())
-
-
-def main():
-    """메인 실행 함수"""
-    try:
-        print("🚀 Portfolio Architect 시작")
-        
-        # 테스트 실행
-        test_portfolio_architect()
-        
-        # AgentCore 앱 실행 (배포 시)
-        # app.run()
-        
-    except Exception as e:
-        print(f"❌ 실행 실패: {str(e)}")
-
 
 if __name__ == "__main__":
-    main()
+    app.run()

@@ -1,64 +1,85 @@
 """
-deploy.py
-AgentCore Runtime 배포 스크립트 (Portfolio Architect)
+Portfolio Architect AgentCore Runtime 배포 스크립트
+
+Gateway 정보를 자동으로 로드하여 AgentCore Runtime을 배포합니다.
 """
 import sys
 import os
 import time
 import json
 from pathlib import Path
-from boto3.session import Session
 from bedrock_agentcore_starter_toolkit import Runtime
 
-# 설정
+
+# 설정 상수
 class Config:
-    AGENT_NAME = "portfolio_architect"
+    """Runtime 배포 설정"""
+    AGENT_NAME = "portfolio-architect"
     ENTRYPOINT_FILE = "portfolio_architect.py"
     REQUIREMENTS_FILE = "requirements.txt"
-    MAX_DEPLOY_MINUTES = 10
+    MAX_DEPLOY_MINUTES = 15
     STATUS_CHECK_INTERVAL = 30
     REGION = "us-west-2"
 
-# 경로 설정
-CURRENT_DIR = Path(__file__).parent.resolve()
-sys.path.append(str(CURRENT_DIR.parent))
-from utils import create_agentcore_role
 
-def setup_environment():
-    """환경 설정"""
-    region = Config.REGION
-    print(f"배포 시작: {Config.AGENT_NAME} ({region})")
-    return region
+def load_gateway_info():
+    """Gateway 배포 정보 로드"""
+    current_dir = Path(__file__).parent
+    gateway_dir = current_dir / "gateway"
+    info_file = gateway_dir / "gateway_deployment_info.json"
+    
+    if not info_file.exists():
+        raise FileNotFoundError(
+            f"Gateway 배포 정보를 찾을 수 없습니다: {info_file}\n"
+            "먼저 'python gateway/deploy_gateway.py'를 실행하세요."
+        )
+    
+    with open(info_file, 'r') as f:
+        gateway_info = json.load(f)
+    
+    print(f"📋 Gateway 정보 로드: {gateway_info['gateway_url']}")
+    return gateway_info
+
 
 def create_iam_role():
-    """IAM 역할 생성"""
-    role_info = create_agentcore_role(agent_name=Config.AGENT_NAME, region=Config.REGION)
+    """AgentCore Runtime용 IAM 역할 생성"""
+    # gateway utils 사용
+    sys.path.append(str(Path(__file__).parent / "gateway"))
+    from utils import create_agentcore_gateway_role
+    
+    role_info = create_agentcore_gateway_role(Config.AGENT_NAME, Config.REGION)
     return role_info['Role']['Arn']
 
-def configure_runtime(role_arn, region):
+
+def configure_runtime(role_arn):
     """Runtime 구성"""
+    print("🔧 Runtime 구성 중...")
+    current_dir = Path(__file__).parent
+    
     runtime = Runtime()
     runtime.configure(
-        entrypoint=str(CURRENT_DIR / Config.ENTRYPOINT_FILE),
+        entrypoint=str(current_dir / Config.ENTRYPOINT_FILE),
         execution_role=role_arn,
         auto_create_ecr=True,
-        requirements_file=str(CURRENT_DIR / Config.REQUIREMENTS_FILE),
-        region=region,
+        requirements_file=str(current_dir / Config.REQUIREMENTS_FILE),
+        region=Config.REGION,
         agent_name=Config.AGENT_NAME,
     )
     return runtime
 
-def deploy_and_wait(runtime, local=False):
-    """배포 및 대기"""
-    print("배포 중...")
-    launch_result = runtime.launch(auto_update_on_conflict=True, local=local)
+
+def deploy_and_wait(runtime):
+    """배포 및 상태 대기"""
+    print("🚀 Runtime 배포 중...")
+    launch_result = runtime.launch(auto_update_on_conflict=True)
     
     end_statuses = ['READY', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED']
     max_checks = (Config.MAX_DEPLOY_MINUTES * 60) // Config.STATUS_CHECK_INTERVAL
     
     for i in range(max_checks):
         status = runtime.status().endpoint['status']
-        print(f"상태: {status}")
+        print(f"📊 상태: {status} ({i+1}/{max_checks})")
+        
         if status in end_statuses:
             break
         time.sleep(Config.STATUS_CHECK_INTERVAL)
@@ -66,43 +87,73 @@ def deploy_and_wait(runtime, local=False):
     success = status == 'READY'
     return success, launch_result.agent_arn if success else "", status
 
-def deploy():
-    """전체 배포 프로세스"""
+
+def save_deployment_info(agent_arn, gateway_info):
+    """배포 정보 저장"""
+    current_dir = Path(__file__).parent
+    deployment_info = {
+        "agent_name": Config.AGENT_NAME,
+        "agent_arn": agent_arn,
+        "region": Config.REGION,
+        "gateway_url": gateway_info['gateway_url'],
+        "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    info_file = current_dir / "runtime_deployment_info.json"
+    with open(info_file, 'w') as f:
+        json.dump(deployment_info, f, indent=2)
+    
+    return str(info_file)
+
+
+def main():
+    """메인 배포 함수"""
     try:
-        region = setup_environment()
+        print("=" * 60)
+        print("🎯 Portfolio Architect Runtime 배포 시작")
+        print("=" * 60)
+        
+        # 필수 파일 확인
+        current_dir = Path(__file__).parent
+        required_files = [Config.ENTRYPOINT_FILE, Config.REQUIREMENTS_FILE]
+        missing_files = [f for f in required_files if not (current_dir / f).exists()]
+        
+        if missing_files:
+            print(f"❌ 필수 파일 누락: {', '.join(missing_files)}")
+            return 1
+        
+        # Gateway 정보 로드
+        gateway_info = load_gateway_info()
+        
+        # IAM 역할 생성
         role_arn = create_iam_role()
-        runtime = configure_runtime(role_arn, region)
+        
+        # Runtime 구성 및 배포
+        runtime = configure_runtime(role_arn)
         success, agent_arn, status = deploy_and_wait(runtime)
         
         if success:
-            print(f"배포 완료: {agent_arn}")
-            deployment_info = {
-                "agent_arn": agent_arn,
-                "region": region,
-                "status": status
-            }
-            with open(CURRENT_DIR / "deployment_info.json", "w") as f:
-                json.dump(deployment_info, f)
-            return True
+            # 배포 정보 저장
+            info_file = save_deployment_info(agent_arn, gateway_info)
+            
+            print("=" * 60)
+            print("🎉 Runtime 배포 성공!")
+            print(f"🔗 Agent ARN: {agent_arn}")
+            print(f"📄 배포 정보: {info_file}")
+            print("=" * 60)
+            return 0
         else:
-            print(f"배포 실패: {status}")
-            return False
+            print("=" * 60)
+            print(f"❌ Runtime 배포 실패: {status}")
+            print("=" * 60)
+            return 1
         
     except Exception as e:
-        print(f"오류: {e}")
-        return False
-
-def main():
-    """메인 함수"""
-    required_files = [Config.ENTRYPOINT_FILE, Config.REQUIREMENTS_FILE]
-    missing_files = [f for f in required_files if not (CURRENT_DIR / f).exists()]
-    
-    if missing_files:
-        print(f"파일 누락: {', '.join(missing_files)}")
+        print("=" * 60)
+        print(f"❌ 배포 오류: {str(e)}")
+        print("=" * 60)
         return 1
-    
-    success = deploy()
-    return 0 if success else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -53,11 +53,11 @@ graph TD
 - **구현**: `FinancialAnalyst` + `ReflectionAgent` → AgentCore Runtime 배포
 - **핵심 기능**: 프로덕션 준비된 서버리스 재무 분석 서비스
 
-### Lab 2: 포트폴리오 설계사 (Tool Use Pattern + AgentCore Gateway)  
-- **AgentCore 서비스**: **Gateway** - 다양한 API를 MCP 도구로 통합
+### Lab 2: 포트폴리오 설계사 (Tool Use Pattern + AgentCore Gateway + Identity)  
+- **AgentCore 서비스**: **Gateway + Identity** - API 통합 및 보안 인증
 - **패턴**: Tool Use - 외부 API 및 데이터 소스 활용
-- **구현**: `PortfolioArchitect` + 통합 금융 API (Yahoo Finance, Bloomberg, FRED 등)
-- **핵심 기능**: 실시간 시장 데이터 기반 포트폴리오 설계
+- **구현**: `PortfolioArchitect` + 보안 금융 API 통합 (Bloomberg, Alpha Vantage, FRED 등)
+- **핵심 기능**: 엔터프라이즈급 보안을 갖춘 실시간 시장 데이터 기반 포트폴리오 설계
 
 ### Lab 3: 리스크 관리사 (Planning Pattern + AgentCore Tools)
 - **AgentCore 서비스**: **Tools** - Browser Tool + Code Interpreter

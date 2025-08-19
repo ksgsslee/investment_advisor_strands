@@ -27,6 +27,7 @@ class Config:
     TEMPERATURE = 0.3
     MAX_TOKENS = 3000
 
+
 def load_gateway_info():
     """
     Gateway 배포 정보 JSON 파일에서 설정 로드
@@ -71,18 +72,10 @@ def create_streamable_http_transport(mcp_url: str, access_token: str):
 class PortfolioArchitect:
     """AI 포트폴리오 설계사 - MCP Gateway 연동"""
     
-    def __init__(self, gateway_info=None):
-        """
-        포트폴리오 설계사 초기화
-        
-        Args:
-            gateway_info (dict, optional): Gateway 설정 정보. None이면 자동 로드
-        """
-        # Gateway 정보 로드
-        if gateway_info is None:
-            gateway_info = load_gateway_info()
-        
-        self.gateway_info = gateway_info
+    def __init__(self):
+        """포트폴리오 설계사 초기화 - Gateway 정보 자동 로드"""
+        # Gateway 정보 자동 로드
+        self.gateway_info = load_gateway_info()
         self.client_id = gateway_info['client_id']
         self.client_secret = gateway_info['client_secret']
         self.gateway_url = gateway_info['gateway_url'] + '/mcp'  # MCP 엔드포인트 추가
@@ -250,16 +243,12 @@ async def portfolio_architect(payload):
         try:
             architect = PortfolioArchitect()
         except FileNotFoundError:
-            # 환경변수에서 설정 로드 (배포 환경용)
-            gateway_info = {
-                "client_id": os.getenv("MCP_CLIENT_ID"),
-                "client_secret": os.getenv("MCP_CLIENT_SECRET"),
-                "gateway_url": os.getenv("MCP_GATEWAY_URL"),
-                "user_pool_id": os.getenv("MCP_USER_POOL_ID"),
-                "region": os.getenv("AWS_REGION", "us-west-2"),
-                "target_id": os.getenv("MCP_TARGET_ID", "portfolio-architect-target")
-            }
-            architect = PortfolioArchitect(gateway_info)
+            # 배포 환경에서는 환경변수 사용하도록 에러 발생
+            raise RuntimeError(
+                "Gateway 배포 정보를 찾을 수 없습니다.\n"
+                "로컬 환경: 'python gateway/deploy_gateway.py' 실행\n"
+                "배포 환경: 환경변수 설정 필요"
+            )
     
     financial_analysis = payload.get("financial_analysis")
     async for chunk in architect.design_portfolio_async(financial_analysis):

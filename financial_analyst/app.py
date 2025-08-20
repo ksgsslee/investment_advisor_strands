@@ -1,6 +1,9 @@
 """
 app.py
-Financial Advisor Streamlit 애플리케이션 (AgentCore Runtime 버전)
+Financial Analyst Streamlit 애플리케이션 (AgentCore Runtime 버전)
+
+개인의 재무 상황을 분석하여 투자 성향과 목표 수익률을 계산하는 웹 애플리케이션입니다.
+Reflection 패턴을 활용하여 AI가 분석 결과의 품질을 검증하고 신뢰성을 보장합니다.
 """
 
 import streamlit as st
@@ -10,9 +13,12 @@ import sys
 import boto3
 from pathlib import Path
 
-# 페이지 설정
+# ================================
+# 페이지 설정 및 초기화
+# ================================
+
 st.set_page_config(page_title="Financial Analyst")
-st.title("🤖 Financial Analyst (AgentCore Version)")
+st.title("💰 Financial Analyst")
 
 # 배포 정보 로드
 CURRENT_DIR = Path(__file__).parent.resolve()
@@ -28,8 +34,45 @@ except Exception as e:
 # AgentCore 클라이언트 설정
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 
+# ================================
+# 유틸리티 함수들
+# ================================
+
+def extract_json_from_text(text_content):
+    """
+    텍스트에서 JSON 데이터를 추출하는 함수
+    
+    Args:
+        text_content (str): JSON이 포함된 텍스트
+        
+    Returns:
+        dict: 파싱된 JSON 데이터 또는 None
+    """
+    if isinstance(text_content, dict):
+        return text_content
+    
+    if not isinstance(text_content, str):
+        return None
+    
+    # JSON 블록 찾기
+    start_idx = text_content.find('{')
+    end_idx = text_content.rfind('}') + 1
+    
+    if start_idx != -1 and end_idx != -1:
+        try:
+            json_str = text_content[start_idx:end_idx]
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            return None
+    
+    return None
+
+# ================================
+# 데이터 표시 함수들
+# ================================
+
 def display_financial_analysis(trace_container, analysis_data):
-    """재무 분석 결과 표시"""
+    """재무 분석 결과 표시 (기존 동작 유지)"""
     sub_col1, sub_col2 = trace_container.columns(2)
     
     with sub_col1:
@@ -43,7 +86,7 @@ def display_financial_analysis(trace_container, analysis_data):
         st.info(analysis_data["return_rate_reason"])
 
 def display_reflection_result(trace_container, reflection_content):
-    """Reflection 분석 결과 표시"""
+    """Reflection 분석 결과 표시 (기존 동작 유지)"""
     if reflection_content.strip().lower().startswith("yes"):
         trace_container.success("재무분석 검토 성공")
     else:
@@ -51,8 +94,12 @@ def display_reflection_result(trace_container, reflection_content):
         if "\n" in reflection_content:
             trace_container.markdown(reflection_content.split("\n")[1])
 
+# ================================
+# 메인 처리 함수
+# ================================
+
 def invoke_financial_advisor(input_data):
-    """AgentCore Runtime 호출"""
+    """AgentCore Runtime 호출 (기존 함수명 및 동작 유지)"""
     try:
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=AGENT_ARN,
@@ -106,6 +153,10 @@ def invoke_financial_advisor(input_data):
             "status": "error",
             "error": str(e)
         }
+
+# ================================
+# UI 구성
+# ================================
 
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):

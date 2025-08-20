@@ -3,12 +3,14 @@ deploy_gateway.py
 Portfolio Architect Gateway 배포 스크립트
 
 이 스크립트는 Portfolio Architect를 위한 AgentCore Gateway를 배포합니다.
-Lambda 함수와 AI 에이전트 간의 MCP(Model Context Protocol) 통신을 중개합니다.
+Lambda 함수와 AI 에이전트 간의 MCP(Model Context Protocol) 통신을 중개하여
+실시간 ETF 데이터 조회 기능을 제공합니다.
 
 주요 기능:
 - Lambda 함수를 MCP 도구로 노출
-- Cognito OAuth2 인증 설정
+- Cognito OAuth2 인증 설정  
 - Gateway Target 구성 (ETF 데이터 조회 도구들)
+- 자동 Lambda ARN 로드 및 설정
 """
 
 import boto3
@@ -24,13 +26,19 @@ from utils import (
     get_or_create_m2m_client
 )
 
-
+# ================================
 # 설정 상수
+# ================================
+
 class Config:
     """Gateway 배포 설정 상수"""
     GATEWAY_NAME = "gateway-portfolio-architect"
     REGION = "us-west-2"
     TARGET_NAME = "target-portfolio-architect"
+
+# ================================
+# 유틸리티 함수들
+# ================================
 
 
 def load_lambda_info():
@@ -113,37 +121,75 @@ def delete_existing_gateway(gateway_name, region):
         pass
 
 
+# ================================
+# 메인 배포 함수
+# ================================
+
 def deploy_gateway():
     """
     Gateway 배포 메인 프로세스
     
     Lambda 배포 정보를 자동으로 로드하여 AgentCore Gateway를 배포합니다.
+    ETF 데이터 조회를 위한 MCP 도구들을 설정하고 OAuth2 인증을 구성합니다.
     
     Returns:
         dict: 배포 결과 정보
         
     Process:
         1. Lambda ARN 자동 로드
-        2. 기존 Gateway 정리
+        2. 기존 Gateway 정리  
         3. IAM 역할 생성
         4. Cognito 인증 설정
         5. Gateway 및 Target 생성
-        6. 배포 정보 저장
+        6. 배포 정보 반환
     """
     print("🚀 Gateway 배포 시작...")
     
     # 1. Lambda 배포 정보 로드
     lambda_arn = load_lambda_info()
     
-    # 2. 기존 Gateway 정리
+    # 2. 기존 Gateway 정리 (깔끔한 재배포를 위해)
     delete_existing_gateway(Config.GATEWAY_NAME, Config.REGION)
 
-    # 3. IAM 역할 생성
+    # 3. IAM 역할 생성 (Gateway가 Lambda 호출할 수 있도록)
     iam_role = create_agentcore_gateway_role(Config.GATEWAY_NAME, Config.REGION)
     role_arn = iam_role['Role']['Arn']
     time.sleep(10)  # IAM 역할 전파 대기
     
     # 4. Cognito 인증 설정
+    auth_components = _setup_cognito_authentication()
+    
+    # 5. Gateway 생성
+    gateway = _create_gateway(role_arn, auth_components)
+    
+    # 6. Gateway Target 생성 (Lambda를 MCP 도구로 노출)
+    target = _create_gateway_target(gateway['gatewayId'], lambda_arn)
+    
+    # 7. 배포 결과 구성
+    result = {
+        'lambda_arn': lambda_arn,
+        'role_arn': role_arn,
+        'user_pool_id': auth_components['user_pool_id'],
+        'client_id': auth_components['client_id'],
+        'client_secret': auth_components['client_secret'],
+        'gateway_id': gateway['gatewayId'],
+        'gateway_url': gateway['gatewayUrl'],
+        'target_id': target['targetId'],
+        'region': Config.REGION,
+        'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    print("✅ Gateway 배포 완료!")
+    print(f"🌐 Gateway URL: {gateway['gatewayUrl']}")
+    return result
+
+def _setup_cognito_authentication():
+    """
+    Cognito OAuth2 인증 구성 요소 설정
+    
+    Returns:
+        dict: 인증 구성 요소 (user_pool_id, client_id, client_secret)
+    """
     print("🔐 Cognito 인증 설정 중...")
     cognito = boto3.client('cognito-idp', region_name=Config.REGION)
     
@@ -161,6 +207,7 @@ def deploy_gateway():
         {"ScopeName": "gateway:read", "ScopeDescription": "Gateway read access"},
         {"ScopeName": "gateway:write", "ScopeDescription": "Gateway write access"}
     ]
+    
     resource_server_id = get_or_create_resource_server(
         cognito, 
         user_pool_id, 
@@ -177,15 +224,31 @@ def deploy_gateway():
         resource_server_id
     )
     
-    # 5. Gateway 생성
+    return {
+        'user_pool_id': user_pool_id,
+        'client_id': client_id,
+        'client_secret': client_secret
+    }
+
+def _create_gateway(role_arn, auth_components):
+    """
+    AgentCore Gateway 생성
+    
+    Args:
+        role_arn (str): Gateway 실행용 IAM 역할 ARN
+        auth_components (dict): Cognito 인증 구성 요소
+        
+    Returns:
+        dict: 생성된 Gateway 정보
+    """
     print("🌉 Gateway 생성 중...")
     gateway_client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
     
     # JWT 인증 설정
     auth_config = {
         'customJWTAuthorizer': {
-            'allowedClients': [client_id],  # 허용된 클라이언트 ID
-            'discoveryUrl': f'https://cognito-idp.{Config.REGION}.amazonaws.com/{user_pool_id}/.well-known/openid-configuration'
+            'allowedClients': [auth_components['client_id']],
+            'discoveryUrl': f'https://cognito-idp.{Config.REGION}.amazonaws.com/{auth_components["user_pool_id"]}/.well-known/openid-configuration'
         }
     }
     
@@ -197,50 +260,55 @@ def deploy_gateway():
         authorizerConfiguration=auth_config,
         description='Portfolio Architect Gateway - ETF data retrieval and analysis'
     )
+    
     print(f"✅ Gateway 생성 완료: {gateway['gatewayId']}")
+    return gateway
+
+def _create_gateway_target(gateway_id, lambda_arn):
+    """
+    Gateway Target 생성 (Lambda 함수를 MCP 도구로 노출)
     
-    # 6. Target 설정 로드
+    Args:
+        gateway_id (str): Gateway ID
+        lambda_arn (str): Lambda 함수 ARN
+        
+    Returns:
+        dict: 생성된 Target 정보
+    """
+    print("🎯 Gateway Target 생성 중...")
+    gateway_client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
+    
+    # Target 설정 로드 및 Lambda ARN 주입
     target_config = copy.deepcopy(TARGET_CONFIGURATION)
-    tool_count = len(target_config["mcp"]["lambda"]["toolSchema"]["inlinePayload"])
-    print(f"📋 Target 설정 로드: {tool_count}개 도구")
-    
-    # Lambda ARN을 설정에 추가
     target_config['mcp']['lambda']['lambdaArn'] = lambda_arn
     
-    # 7. Gateway Target 생성 (Lambda 함수를 MCP 도구로 노출)
-    print("🎯 Gateway Target 생성 중...")
+    tool_count = len(target_config["mcp"]["lambda"]["toolSchema"]["inlinePayload"])
+    print(f"📋 Target 설정: {tool_count}개 도구 구성")
+    
+    # Gateway Target 생성
     target = gateway_client.create_gateway_target(
-        gatewayIdentifier=gateway['gatewayId'],
+        gatewayIdentifier=gateway_id,
         name=Config.TARGET_NAME,
         targetConfiguration=target_config,
         credentialProviderConfigurations=[{
-            'credentialProviderType': 'GATEWAY_IAM_ROLE'  # Gateway IAM 역할 사용
+            'credentialProviderType': 'GATEWAY_IAM_ROLE'
         }]
     )
+    
     print(f"✅ Gateway Target 생성 완료: {target['targetId']}")
-    
-    # 8. 배포 결과 구성
-    result = {
-        'lambda_arn': lambda_arn,
-        'role_arn': role_arn,
-        'user_pool_id': user_pool_id,
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'gateway_id': gateway['gatewayId'],
-        'gateway_url': gateway['gatewayUrl'],
-        'target_id': target['targetId'],
-        'region': Config.REGION,
-        'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-    
-    print("✅ Gateway 배포 완료!")
-    print(f"🌐 Gateway URL: {gateway['gatewayUrl']}")
-    return result
+    return target
 
+
+# ================================
+# 배포 정보 관리
+# ================================
 
 def save_deployment_info(result):
     """
     Gateway 배포 정보를 JSON 파일로 저장
+    
+    다른 컴포넌트에서 Gateway 정보를 참조할 수 있도록 
+    배포 결과를 JSON 파일로 저장합니다.
     
     Args:
         result (dict): 배포 결과 정보
@@ -254,11 +322,25 @@ def save_deployment_info(result):
     with open(info_file, 'w') as f:
         json.dump(result, f, indent=2)
     
+    print(f"📄 배포 정보 저장: {info_file}")
     return str(info_file)
 
+# ================================
+# 메인 실행 함수
+# ================================
 
 def main():
-    """메인 실행 함수"""
+    """
+    메인 실행 함수
+    
+    Portfolio Architect Gateway의 전체 배포 프로세스를 관리합니다.
+    
+    Returns:
+        dict: 배포 결과 정보
+        
+    Raises:
+        Exception: 배포 과정에서 오류 발생 시
+    """
     try:
         print("=" * 60)
         print("🌉 Portfolio Architect Gateway 배포 시작")
@@ -279,6 +361,10 @@ def main():
         print(f"📄 배포 정보: {info_file}")
         print("=" * 60)
         
+        print("\n📋 다음 단계:")
+        print("1. Runtime 배포: python deploy.py")
+        print("2. 또는 직접 테스트: python test.py")
+        
         return result
         
     except Exception as e:
@@ -286,7 +372,6 @@ def main():
         print(f"❌ Gateway 배포 실패: {str(e)}")
         print("=" * 60)
         raise
-
 
 if __name__ == "__main__":
     main()

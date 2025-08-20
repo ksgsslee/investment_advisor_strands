@@ -3,9 +3,13 @@ deploy_lambda.py
 Portfolio Architect Lambda 함수 배포 스크립트
 
 이 스크립트는 포트폴리오 설계를 위한 Lambda 함수를 AWS에 배포합니다.
+yfinance Layer와 함께 배포되어 실시간 ETF 데이터 조회 기능을 제공합니다.
+
 주요 기능:
 - ETF 상품 목록 조회 (get_available_products)
 - 실시간 가격 데이터 조회 (get_product_data)
+- yfinance Layer 자동 연결
+- IAM 역할 자동 생성
 """
 
 import boto3
@@ -15,17 +19,23 @@ import os
 import time
 from pathlib import Path
 
-
+# ================================
 # 설정 상수
+# ================================
+
 class Config:
-    """배포 설정 상수"""
+    """Lambda 배포 설정 상수"""
     FUNCTION_NAME = 'agentcore-portfolio-architect'
     ROLE_NAME = 'lambda-portfolio-architect-role'
     REGION = 'us-west-2'
     RUNTIME = 'python3.12'
     TIMEOUT = 30
-    MEMORY_SIZE = 256  # 128MB에서 256MB로 증가 (yfinance 사용)
+    MEMORY_SIZE = 256  # yfinance 사용을 위해 256MB 할당
     ZIP_FILENAME = 'lambda_function.zip'
+
+# ================================
+# 유틸리티 함수들
+# ================================
 
 
 def create_lambda_zip():

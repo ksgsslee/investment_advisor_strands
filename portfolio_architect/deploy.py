@@ -1,8 +1,17 @@
 """
+deploy.py
 Portfolio Architect AgentCore Runtime 배포 스크립트
 
 Gateway 정보를 자동으로 로드하여 AgentCore Runtime을 배포합니다.
+실시간 포트폴리오 설계 AI 에이전트를 AWS 서버리스 환경에서 실행할 수 있도록 합니다.
+
+주요 기능:
+- Gateway 정보 자동 로드 및 환경변수 주입
+- IAM 역할 자동 생성 및 권한 설정
+- Docker 이미지 빌드 및 ECR 배포
+- 배포 상태 실시간 모니터링
 """
+
 import sys
 import os
 import time
@@ -15,16 +24,22 @@ utils_path = str(Path(__file__).parent.parent)
 sys.path.append(utils_path)
 from utils import create_agentcore_role
 
-
+# ================================
 # 설정 상수
+# ================================
+
 class Config:
-    """Runtime 배포 설정"""
+    """AgentCore Runtime 배포 설정 상수"""
     AGENT_NAME = "portfolio_architect"
     ENTRYPOINT_FILE = "portfolio_architect.py"
     REQUIREMENTS_FILE = "requirements.txt"
     MAX_DEPLOY_MINUTES = 15
     STATUS_CHECK_INTERVAL = 30
     REGION = "us-west-2"
+
+# ================================
+# 유틸리티 함수들
+# ================================
 
 
 def load_gateway_info():
@@ -225,15 +240,26 @@ def save_deployment_info(agent_arn, gateway_info):
     return str(info_file)
 
 
+# ================================
+# 배포 검증 함수들
+# ================================
+
 def validate_prerequisites():
     """
     배포 전 필수 조건 검증
+    
+    Runtime 배포에 필요한 모든 파일과 의존성을 확인합니다.
     
     Returns:
         bool: 모든 조건이 충족되면 True
         
     Raises:
         FileNotFoundError: 필수 파일이 없을 때
+        
+    Checks:
+        - portfolio_architect.py (엔트리포인트)
+        - requirements.txt (의존성 파일)
+        - Gateway 배포 정보 존재 여부
     """
     print("🔍 배포 전 필수 조건 검증 중...")
     
@@ -244,32 +270,51 @@ def validate_prerequisites():
     if missing_files:
         raise FileNotFoundError(f"필수 파일 누락: {', '.join(missing_files)}")
     
+    # Gateway 배포 정보 확인
+    gateway_info_file = current_dir / "gateway" / "gateway_deployment_info.json"
+    if not gateway_info_file.exists():
+        raise FileNotFoundError(
+            "Gateway 배포 정보가 없습니다.\n"
+            "먼저 'python gateway/deploy_gateway.py'를 실행하세요."
+        )
+    
     print("✅ 필수 파일 확인 완료")
     return True
 
+# ================================
+# 메인 실행 함수
+# ================================
 
 def main():
     """
     메인 배포 함수
     
     Portfolio Architect Runtime의 전체 배포 프로세스를 관리합니다.
+    Gateway 정보를 자동으로 로드하여 환경변수로 주입하고,
+    AWS 서버리스 환경에서 실행 가능한 Runtime을 배포합니다.
     
     Returns:
         int: 성공 시 0, 실패 시 1
         
     Process:
-        1. 필수 조건 검증
-        2. Gateway 정보 로드
-        3. IAM 역할 생성
-        4. Runtime 구성
-        5. 배포 및 대기
-        6. 배포 정보 저장
+        1. 필수 조건 검증 (파일 존재, Gateway 배포 상태)
+        2. Gateway 정보 로드 (인증 정보, URL 등)
+        3. IAM 역할 생성 (Runtime 실행 권한)
+        4. Runtime 구성 (Docker, ECR, 의존성)
+        5. 배포 및 대기 (상태 모니터링)
+        6. 배포 정보 저장 (다른 시스템에서 참조용)
+        
+    Note:
+        - 최대 15분 배포 대기
+        - 30초 간격으로 상태 체크
+        - 자동 업데이트 지원 (기존 배포 덮어쓰기)
     """
     try:
         print("=" * 60)
         print("🎯 Portfolio Architect Runtime 배포")
-        print(f"📍 Agent명: {Config.AGENT_NAME}")
+        print(f"� Agent다명: {Config.AGENT_NAME}")
         print(f"🌍 리전: {Config.REGION}")
+        print(f"⏱️ 최대 대기시간: {Config.MAX_DEPLOY_MINUTES}분")
         print("=" * 60)
         
         # 1. 필수 조건 검증
@@ -299,12 +344,17 @@ def main():
             
             print("\n📋 다음 단계:")
             print("1. Streamlit 앱 실행: streamlit run app.py")
-            print("2. 또는 Agent ARN으로 직접 호출")
+            print("2. 직접 테스트: python test.py")
+            print("3. Agent ARN으로 직접 호출")
             
             return 0
         else:
             print("=" * 60)
             print(f"❌ 배포 실패: {status}")
+            print("💡 문제 해결 방법:")
+            print("1. IAM 권한 확인")
+            print("2. Gateway 배포 상태 확인")
+            print("3. 로그 확인 후 재시도")
             print("=" * 60)
             return 1
         
@@ -313,7 +363,6 @@ def main():
         print(f"❌ 배포 오류: {str(e)}")
         print("=" * 60)
         return 1
-
 
 if __name__ == "__main__":
     sys.exit(main())

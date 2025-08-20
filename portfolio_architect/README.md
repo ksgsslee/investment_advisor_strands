@@ -1,6 +1,6 @@
 # Portfolio Architect
 
-실시간 시장 데이터를 분석하여 맞춤형 투자 포트폴리오를 설계하는 AI 에이전트입니다. MCP(Model Context Protocol)를 통해 외부 데이터와 연동하여 데이터 기반 투자 전략을 제공합니다.
+실시간 시장 데이터를 분석하여 맞춤형 투자 포트폴리오를 설계하는 AI 에이전트입니다. **Tool Use 패턴**을 활용하여 **MCP(Model Context Protocol)**를 통해 외부 데이터와 연동하고, **AWS Bedrock AgentCore Runtime** 기반으로 서버리스 환경에서 실행되어 데이터 기반 투자 전략을 제공합니다.
 
 ## 🎯 핵심 기능
 
@@ -165,28 +165,11 @@ flowchart TD
 - Bedrock 모델 접근 권한
 - 충분한 AWS 권한 (Lambda, API Gateway, Cognito, ECR 등)
 
-### 1. Gateway 배포 (필수 선행)
-```bash
-cd gateway
-
-# Gateway 인프라 배포 (10-15분 소요)
-python deploy_gateway.py
-
-# 배포 결과 확인
-cat gateway_deployment_info.json
-```
-
-**Gateway 구성요소:**
-- API Gateway: MCP 엔드포인트 노출
-- Cognito User Pool: OAuth2 인증
-- Lambda 함수: MCP 도구 실행
-- ECR Repository: 컨테이너 이미지 저장
-
-### 2. Lambda Layer 배포 (필수)
+### 1. Lambda Layer 배포 (필수 선행)
 ```bash
 cd lambda_layer
 
-# MCP 클라이언트 라이브러리 Layer 생성
+# yfinance 등 데이터 분석 라이브러리 Layer 생성 (S3 기반 대용량 배포)
 python deploy_layer.py
 
 # Layer 정보 확인
@@ -194,11 +177,44 @@ cat layer_deployment_info.json
 ```
 
 **Layer 구성요소:**
-- MCP 클라이언트 라이브러리
-- HTTP 전송 프로토콜 구현
-- 인증 헬퍼 함수
+- yfinance: 실시간 ETF 가격 데이터 조회
+- pandas, numpy: 데이터 분석 및 처리
+- S3 기반 50MB+ 대용량 Layer 지원
 
-### 3. Runtime 배포
+### 2. Lambda 함수 배포 (필수)
+```bash
+cd lambda
+
+# ETF 데이터 조회 Lambda 함수 배포
+python deploy_lambda.py
+
+# 배포 결과 확인
+cat lambda_deployment_info.json
+```
+
+**Lambda 구성요소:**
+- get_available_products: 30개 ETF 상품 목록 조회
+- get_product_data: 실시간 가격 데이터 조회 (최근 3개월)
+- yfinance Layer 자동 연결
+
+### 3. Gateway 배포 (필수)
+```bash
+cd gateway
+
+# MCP Gateway 인프라 배포 (Lambda ARN 자동 로드)
+python deploy_gateway.py
+
+# 배포 결과 확인
+cat gateway_deployment_info.json
+```
+
+**Gateway 구성요소:**
+- MCP 프로토콜 기반 도구 노출
+- Cognito OAuth2 인증 시스템
+- Lambda 함수를 AI 도구로 변환
+- 실시간 ETF 데이터 API 제공
+
+### 4. Runtime 배포
 ```bash
 # Gateway 정보 자동 로드하여 Runtime 배포
 python deploy.py
@@ -208,24 +224,24 @@ cat deployment_info.json
 ```
 
 **Runtime 구성요소:**
-- Portfolio Architect Agent
+- Portfolio Architect Agent (Claude 3.5 Sonnet)
 - MCP 클라이언트 통합
-- 환경변수 자동 설정
+- 환경변수 자동 설정 (Gateway 연동 정보)
 
-### 4. Streamlit 앱 실행
+### 5. Streamlit 앱 실행
 ```bash
 # 의존성 설치
-pip install streamlit boto3
+pip install streamlit boto3 plotly pandas
 
 # 웹 애플리케이션 실행
 streamlit run app.py
 ```
 
-### 5. 통합 테스트
+### 6. 통합 테스트
 - Financial Analyst에서 재무 분석 수행
 - 분석 결과를 Portfolio Architect에 입력
 - 실시간 포트폴리오 설계 과정 확인
-- MCP 도구 호출 및 결과 검증
+- MCP 도구 호출 및 결과 검증 (30개 ETF 중 3개 선택)
 
 ## 📊 상세 입력/출력 명세
 
@@ -243,21 +259,35 @@ streamlit run app.py
 1. **get_available_products 호출**
    ```json
    {
-     "products": ["QQQ", "SPY", "VTI", "ARKK", "IWM", "EFA", "BND", "GLD"]
+     "SPY": "SPDR S&P 500 ETF - 미국 대형주 500개 기업",
+     "QQQ": "Invesco QQQ ETF - 나스닥 100 기술주",
+     "VTI": "Vanguard Total Stock Market ETF - 미국 전체 주식시장",
+     "ARKK": "ARK Innovation ETF - 혁신 기술주",
+     "BND": "Vanguard Total Bond Market ETF - 미국 전체 채권",
+     "GLD": "SPDR Gold Shares - 금 현물 ETF"
    }
    ```
+   *총 30개 ETF 상품 (주요 지수, 국제, 채권, 섹터, 혁신, 배당 카테고리)*
 
 2. **3개 상품 선택 (AI 판단)**
    - 위험 성향과 목표 수익률 고려
-   - 분산 투자 원칙 적용
-   - 상관관계 분석
+   - 분산 투자 원칙 적용 (최소 3개, 최대 60% 제한)
+   - 상관관계 분석 및 카테고리 분산
 
-3. **get_product_data 동시 호출**
+3. **get_product_data 동시 호출 (최근 3개월 데이터)**
    ```json
    {
-     "QQQ": {"price": 380.50, "change": "+1.2%", "volume": "45M"},
-     "SPY": {"price": 445.20, "change": "+0.8%", "volume": "78M"},
-     "VTI": {"price": 220.15, "change": "+0.9%", "volume": "32M"}
+     "QQQ": {
+       "2024-05-01": 450.25,
+       "2024-05-02": 452.10,
+       "2024-05-03": 448.75,
+       "...": "..."
+     },
+     "SPY": {
+       "2024-05-01": 520.30,
+       "2024-05-02": 522.15,
+       "...": "..."
+     }
    }
    ```
 
@@ -286,20 +316,40 @@ class Config:
     MAX_TOKENS = 3000      # 상세한 분석을 위한 충분한 토큰
 ```
 
-### MCP Gateway 설정
+### Lambda 함수 ETF 상품 설정
 ```python
-# gateway/deploy_gateway.py에서 수정 가능
+# lambda/lambda_function.py에서 수정 가능
 
-# 지원 투자 상품 확장
-SUPPORTED_PRODUCTS = [
-    "QQQ", "SPY", "VTI", "ARKK", "IWM",  # 주식 ETF
-    "EFA", "EEM", "VWO",                  # 해외 ETF  
-    "BND", "TLT", "HYG",                  # 채권 ETF
-    "GLD", "SLV", "DBC"                   # 원자재 ETF
-]
+# 지원 투자 상품 (30개 ETF)
+SUPPORTED_PRODUCTS = {
+    # 주요 지수 ETF (5개)
+    "SPY": "SPDR S&P 500 ETF - 미국 대형주 500개 기업",
+    "QQQ": "Invesco QQQ ETF - 나스닥 100 기술주",
+    "VTI": "Vanguard Total Stock Market ETF - 미국 전체 주식시장",
+    
+    # 국제/신흥국 ETF (5개)
+    "VEA": "Vanguard FTSE Developed Markets ETF - 선진국 주식",
+    "VWO": "Vanguard FTSE Emerging Markets ETF - 신흥국 주식",
+    
+    # 채권/안전자산 ETF (5개)
+    "BND": "Vanguard Total Bond Market ETF - 미국 전체 채권",
+    "GLD": "SPDR Gold Shares - 금 현물 ETF",
+    
+    # 섹터별 ETF (8개)
+    "XLK": "Technology Select Sector SPDR Fund - 기술 섹터",
+    "XLF": "Financial Select Sector SPDR Fund - 금융 섹터",
+    
+    # 혁신/성장 ETF (5개)
+    "ARKK": "ARK Innovation ETF - 혁신 기술주",
+    "ARKQ": "ARK Autonomous Technology & Robotics ETF - 자율주행/로봇",
+    
+    # 배당 ETF (2개)
+    "SCHD": "Schwab US Dividend Equity ETF - 미국 배당주",
+    "VYM": "Vanguard High Dividend Yield ETF - 고배당 ETF"
+}
 
-# API 응답 시간 설정
-TIMEOUT_SECONDS = 30
+# yfinance 데이터 조회 설정
+PRICE_DATA_DAYS = 100  # 최근 100일 (약 3개월)
 ```
 
 ### 포트폴리오 최적화 로직
@@ -341,13 +391,15 @@ aws cloudwatch get-metric-statistics \
 ### 문제 해결 가이드
 
 #### 배포 관련 문제
-- **Gateway 배포 실패**: IAM 권한, Docker 설치 상태 확인
-- **Layer 배포 실패**: Python 환경, 의존성 설치 확인
-- **Runtime 배포 실패**: Gateway 선행 배포 여부 확인
+- **Layer 배포 실패**: yfinance.zip 파일 존재 여부, S3 권한 확인
+- **Lambda 배포 실패**: Layer 선행 배포 여부, IAM 권한 확인
+- **Gateway 배포 실패**: Lambda 선행 배포 여부, Cognito 권한 확인
+- **Runtime 배포 실패**: Gateway 선행 배포 여부, 환경변수 설정 확인
 
 #### 실행 시간 문제
-- **MCP 연결 실패**: Gateway URL, 인증 정보 확인
-- **도구 호출 오류**: 네트워크 연결, API 응답 시간 확인
+- **MCP 연결 실패**: Gateway URL, OAuth2 토큰 확인
+- **도구 호출 오류**: Lambda 함수 상태, yfinance 네트워크 연결 확인
+- **ETF 데이터 조회 실패**: 티커 심볼 유효성, 시장 개장 시간 확인
 - **포트폴리오 생성 실패**: 입력 데이터 형식, 모델 응답 확인
 
 #### 성능 최적화
@@ -359,32 +411,38 @@ aws cloudwatch get-metric-statistics \
 
 ```
 portfolio_architect/
-├── gateway/                    # MCP Gateway 구성요소
-│   ├── deploy_gateway.py      # Gateway 배포 스크립트
-│   ├── gateway_handler.py     # Lambda 핸들러
-│   ├── mcp_tools.py          # MCP 도구 구현
-│   ├── requirements.txt      # Gateway 의존성
-│   ├── Dockerfile           # Gateway 컨테이너
-│   └── gateway_deployment_info.json  # 배포 정보
-├── lambda_layer/              # Lambda Layer 구성요소
-│   ├── deploy_layer.py       # Layer 배포 스크립트
-│   ├── requirements.txt      # Layer 의존성
-│   └── layer_deployment_info.json    # Layer 정보
-├── portfolio_architect.py     # 메인 에이전트 클래스
-├── deploy.py                 # Runtime 배포 스크립트
-├── app.py                    # Streamlit 웹 애플리케이션
-├── requirements.txt          # Runtime 의존성
-├── __init__.py              # 패키지 초기화
-├── .bedrock_agentcore.yaml  # AgentCore 설정
-├── Dockerfile               # Runtime 컨테이너
-└── deployment_info.json     # Runtime 배포 정보
+├── lambda_layer/              # Lambda Layer 구성요소 (yfinance 등)
+│   ├── deploy_layer.py       # Layer 배포 스크립트 (S3 기반 대용량 지원)
+│   ├── yfinance.zip         # yfinance, pandas, numpy 라이브러리 패키지
+│   └── layer_deployment_info.json    # Layer 배포 정보
+├── lambda/                   # Lambda 함수 구성요소 (ETF 데이터 조회)
+│   ├── deploy_lambda.py     # Lambda 배포 스크립트
+│   ├── lambda_function.py   # ETF 데이터 조회 함수 (30개 상품 지원)
+│   └── lambda_deployment_info.json  # Lambda 배포 정보
+├── gateway/                  # MCP Gateway 구성요소 (도구 노출)
+│   ├── deploy_gateway.py    # Gateway 배포 스크립트 (Lambda ARN 자동 로드)
+│   ├── target_config.py     # MCP 도구 스키마 정의
+│   ├── utils.py            # IAM, Cognito 관리 유틸리티
+│   └── gateway_deployment_info.json  # Gateway 배포 정보
+├── portfolio_architect.py   # 메인 에이전트 클래스 (MCP 클라이언트 통합)
+├── deploy.py               # Runtime 배포 스크립트 (Gateway 정보 자동 로드)
+├── app.py                  # Streamlit 웹 애플리케이션 (차트 시각화 포함)
+├── requirements.txt        # Runtime 의존성 (strands, mcp-client 등)
+├── __init__.py            # 패키지 초기화
+├── .bedrock_agentcore.yaml # AgentCore 설정
+├── Dockerfile             # Runtime 컨테이너
+└── deployment_info.json   # Runtime 배포 정보
 ```
 
 ## 🔗 연관 프로젝트
 
 이 프로젝트는 **Financial Analyst**와 연동하여 완전한 투자 자문 시스템을 구성합니다:
 
-1. **Financial Analyst** → 개인 재무 분석 및 위험 성향 평가
-2. **Portfolio Architect** → 분석 결과 기반 포트폴리오 설계
+1. **Financial Analyst** (Reflection 패턴) → 개인 재무 분석 및 위험 성향 평가
+2. **Portfolio Architect** (Tool Use 패턴) → 실시간 데이터 기반 포트폴리오 설계
 
-두 시스템을 순차적으로 사용하여 개인 맞춤형 투자 전략을 수립할 수 있습니다.
+**통합 워크플로우:**
+- Financial Analyst에서 JSON 형태의 재무 분석 결과 생성
+- Portfolio Architect가 해당 결과를 입력받아 MCP 도구 활용
+- 30개 ETF 중 최적 3개 선택하여 포트폴리오 구성
+- 실시간 가격 데이터 기반 투자 비율 최적화

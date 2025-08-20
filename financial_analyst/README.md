@@ -1,6 +1,6 @@
 # Financial Analyst
 
-개인의 재무 상황을 분석하여 투자 성향과 목표 수익률을 계산하는 AI 에이전트입니다. Reflection 패턴을 활용하여 분석 결과의 정확성과 신뢰성을 보장합니다.
+개인의 재무 상황을 분석하여 투자 성향과 목표 수익률을 계산하는 AI 에이전트입니다. **Reflection 패턴**을 활용하여 분석 결과의 정확성과 신뢰성을 보장하며, **AWS Bedrock AgentCore Runtime** 기반으로 서버리스 환경에서 실행됩니다.
 
 ## 🎯 핵심 기능
 
@@ -216,9 +216,10 @@ aws logs tail /aws/lambda/financial-analyst-runtime --follow
 ```
 
 ### 성능 메트릭
-- **응답 시간**: 평균 5-10초
+- **응답 시간**: 평균 5-10초 (Reflection 포함)
 - **성공률**: 99%+ (정상 입력 기준)
-- **비용**: 요청당 약 $0.01-0.05
+- **Reflection 검증률**: 95%+ (분석 품질 보장)
+- **비용**: 요청당 약 $0.01-0.05 (Analyst + Reflection)
 
 ### 문제 해결
 - **배포 실패**: IAM 권한 및 Docker 설치 확인

@@ -264,7 +264,6 @@ def invoke_portfolio_architect(financial_analysis):
         placeholder.subheader("Bedrock Reasoning")
         
         # 상태 변수 초기화
-        output_text = ""
         current_thinking = ""
         current_text_placeholder = placeholder.empty()
         tool_id_to_name = {}  # tool_use_id와 tool_name 매핑
@@ -281,7 +280,6 @@ def invoke_portfolio_architect(financial_analysis):
                 if event_type == "text_chunk":
                     # AI 생각 과정을 실시간으로 표시
                     chunk_data = event_data.get("data", "")
-                    output_text += chunk_data
                     current_thinking += chunk_data
                     
                     if current_thinking.strip():
@@ -296,8 +294,6 @@ def invoke_portfolio_architect(financial_analysis):
                     # 실제 함수명 추출 (target-portfolio-architect___get_available_products -> get_available_products)
                     actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
                     tool_id_to_name[tool_use_id] = actual_tool_name
-                    
-                    current_thinking = ""  # 생각 텍스트 리셋
                 
                 elif event_type == "tool_result":
                     # 도구 실행 결과 처리
@@ -315,7 +311,8 @@ def invoke_portfolio_architect(financial_analysis):
                         elif actual_tool_name == "get_product_data":
                             display_product_data(placeholder, body)
                     
-                    # 메모리 정리 및 새로운 텍스트 placeholder 생성
+                    # 도구 결과 처리 후 생각 텍스트 리셋 및 새로운 placeholder 생성
+                    current_thinking = ""
                     if tool_use_id in tool_id_to_name:
                         del tool_id_to_name[tool_use_id]
                     current_text_placeholder = placeholder.empty()
@@ -334,11 +331,11 @@ def invoke_portfolio_architect(financial_analysis):
         placeholder.divider()
         placeholder.markdown("🤖 **Portfolio Architect**")
         placeholder.subheader("📌 포트폴리오 설계")
-        display_portfolio_suggestion(placeholder, output_text)
+        display_portfolio_suggestion(placeholder, current_thinking)
         
         return {
             "status": "success",
-            "output_text": output_text
+            "output_text": current_thinking
         }
         
     except Exception as e:

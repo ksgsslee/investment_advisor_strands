@@ -71,34 +71,69 @@ def display_product_data(trace_container, data):
         else:
             price_data = data
         
-        for ticker, prices in price_data.items():
-            df = pd.DataFrame.from_dict(prices, orient='index', columns=['Price'])
-            df.index = pd.to_datetime(df.index)
-            df = df.sort_index()
-            
+        # 여러 ETF가 있는 경우 하나의 차트에 모두 표시
+        if len(price_data) > 1:
             fig = go.Figure()
-            fig.add_trace(
-                go.Scatter(
-                    x=df.index,
-                    y=df['Price'],
-                    mode='lines',
-                    name=ticker,
-                    line=dict(width=2)
+            
+            for ticker, prices in price_data.items():
+                df = pd.DataFrame.from_dict(prices, orient='index', columns=['Price'])
+                df.index = pd.to_datetime(df.index)
+                df = df.sort_index()
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=df.index,
+                        y=df['Price'],
+                        mode='lines',
+                        name=ticker,
+                        line=dict(width=2)
+                    )
                 )
-            )
             
             fig.update_layout(
-                title=f"{ticker} 가격 추이",
+                title="선택된 ETF 가격 추이 비교",
                 xaxis_title="날짜",
                 yaxis_title="가격 ($)",
-                height=400,
+                height=500,
                 showlegend=True,
                 hovermode='x unified'
             )
             
             trace_container.plotly_chart(fig, use_container_width=True)
+        
+        else:
+            # 단일 ETF인 경우 개별 차트
+            for ticker, prices in price_data.items():
+                df = pd.DataFrame.from_dict(prices, orient='index', columns=['Price'])
+                df.index = pd.to_datetime(df.index)
+                df = df.sort_index()
+                
+                fig = go.Figure()
+                fig.add_trace(
+                    go.Scatter(
+                        x=df.index,
+                        y=df['Price'],
+                        mode='lines',
+                        name=ticker,
+                        line=dict(width=2)
+                    )
+                )
+                
+                fig.update_layout(
+                    title=f"{ticker} 가격 추이",
+                    xaxis_title="날짜",
+                    yaxis_title="가격 ($)",
+                    height=400,
+                    showlegend=True,
+                    hovermode='x unified'
+                )
+                
+                trace_container.plotly_chart(fig, use_container_width=True)
+                
     except Exception as e:
         trace_container.error(f"가격 데이터 표시 오류: {str(e)}")
+        # 디버깅을 위해 원본 데이터도 표시
+        trace_container.json(data)
 
 def create_pie_chart(data, chart_title=""):
     """Create a pie chart for portfolio allocation"""
@@ -169,7 +204,9 @@ def invoke_portfolio_architect(financial_analysis):
         placeholder.subheader("Bedrock Reasoning")
         
         output_text = ""
-        function_name = ""
+        
+        # tool_use_id와 tool_name을 매핑하는 딕셔너리 (핵심 추가!)
+        tool_id_to_name = {}
         
         # SSE 형식 응답 처리
         for line in response["response"].iter_lines(chunk_size=1):
@@ -184,45 +221,38 @@ def invoke_portfolio_architect(financial_analysis):
                         output_text += chunk_data
                     
                     elif event_type == "tool_use":
-                        # 도구 사용 시작 (기존 trace 방식과 유사하게 처리)
+                        # 도구 사용 시작 - tool_id와 tool_name 매핑 저장
                         tool_name = event_data.get("tool_name", "")
-                        if "get_available_products" in tool_name:
-                            function_name = "get_available_products"
-                        elif "get_product_data" in tool_name:
-                            function_name = "get_product_data"
+                        tool_use_id = event_data.get("tool_use_id", "")
                         
-                        with placeholder.chat_message("ai"):
-                            st.markdown(f"🔧 {tool_name} 실행 중...")
+                        # tool_name에서 실제 함수명 추출 (___로 분리해서 마지막 부분)
+                        actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
+                        
+                        # tool_id와 실제 tool_name 매핑 저장
+                        tool_id_to_name[tool_use_id] = actual_tool_name
                     
                     elif event_type == "tool_result":
-                        # 도구 실행 결과 표시
-                        if function_name == "get_available_products":
-                            tool_content = event_data.get("content", [{}])
-                            if tool_content and len(tool_content) > 0:
-                                result_text = tool_content[0].get("text", "{}")
-                                # JSON에서 실제 데이터 추출
-                                try:
-                                    parsed_result = json.loads(result_text)
-                                    if "response" in parsed_result and "payload" in parsed_result["response"]:
-                                        body = parsed_result["response"]["payload"]["body"]
-                                        display_available_products(placeholder, body)
-                                except:
-                                    display_available_products(placeholder, result_text)
+                        # 도구 실행 결과 표시 - tool_use_id로 실제 함수명 찾기
+                        tool_use_id = event_data.get("tool_use_id", "")
+                        actual_tool_name = tool_id_to_name.get(tool_use_id, "unknown")
                         
-                        elif function_name == "get_product_data":
-                            tool_content = event_data.get("content", [{}])
-                            if tool_content and len(tool_content) > 0:
-                                result_text = tool_content[0].get("text", "{}")
-                                # JSON에서 실제 데이터 추출
-                                try:
-                                    parsed_result = json.loads(result_text)
-                                    if "response" in parsed_result and "payload" in parsed_result["response"]:
-                                        body = parsed_result["response"]["payload"]["body"]
-                                        display_product_data(placeholder, body)
-                                except:
-                                    display_product_data(placeholder, result_text)
+                        tool_content = event_data.get("content", [{}])
+                        if tool_content and len(tool_content) > 0:
+                            # JSON에서 실제 데이터 추출
+                            result_text = tool_content[0].get("text", "{}")
+                            parsed_result = json.loads(result_text)
+                            body = parsed_result["response"]["payload"]["body"]
+
+                            # 실제 함수명에 따라 적절한 display 함수 호출
+                            if actual_tool_name == "get_available_products":
+                                display_available_products(placeholder, body)
+                            
+                            elif actual_tool_name == "get_product_data":
+                                display_product_data(placeholder, body)
                         
-                        function_name = ""
+                        # 처리 완료된 tool_id는 딕셔너리에서 제거 (메모리 정리)
+                        if tool_use_id in tool_id_to_name:
+                            del tool_id_to_name[tool_use_id]
                     
                     elif event_type == "streaming_complete":
                         # 스트리밍 완료

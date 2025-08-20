@@ -247,14 +247,6 @@ if submitted:
                 st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
                 st.stop()
             
-            # 상세 정보
-            with st.expander("상세 분석 데이터 보기"):
-                st.subheader("📥 입력 데이터")
-                st.json(input_data)
-                
-                st.subheader("📊 완전한 분석 결과")
-                st.json(result)
-                
         except Exception as e:
             st.error(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")
             

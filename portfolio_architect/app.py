@@ -204,6 +204,10 @@ def invoke_portfolio_architect(financial_analysis):
         placeholder.subheader("Bedrock Reasoning")
         
         output_text = ""
+        current_thinking = ""  # 현재 생각 중인 텍스트 (도구 호출 사이의 텍스트)
+        
+        # 실시간 텍스트 표시를 위한 placeholder
+        current_text_placeholder = placeholder.empty()
         
         # tool_use_id와 tool_name을 매핑하는 딕셔너리 (핵심 추가!)
         tool_id_to_name = {}
@@ -216,9 +220,15 @@ def invoke_portfolio_architect(financial_analysis):
                     event_type = event_data.get("type")
                     
                     if event_type == "text_chunk":
-                        # 텍스트 청크 누적 (기존 방식과 동일)
+                        # 텍스트 청크 누적하고 실시간 업데이트
                         chunk_data = event_data.get("data", "")
                         output_text += chunk_data
+                        current_thinking += chunk_data
+                        
+                        # 실시간으로 현재까지의 생각 표시
+                        if current_thinking.strip():
+                            with current_text_placeholder.chat_message("assistant"):
+                                st.markdown(current_thinking)
                     
                     elif event_type == "tool_use":
                         # 도구 사용 시작 - tool_id와 tool_name 매핑 저장
@@ -230,6 +240,8 @@ def invoke_portfolio_architect(financial_analysis):
                         
                         # tool_id와 실제 tool_name 매핑 저장
                         tool_id_to_name[tool_use_id] = actual_tool_name
+                        
+                        current_thinking = ""  # 리셋
                     
                     elif event_type == "tool_result":
                         # 도구 실행 결과 표시 - tool_use_id로 실제 함수명 찾기
@@ -254,7 +266,15 @@ def invoke_portfolio_architect(financial_analysis):
                         if tool_use_id in tool_id_to_name:
                             del tool_id_to_name[tool_use_id]
                     
+                        # 현재 텍스트 placeholder 고정 (더 이상 업데이트 안 함)
+                        current_text_placeholder = placeholder.empty()
+
+
                     elif event_type == "streaming_complete":
+                        # 마지막 남은 AI 생각을 표시
+                        if current_thinking.strip():
+                            with current_text_placeholder.chat_message("assistant"):
+                                st.markdown(current_thinking.strip())
                         # 스트리밍 완료
                         break
                         

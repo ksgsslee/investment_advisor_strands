@@ -51,68 +51,46 @@ def get_product_news(ticker, top_n=5):
         - 뉴스가 없거나 오류 시 적절한 에러 메시지 반환
     """
     try:
-        print(f"📰 {ticker} 뉴스 데이터 조회 시작...")
-        
         # yfinance를 사용하여 ETF 뉴스 조회
         stock = yf.Ticker(ticker)
         news = stock.news[:top_n]
         
-        # 뉴스 데이터 유효성 검사
-        if not news:
-            print(f"⚠️ {ticker}: 뉴스 데이터가 없습니다")
-            return {
-                "ticker": ticker,
-                "news": [],
-                "message": f"No news available for {ticker}"
-            }
-        
         # 뉴스 데이터 포맷팅
         formatted_news = []
         for item in news:
-            try:
-                # yfinance 뉴스 구조에 따른 데이터 추출
-                title = item.get("title", "")
-                summary = item.get("summary", "")
-                
-                # 발행일 처리 (다양한 형식 지원)
-                publish_date = ""
-                if "providerPublishTime" in item:
-                    # Unix timestamp를 날짜로 변환
-                    timestamp = item["providerPublishTime"]
-                    publish_date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
-                elif "pubDate" in item:
-                    # 문자열 날짜 처리
-                    pub_date = item["pubDate"]
-                    if isinstance(pub_date, str) and len(pub_date) >= 10:
-                        publish_date = pub_date[:10]
-                
-                news_item = {
-                    "title": title,
-                    "summary": summary,
-                    "publish_date": publish_date,
-                    "link": item.get("link", "")
-                }
-                formatted_news.append(news_item)
-                
-            except Exception as e:
-                print(f"⚠️ 뉴스 항목 처리 오류: {str(e)}")
-                continue
+            # content 객체에서 데이터 추출
+            content = item.get("content", item)
+            
+            title = content.get("title", "")
+            summary = content.get("summary", "")
+            
+            # 날짜 처리
+            pub_date = content.get("pubDate", "")
+            publish_date = pub_date.split("T")[0] if "T" in pub_date else pub_date[:10] if len(pub_date) >= 10 else ""
+            
+            # 링크 처리
+            link = ""
+            if "canonicalUrl" in content:
+                link = content["canonicalUrl"].get("url", "")
+            
+            news_item = {
+                "title": title,
+                "summary": summary,
+                "publish_date": publish_date,
+                "link": link
+            }
+            formatted_news.append(news_item)
         
-        result = {
+        return {
             "ticker": ticker,
             "news": formatted_news,
             "count": len(formatted_news)
         }
         
-        print(f"✅ {ticker}: {len(formatted_news)}개 뉴스 조회 완료")
-        return result
-        
     except Exception as e:
-        error_msg = f"Error fetching news for {ticker}: {str(e)}"
-        print(f"❌ {error_msg}")
         return {
             "ticker": ticker,
-            "error": error_msg,
+            "error": str(e),
             "news": []
         }
 
@@ -146,120 +124,47 @@ def get_market_data():
         - 각 지표별 설명과 티커 정보 포함
     """
     try:
-        print("📊 거시경제 지표 데이터 조회 시작...")
-        
         # 주요 거시경제 지표 정의
         market_indicators = {
-            "us_dollar_index": {
-                "ticker": "DX-Y.NYB", 
-                "description": "미국 달러 강세를 나타내는 지수"
-            },
-            "us_10y_treasury_yield": {
-                "ticker": "^TNX", 
-                "description": "미국 10년 국채 수익률 (%)"
-            },
-            "us_2y_treasury_yield": {
-                "ticker": "^IRX", 
-                "description": "미국 3개월 국채 수익률 (%)"
-            },
-            "vix_volatility_index": {
-                "ticker": "^VIX", 
-                "description": "시장의 변동성을 나타내는 VIX 지수"
-            },
-            "crude_oil_price": {
-                "ticker": "CL=F", 
-                "description": "WTI 원유 선물 가격 (USD/배럴)"
-            }
+            "us_dollar_index": {"ticker": "DX-Y.NYB", "description": "미국 달러 강세 지수"},
+            "us_10y_treasury_yield": {"ticker": "^TNX", "description": "미국 10년 국채 수익률 (%)"},
+            "us_2y_treasury_yield": {"ticker": "^IRX", "description": "미국 3개월 국채 수익률 (%)"},
+            "vix_volatility_index": {"ticker": "^VIX", "description": "VIX 변동성 지수"},
+            "crude_oil_price": {"ticker": "CL=F", "description": "WTI 원유 선물 가격 (USD/배럴)"}
         }
         
         market_data = {}
-        successful_queries = 0
         
         # 각 지표별 데이터 조회
         for key, info in market_indicators.items():
+            ticker_symbol = info["ticker"]
+            
             try:
-                ticker_symbol = info["ticker"]
-                print(f"📈 {key} ({ticker_symbol}) 조회 중...")
-                
-                # yfinance를 사용하여 지표 데이터 조회
                 ticker = yf.Ticker(ticker_symbol)
-                
-                # 다양한 가격 정보 시도 (지표별로 사용 가능한 필드가 다름)
-                market_price = None
-                
-                # 1. 기본 정보에서 가격 추출 시도
                 info_data = ticker.info
-                price_fields = [
-                    'regularMarketPrice',
-                    'regularMarketPreviousClose', 
-                    'previousClose',
-                    'ask',
-                    'bid',
-                    'open'
-                ]
                 
-                for field in price_fields:
-                    if field in info_data and info_data[field] is not None:
-                        market_price = float(info_data[field])
-                        break
-                
-                # 2. 최근 히스토리 데이터에서 추출 시도
-                if market_price is None:
-                    try:
-                        hist = ticker.history(period="5d")
-                        if not hist.empty:
-                            market_price = float(hist['Close'].iloc[-1])
-                    except:
-                        pass
-                
-                # 3. 기본값 설정 (데이터를 가져올 수 없는 경우)
-                if market_price is None:
-                    market_price = 0.0
-                    print(f"⚠️ {key}: 가격 데이터를 가져올 수 없음, 기본값 사용")
+                # 가격 정보 추출
+                market_price = (info_data.get('regularMarketPrice') or 
+                              info_data.get('regularMarketPreviousClose') or 
+                              info_data.get('previousClose') or 0.0)
                 
                 market_data[key] = {
                     "description": info["description"],
-                    "value": round(market_price, 2),
-                    "ticker": ticker_symbol,
-                    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "value": round(float(market_price), 2),
+                    "ticker": ticker_symbol
                 }
                 
-                successful_queries += 1
-                print(f"✅ {key}: {market_price}")
-                
-            except Exception as e:
-                print(f"⚠️ {key} 조회 실패: {str(e)}")
-                # 실패한 지표도 기본 구조로 포함
+            except:
                 market_data[key] = {
                     "description": info["description"],
                     "value": 0.0,
-                    "ticker": info["ticker"],
-                    "error": str(e),
-                    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "ticker": ticker_symbol
                 }
-        
-        print(f"✅ 거시경제 지표 조회 완료: {successful_queries}/{len(market_indicators)}개 성공")
-        
-        # 메타데이터 추가
-        market_data["_metadata"] = {
-            "total_indicators": len(market_indicators),
-            "successful_queries": successful_queries,
-            "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "data_source": "Yahoo Finance via yfinance"
-        }
         
         return market_data
         
     except Exception as e:
-        error_msg = f"Error fetching market data: {str(e)}"
-        print(f"❌ {error_msg}")
-        return {
-            "error": error_msg,
-            "_metadata": {
-                "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "status": "failed"
-            }
-        }
+        return {"error": f"Error fetching market data: {str(e)}"}
 
 # ================================
 # Lambda 핸들러 함수

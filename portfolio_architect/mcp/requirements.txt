@@ -1,0 +1,13 @@
+# requirements.txt
+# MCP Server 의존성
+
+# MCP Server 프레임워크
+fastmcp
+
+# 데이터 분석 라이브러리
+yfinance
+pandas
+numpy
+
+# AWS Bedrock AgentCore
+bedrock-agentcore-starter-toolkit

@@ -1,8 +1,12 @@
 # requirements.txt
-# Portfolio Architect AgentCore Runtime 의존성
+# Portfolio Architect 의존성
 
 # AI 에이전트 프레임워크
 strands-agents
 
-# AWS Bedrock AgentCore Runtime
+# AWS Bedrock AgentCore
 bedrock-agentcore
+bedrock-agentcore-starter-toolkit
+
+# AWS SDK
+boto3

@@ -32,8 +32,8 @@ CURRENT_DIR = Path(__file__).parent.resolve()
 try:
     with open(CURRENT_DIR / "deployment_info.json", "r") as f:
         deployment_info = json.load(f)
-    AGENT_ARN = deployment_info["agent_arn"]
-    REGION = deployment_info["region"]
+    AGENT_ARN = deployment_info["portfolio_architect"]["agent_arn"]
+    REGION = deployment_info["portfolio_architect"]["region"]
 except Exception as e:
     st.error("배포 정보를 찾을 수 없습니다. deploy.py를 먼저 실행해주세요.")
     st.stop()
@@ -351,19 +351,20 @@ def invoke_portfolio_architect(financial_analysis):
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
     st.markdown("""
-    ### 🔄 AgentCore Runtime Architecture (Tool Use Pattern)
+    ### 🔄 MCP Server Architecture (Tool Use Pattern)
     ```
-    재무 분석 결과 → AgentCore Runtime → 포트폴리오 설계사 AI → 도구 사용 → 최종 포트폴리오
+    재무 분석 결과 → Portfolio Architect → MCP Server → ETF 데이터 → 최종 포트폴리오
     ```
     
     **구성 요소:**
-    - **Portfolio Architect Agent**: 실시간 시장 데이터 기반 포트폴리오 설계
-    - **Tool Use Pattern**: 외부 API 및 데이터 소스 활용
-    - **AgentCore Runtime**: AWS 서버리스 실행 환경
+    - **Portfolio Architect Agent**: AI 포트폴리오 설계사 (AgentCore Runtime)
+    - **MCP Server**: ETF 데이터 조회 도구 서버 (AgentCore Runtime)
+    - **Tool Use Pattern**: MCP 프로토콜을 통한 도구 활용
+    - **yfinance**: 실시간 ETF 가격 데이터 소스
     
     **사용 도구:**
-    - `get_available_products()`: 투자 상품 목록 조회
-    - `get_product_data(ticker)`: 실시간 가격 데이터 조회
+    - `get_available_products()`: 30개 ETF 상품 목록 조회
+    - `get_product_data(ticker)`: 실시간 가격 데이터 조회 (최근 3개월)
     """)
 
 # 입력 폼

@@ -14,10 +14,10 @@ import boto3
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
+import uuid
+import itertools
 from pathlib import Path
 
-# 상위 디렉토리 경로 추가
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ================================
 # 페이지 설정 및 초기화
@@ -114,12 +114,20 @@ def display_news_data(container, news_data):
         
         container.markdown(f"**📰 {ticker} 최신 뉴스**")
         
-        for i, news_item in enumerate(news_list[:3], 1):  # 상위 3개만 표시
-            with container.expander(f"{i}. {news_item.get('title', 'No Title')}"):
-                st.write(f"**발행일:** {news_item.get('publish_date', 'Unknown')}")
-                st.write(f"**요약:** {news_item.get('summary', 'No summary available')}")
-                if news_item.get('link'):
-                    st.write(f"**링크:** {news_item['link']}")
+        # DataFrame으로 뉴스 표시 (원본 코드 스타일 적용)
+        news_df = pd.DataFrame(news_list)
+        if not news_df.empty and all(col in news_df.columns for col in ['publish_date', 'title', 'summary']):
+            container.dataframe(
+                news_df[['publish_date', 'title', 'summary']],
+                hide_index=True,
+                use_container_width=True
+            )
+        else:
+            # DataFrame 생성 실패 시 기존 방식으로 표시
+            for i, news_item in enumerate(news_list[:5], 1):
+                with container.expander(f"{i}. {news_item.get('title', 'No Title')}"):
+                    st.write(f"**발행일:** {news_item.get('publish_date', 'Unknown')}")
+                    st.write(f"**요약:** {news_item.get('summary', 'No summary available')}")
                 
     except Exception as e:
         container.error(f"뉴스 데이터 표시 오류: {str(e)}")
@@ -144,84 +152,57 @@ def display_market_data(container, market_data):
         # 메타데이터 제외하고 지표만 추출
         indicators = {k: v for k, v in data.items() if not k.startswith('_')}
         
-        # 2열로 지표 표시
-        cols = container.columns(2)
-        col_idx = 0
-        
-        for key, info in indicators.items():
-            with cols[col_idx % 2]:
-                if isinstance(info, dict) and 'value' in info:
-                    value = info['value']
-                    description = info.get('description', key)
-                    
-                    # 값에 따른 색상 설정
-                    if 'vix' in key.lower():
-                        # VIX는 높을수록 위험 (빨간색)
-                        color = "red" if value > 20 else "green"
-                    elif 'yield' in key.lower():
-                        # 수익률은 높을수록 주의 (노란색)
-                        color = "orange" if value > 4 else "blue"
-                    else:
-                        color = "blue"
-                    
-                    st.metric(
-                        label=description,
-                        value=f"{value}",
-                        delta=None
-                    )
-                else:
-                    st.write(f"**{key}**: 데이터 없음")
-            
-            col_idx += 1
+        # 3열로 지표 표시 (원본 코드 스타일 적용)
+        indicator_items = list(indicators.items())
+        for i in range(0, len(indicator_items), 3):
+            cols = container.columns(3)
+            for j, (key, info) in enumerate(indicator_items[i:i+3]):
+                if j < len(cols):
+                    with cols[j]:
+                        if isinstance(info, dict) and 'value' in info:
+                            description = info.get('description', key)
+                            value = info['value']
+                            st.metric(description, f"{value}")
+                        else:
+                            st.write(f"**{key}**: 데이터 없음")
                 
     except Exception as e:
         container.error(f"시장 데이터 표시 오류: {str(e)}")
 
-def create_scenario_comparison_chart(scenario_data):
+def create_pie_chart(data, chart_title=""):
     """
-    시나리오별 포트폴리오 비교 차트 생성
+    포트폴리오 배분을 위한 파이 차트 생성 (원본 코드 스타일)
     
     Args:
-        scenario_data (dict): 시나리오 데이터
+        data (dict): 자산 배분 데이터
+        chart_title (str): 차트 제목
         
     Returns:
-        plotly.graph_objects.Figure: 비교 차트
+        plotly.graph_objects.Figure: 파이 차트
     """
     try:
-        scenario1 = scenario_data.get('scenario1', {})
-        scenario2 = scenario_data.get('scenario2', {})
-        
-        allocation1 = scenario1.get('allocation_management', {})
-        allocation2 = scenario2.get('allocation_management', {})
-        
-        # 데이터 준비
-        tickers = list(set(list(allocation1.keys()) + list(allocation2.keys())))
-        scenario1_values = [allocation1.get(ticker, 0) for ticker in tickers]
-        scenario2_values = [allocation2.get(ticker, 0) for ticker in tickers]
-        
-        # 그룹화된 막대 차트 생성
-        fig = go.Figure(data=[
-            go.Bar(name=scenario1.get('name', 'Scenario 1'), x=tickers, y=scenario1_values, marker_color='lightblue'),
-            go.Bar(name=scenario2.get('name', 'Scenario 2'), x=tickers, y=scenario2_values, marker_color='lightcoral')
-        ])
+        fig = go.Figure(data=[go.Pie(
+            labels=list(data.keys()),
+            values=list(data.values()),
+            hole=.3,
+            textinfo='label+percent',
+            marker=dict(colors=px.colors.qualitative.Set3)
+        )])
         
         fig.update_layout(
-            title="시나리오별 포트폴리오 배분 비교",
-            xaxis_title="ETF 티커",
-            yaxis_title="배분 비율 (%)",
-            barmode='group',
+            title=chart_title,
+            showlegend=True,
+            width=400,
             height=400
         )
-        
         return fig
-        
     except Exception as e:
-        st.error(f"차트 생성 오류: {str(e)}")
+        st.error(f"파이 차트 생성 오류: {str(e)}")
         return None
 
 def display_risk_analysis_result(container, analysis_content):
     """
-    최종 리스크 분석 결과를 표시
+    최종 리스크 분석 결과를 표시 (원본 코드 스타일 적용)
     
     Args:
         container: Streamlit 컨테이너
@@ -234,41 +215,29 @@ def display_risk_analysis_result(container, analysis_content):
             container.error("리스크 분석 데이터를 찾을 수 없습니다.")
             return
         
-        # 시나리오 비교 차트
-        fig = create_scenario_comparison_chart(data)
-        if fig:
-            container.plotly_chart(fig, use_container_width=True)
-        
-        # 시나리오별 상세 정보
-        col1, col2 = container.columns(2)
-        
-        # 시나리오 1
-        with col1:
-            scenario1 = data.get('scenario1', {})
-            st.markdown(f"### 🔮 {scenario1.get('name', 'Scenario 1')}")
-            st.info(scenario1.get('description', '설명 없음'))
-            
-            st.markdown("**조정된 포트폴리오:**")
-            allocation1 = scenario1.get('allocation_management', {})
-            for ticker, ratio in allocation1.items():
-                st.write(f"• {ticker}: {ratio}%")
-            
-            st.markdown("**조정 근거:**")
-            st.write(scenario1.get('reason', '근거 없음'))
-        
-        # 시나리오 2
-        with col2:
-            scenario2 = data.get('scenario2', {})
-            st.markdown(f"### 🔮 {scenario2.get('name', 'Scenario 2')}")
-            st.info(scenario2.get('description', '설명 없음'))
-            
-            st.markdown("**조정된 포트폴리오:**")
-            allocation2 = scenario2.get('allocation_management', {})
-            for ticker, ratio in allocation2.items():
-                st.write(f"• {ticker}: {ratio}%")
-            
-            st.markdown("**조정 근거:**")
-            st.write(scenario2.get('reason', '근거 없음'))
+        # 각 시나리오별로 표시 (원본 코드 스타일)
+        for i, scenario_key in enumerate(["scenario1", "scenario2"], 1):
+            if scenario_key in data:
+                scenario = data[scenario_key]
+                
+                container.subheader(f"시나리오 {i}: {scenario.get('name', f'Scenario {i}')}")
+                container.markdown(scenario.get('description', '설명 없음'))
+                
+                sub_col1, sub_col2 = container.columns([1, 1])
+                
+                with sub_col1:
+                    # 파이 차트 생성 및 표시
+                    allocation = scenario.get('allocation_management', {})
+                    if allocation:
+                        fig = create_pie_chart(
+                            allocation,
+                            "조정된 포트폴리오 자산 배분"
+                        )
+                        st.plotly_chart(fig)
+                
+                with sub_col2:
+                    st.markdown("**조정 이유 및 전략**")
+                    st.info(scenario.get('reason', '근거 없음'))
         
     except Exception as e:
         container.error(f"리스크 분석 표시 오류: {str(e)}")
@@ -404,7 +373,7 @@ with st.expander("아키텍처", expanded=True):
     """)
 
 # 입력 폼
-st.markdown("**포트폴리오 제안 결과 입력 (🤖 Portfolio Architect)**")
+st.markdown("**포트폴리오 구성 입력 (🤖 Portfolio Architect)**")
 
 portfolio_data = st.text_area(
     "JSON 형식",

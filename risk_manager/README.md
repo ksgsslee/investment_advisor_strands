@@ -168,7 +168,23 @@ flowchart TD
 - Bedrock 모델 접근 권한
 - Portfolio Architect Layer 선행 배포 (yfinance 공유)
 
-### 1. Lambda 함수 배포 (필수)
+### 1. Lambda Layer 배포 (필수 선행)
+```bash
+cd lambda_layer
+
+# yfinance 등 데이터 분석 라이브러리 Layer 생성 (Portfolio Architect Layer 재사용 우선)
+python deploy_lambda_layer.py
+
+# Layer 정보 확인
+cat layer_deployment_info.json
+```
+
+**Layer 구성요소:**
+- yfinance: 실시간 뉴스 및 시장 데이터 조회
+- pandas, numpy: 데이터 분석 및 처리
+- Portfolio Architect Layer 재사용 우선 (비용 최적화)
+
+### 2. Lambda 함수 배포 (필수)
 ```bash
 cd lambda
 
@@ -184,7 +200,7 @@ cat lambda_deployment_info.json
 - get_market_data: 주요 거시경제 지표 조회 (달러지수, 국채수익률, VIX, 원유)
 - Portfolio Architect Layer 재사용 (yfinance)
 
-### 2. Gateway 배포 (필수)
+### 3. Gateway 배포 (필수)
 ```bash
 cd gateway
 
@@ -201,7 +217,7 @@ cat gateway_deployment_info.json
 - Lambda 함수를 AI 도구로 변환
 - 실시간 뉴스 및 시장 데이터 API 제공
 
-### 3. Runtime 배포
+### 4. Runtime 배포
 ```bash
 # Gateway 정보 자동 로드하여 Runtime 배포
 python deploy.py
@@ -215,7 +231,7 @@ cat deployment_info.json
 - MCP 클라이언트 통합
 - 환경변수 자동 설정 (Gateway 연동 정보)
 
-### 4. Streamlit 앱 실행
+### 5. Streamlit 앱 실행
 ```bash
 # 의존성 설치
 pip install streamlit boto3 plotly pandas
@@ -224,7 +240,7 @@ pip install streamlit boto3 plotly pandas
 streamlit run app.py
 ```
 
-### 5. 통합 테스트
+### 6. 통합 테스트
 - Portfolio Architect에서 포트폴리오 설계 수행
 - 설계 결과를 Risk Manager에 입력
 - 실시간 뉴스 및 시장 데이터 수집 과정 확인
@@ -383,6 +399,10 @@ aws cloudwatch get-metric-statistics \
 
 ```
 risk_manager/
+├── lambda_layer/             # Lambda Layer 구성요소 (yfinance 등)
+│   ├── deploy_lambda_layer.py # Layer 배포 스크립트 (Portfolio Architect 재사용 우선)
+│   ├── yfinance.zip         # yfinance, pandas, numpy 라이브러리 패키지
+│   └── layer_deployment_info.json    # Layer 배포 정보
 ├── lambda/                   # Lambda 함수 구성요소 (뉴스 및 시장 데이터 조회)
 │   ├── deploy_lambda.py     # Lambda 배포 스크립트
 │   ├── lambda_function.py   # 뉴스 및 시장 데이터 조회 함수

@@ -156,8 +156,8 @@ flowchart TD
 
 #### Lambda Layer
 - **의존성**: yfinance 라이브러리 (뉴스 및 시장 데이터 조회)
-- **재사용**: Portfolio Architect와 동일한 Layer 공유
-- **버전 관리**: 의존성 버전 통합 관리
+- **독립성**: Risk Manager 전용 독립적인 Layer
+- **버전 관리**: 자체적인 의존성 버전 관리
 
 ## 🚀 배포 및 실행
 
@@ -166,13 +166,18 @@ flowchart TD
 - Docker 설치 (Gateway 및 Runtime 빌드용)
 - Python 3.9+ 환경
 - Bedrock 모델 접근 권한
-- Portfolio Architect Layer 선행 배포 (yfinance 공유)
+- yfinance.zip 파일 준비 (독립적인 Layer 배포)
 
 ### 1. Lambda Layer 배포 (필수 선행)
 ```bash
 cd lambda_layer
 
-# yfinance 등 데이터 분석 라이브러리 Layer 생성 (Portfolio Architect Layer 재사용 우선)
+# yfinance.zip 파일이 없는 경우 생성
+mkdir python
+pip install yfinance pandas numpy -t python/
+zip -r yfinance.zip python/
+
+# yfinance 등 데이터 분석 라이브러리 Layer 생성 (독립적인 Layer)
 python deploy_lambda_layer.py
 
 # Layer 정보 확인
@@ -182,7 +187,7 @@ cat layer_deployment_info.json
 **Layer 구성요소:**
 - yfinance: 실시간 뉴스 및 시장 데이터 조회
 - pandas, numpy: 데이터 분석 및 처리
-- Portfolio Architect Layer 재사용 우선 (비용 최적화)
+- 독립적인 Risk Manager 전용 Layer
 
 ### 2. Lambda 함수 배포 (필수)
 ```bash
@@ -198,7 +203,7 @@ cat lambda_deployment_info.json
 **Lambda 구성요소:**
 - get_product_news: ETF별 최신 뉴스 조회 (상위 5개)
 - get_market_data: 주요 거시경제 지표 조회 (달러지수, 국채수익률, VIX, 원유)
-- Portfolio Architect Layer 재사용 (yfinance)
+- 독립적인 yfinance Layer 사용
 
 ### 3. Gateway 배포 (필수)
 ```bash
@@ -380,7 +385,7 @@ aws cloudwatch get-metric-statistics \
 ### 문제 해결 가이드
 
 #### 배포 관련 문제
-- **Lambda 배포 실패**: Portfolio Architect Layer 선행 배포 여부 확인
+- **Lambda 배포 실패**: yfinance.zip 파일 존재 여부, Layer 선행 배포 확인
 - **Gateway 배포 실패**: Lambda 선행 배포 여부, Cognito 권한 확인
 - **Runtime 배포 실패**: Gateway 선행 배포 여부, 환경변수 설정 확인
 

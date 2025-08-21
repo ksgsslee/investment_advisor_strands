@@ -2,7 +2,6 @@
 deploy_layer.py
 Risk Manager Lambda Layer 배포 스크립트
 
-Portfolio Architect와 동일한 yfinance Layer를 재사용합니다.
 뉴스 및 시장 데이터 조회를 위한 외부 라이브러리를 포함한 Lambda Layer를 배포합니다.
 
 주요 기능:

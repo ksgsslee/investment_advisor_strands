@@ -3,7 +3,6 @@ utils.py
 Gateway 배포 전용 유틸리티 함수들
 
 이 모듈은 AgentCore Gateway 배포에 필요한 AWS 리소스 생성 및 관리 함수들을 제공합니다.
-Portfolio Architect와 동일한 구조로 구성되어 일관성을 보장합니다.
 
 주요 기능:
 - IAM 역할 생성 및 관리

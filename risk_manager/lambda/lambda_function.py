@@ -16,26 +16,6 @@ import yfinance as yf
 from datetime import datetime, timedelta
 
 # ================================
-# 유틸리티 함수들
-# ================================
-
-def get_named_parameter(event, name):
-    """
-    Lambda 이벤트에서 특정 파라미터 값 추출
-    
-    Args:
-        event (dict): Lambda 이벤트 객체
-        name (str): 추출할 파라미터 이름
-        
-    Returns:
-        str: 파라미터 값 또는 None
-    """
-    for param in event.get('parameters', []):
-        if param['name'] == name:
-            return param['value']
-    return None
-
-# ================================
 # 비즈니스 로직 함수들
 # ================================
 

@@ -1,11 +1,11 @@
 """
-deploy_layer.py
+deploy_lambda_layer.py
 Risk Manager Lambda Layer 배포 스크립트
 
 뉴스 및 시장 데이터 조회를 위한 외부 라이브러리를 포함한 Lambda Layer를 배포합니다.
 
 주요 기능:
-- yfinance, pandas, numpy 등 데이터 분석 라이브러리 포함
+- yfinance 라이브러리 포함
 - S3 기반 대용량 파일 배포 시스템
 - Portfolio Architect Layer와 동일한 구성으로 재사용성 극대화
 """

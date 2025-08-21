@@ -17,6 +17,15 @@ utils_path = str(Path(__file__).parent.parent.parent)
 sys.path.append(utils_path)
 from utils import create_agentcore_role
 
+# MCP utils 모듈 import
+from utils import (
+    get_or_create_user_pool,
+    get_or_create_m2m_client,
+    get_token
+)
+
+import boto3
+
 # ================================
 # 설정 상수
 # ================================
@@ -34,40 +43,110 @@ class Config:
 
 def deploy_mcp_server():
     """
-    MCP Server 배포
-    
-    ETF 데이터 조회 도구를 제공하는 MCP Server를 AgentCore Runtime에 배포합니다.
+    MCP Server 배포 메인 프로세스
     
     Returns:
-        dict: MCP Server 배포 정보 (agent_arn, bearer_token 등)
+        dict: 배포 결과 정보
     """
     print("🚀 MCP Server 배포 시작...")
     
-    # 1. Cognito 인증 설정
+    # 1. IAM 역할 생성
+    iam_role = create_agentcore_role(Config.MCP_SERVER_NAME, Config.REGION)
+    role_arn = iam_role['Role']['Arn']
+    time.sleep(10)
+    
+    # 2. Cognito 인증 설정
+    auth_components = _setup_cognito_authentication()
+    
+    # 3. MCP Server Runtime 생성
+    runtime_result = _create_mcp_runtime(role_arn, auth_components)
+    
+    # 4. 배포 결과 구성
+    result = {
+        'agent_arn': runtime_result['agent_arn'],
+        'agent_id': runtime_result['agent_id'],
+        'bearer_token': auth_components['bearer_token'],
+        'region': Config.REGION,
+        'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    print("✅ MCP Server 배포 완료!")
+    return result
+
+def _setup_cognito_authentication():
+    """
+    Cognito M2M 인증 구성 요소 설정 (risk_manager 패턴 - 스코프 없는 M2M)
+    
+    Returns:
+        dict: 인증 구성 요소
+    """
     print("🔐 Cognito 인증 설정 중...")
-    cognito_config = setup_cognito_user_pool()
-    print("✅ Cognito 설정 완료")
+    cognito = boto3.client('cognito-idp', region_name=Config.REGION)
     
-    # 2. IAM 역할 생성
-    print("🔐 IAM 역할 생성 중...")
-    agentcore_iam_role = create_agentcore_role(agent_name=Config.MCP_SERVER_NAME)
-    print("✅ IAM 역할 생성 완료")
+    # 사용자 풀 생성/조회
+    user_pool_id = get_or_create_user_pool(
+        cognito, 
+        f"{Config.MCP_SERVER_NAME}-pool", 
+        Config.REGION
+    )
     
-    # 3. Runtime 구성
+    # M2M 클라이언트 생성/조회
+    client_id, client_secret = get_or_create_m2m_client(
+        cognito,
+        user_pool_id,
+        f"{Config.MCP_SERVER_NAME}-client"
+    )
+    
+    # OAuth2 토큰 획득 (스코프 없는 M2M)
+    token_response = get_token(
+        user_pool_id, 
+        client_id, 
+        client_secret, 
+        Config.REGION
+    )
+    
+    if "error" in token_response:
+        raise Exception(f"토큰 획득 실패: {token_response['error']}")
+    
+    bearer_token = token_response["access_token"]
+    
+    # Discovery URL 구성
+    discovery_url = f'https://cognito-idp.{Config.REGION}.amazonaws.com/{user_pool_id}/.well-known/openid-configuration'
+    
+    return {
+        'user_pool_id': user_pool_id,
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'discovery_url': discovery_url,
+        'bearer_token': bearer_token
+    }
+
+def _create_mcp_runtime(role_arn, auth_components):
+    """
+    MCP Server Runtime 생성
+    
+    Args:
+        role_arn (str): Runtime 실행용 IAM 역할 ARN
+        auth_components (dict): Cognito 인증 구성 요소
+        
+    Returns:
+        dict: 생성된 Runtime 정보
+    """
     print("🔧 MCP Server Runtime 구성 중...")
     current_dir = Path(__file__).parent
     
-    agentcore_runtime = Runtime()
+    # JWT 인증 설정
     auth_config = {
         "customJWTAuthorizer": {
-            "allowedClients": [cognito_config['client_id']],
-            "discoveryUrl": cognito_config['discovery_url'],
+            "allowedClients": [auth_components['client_id']],
+            "discoveryUrl": auth_components['discovery_url'],
         }
     }
     
+    agentcore_runtime = Runtime()
     agentcore_runtime.configure(
         entrypoint=str(current_dir / "server.py"),
-        execution_role=agentcore_iam_role['Role']['Arn'],
+        execution_role=role_arn,
         auto_create_ecr=True,
         requirements_file=str(current_dir / "requirements.txt"),
         region=Config.REGION,
@@ -77,12 +156,12 @@ def deploy_mcp_server():
     )
     print("✅ MCP Server Runtime 구성 완료")
     
-    # 4. 배포 실행
+    # 배포 실행
     print("🚀 MCP Server 배포 중...")
     launch_result = agentcore_runtime.launch()
     print("✅ MCP Server 배포 시작 완료")
     
-    # 5. 배포 상태 대기
+    # 배포 상태 대기
     print("⏳ MCP Server 배포 상태 모니터링 중...")
     end_statuses = ['READY', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED']
     max_checks = (Config.MAX_DEPLOY_MINUTES * 60) // Config.STATUS_CHECK_INTERVAL
@@ -105,49 +184,33 @@ def deploy_mcp_server():
     if status != 'READY':
         raise Exception(f"MCP Server 배포 실패: {status}")
     
-    print("✅ MCP Server 배포 완료!")
-    
-    # 6. 배포 정보를 AWS에 저장
-    print("📄 MCP Server 정보 AWS에 저장 중...")
-    
+    print(f"✅ MCP Server Runtime 생성 완료: {launch_result.agent_id}")
     return {
-        "agent_arn": launch_result.agent_arn,
-        "agent_id": launch_result.agent_id,
-        "bearer_token": cognito_config['bearer_token'],
-        "region": Config.REGION
+        'agent_arn': launch_result.agent_arn,
+        'agent_id': launch_result.agent_id
     }
 
 # ================================
-# 배포 정보 저장
+# 배포 정보 관리
 # ================================
 
-def save_deployment_info(mcp_server_info):
+def save_deployment_info(result):
     """
-    MCP Server 배포 정보 저장
+    MCP Server 배포 정보를 JSON 파일로 저장
     
     Args:
-        mcp_server_info (dict): MCP Server 배포 정보
+        result (dict): 배포 결과 정보
         
     Returns:
         str: 저장된 JSON 파일 경로
     """
-    print("📄 MCP Server 배포 정보 저장 중...")
-    
     current_dir = Path(__file__).parent
-    deployment_info = {
-        "agent_name": Config.MCP_SERVER_NAME,
-        "agent_arn": mcp_server_info["agent_arn"],
-        "agent_id": mcp_server_info["agent_id"],
-        "bearer_token": mcp_server_info["bearer_token"],
-        "region": mcp_server_info["region"],
-        "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-    
     info_file = current_dir / "mcp_deployment_info.json"
-    with open(info_file, 'w') as f:
-        json.dump(deployment_info, f, indent=2)
     
-    print(f"✅ MCP Server 배포 정보 저장: {info_file}")
+    with open(info_file, 'w') as f:
+        json.dump(result, f, indent=2)
+    
+    print(f"📄 배포 정보 저장: {info_file}")
     return str(info_file)
 
 # ================================
@@ -156,29 +219,26 @@ def save_deployment_info(mcp_server_info):
 
 def main():
     """
-    메인 배포 함수
+    메인 실행 함수
     
-    MCP Server를 AWS에 배포합니다.
-    
-    Returns:
-        int: 성공 시 0, 실패 시 1
+    ETF Data MCP Server의 전체 배포 프로세스를 관리합니다.
     """
     try:
         print("=" * 60)
-        print("🚀 ETF Data MCP Server 배포")
-        print(f"🌍 리전: {Config.REGION}")
+        print("🚀 ETF Data MCP Server 배포 시작")
         print(f"📍 서버명: {Config.MCP_SERVER_NAME}")
+        print(f"🌍 리전: {Config.REGION}")
         print("=" * 60)
         
-        # MCP Server 배포
-        mcp_server_info = deploy_mcp_server()
+        # MCP Server 배포 실행
+        result = deploy_mcp_server()
         
         # 배포 정보 저장
-        info_file = save_deployment_info(mcp_server_info)
+        info_file = save_deployment_info(result)
         
-        print("\n" + "=" * 60)
-        print("🎉 MCP Server 배포 완료!")
-        print(f"🔗 MCP Server ARN: {mcp_server_info['agent_arn']}")
+        print("=" * 60)
+        print("🎉 MCP Server 배포 성공!")
+        print(f"🔗 Agent ARN: {result['agent_arn']}")
         print(f"📄 배포 정보: {info_file}")
         print("=" * 60)
         
@@ -186,17 +246,13 @@ def main():
         print("1. MCP Server 테스트: python test_remote.py")
         print("2. Portfolio Architect 배포: cd .. && python deploy.py")
         
-        return 0
+        return result
         
     except Exception as e:
         print("=" * 60)
         print(f"❌ MCP Server 배포 실패: {str(e)}")
-        print("💡 문제 해결 방법:")
-        print("1. AWS 권한 확인")
-        print("2. 필수 파일 존재 확인")
-        print("3. 로그 확인 후 재시도")
         print("=" * 60)
-        return 1
+        raise
 
 if __name__ == "__main__":
     sys.exit(main())

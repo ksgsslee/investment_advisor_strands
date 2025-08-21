@@ -37,7 +37,7 @@ class Config:
 
 def load_mcp_server_info():
     """
-    MCP Server 배포 정보를 AWS에서 로드
+    MCP Server 배포 정보 로드 (로컬 JSON 우선)
     
     Returns:
         dict: MCP Server 설정 정보 (agent_arn, bearer_token 등)
@@ -45,37 +45,40 @@ def load_mcp_server_info():
     Raises:
         Exception: 배포 정보 로드 실패 시
     """
+    region = os.getenv("AWS_REGION", "us-west-2")
+    
     try:
-        region = os.getenv("AWS_REGION", "us-west-2")
+        # 로컬 배포 정보에서 먼저 로드 시도
+        print("📋 로컬 MCP Server 정보 로드 중...")
+        current_dir = Path(__file__).parent
+        info_file = current_dir / "mcp" / "mcp_deployment_info.json"
         
-        # Parameter Store에서 Agent ARN 조회
-        ssm_client = boto3.client('ssm', region_name=region)
-        agent_arn_response = ssm_client.get_parameter(Name='/mcp_server/runtime/agent_arn')
-        agent_arn = agent_arn_response['Parameter']['Value']
-        
-        # Secrets Manager에서 인증 정보 조회
-        secrets_client = boto3.client('secretsmanager', region_name=region)
-        response = secrets_client.get_secret_value(SecretId='mcp_server/cognito/credentials')
-        secret_value = response['SecretString']
-        parsed_secret = json.loads(secret_value)
-        bearer_token = parsed_secret['bearer_token']
-        
-        # MCP URL 구성
-        encoded_arn = agent_arn.replace(':', '%3A').replace('/', '%2F')
-        mcp_url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
-        
-        print(f"📋 MCP Server 정보 로드 완료")
-        print(f"🔗 Agent ARN: {agent_arn}")
-        print(f"🌐 MCP URL: {mcp_url}")
-        
-        return {
-            "agent_arn": agent_arn,
-            "bearer_token": bearer_token,
-            "mcp_url": mcp_url,
-            "region": region
-        }
-        
+        if info_file.exists():
+            with open(info_file, 'r') as f:
+                local_info = json.load(f)
+            
+            agent_arn = local_info['agent_arn']
+            bearer_token = local_info['bearer_token']
+            
+            # MCP URL 구성
+            encoded_arn = agent_arn.replace(':', '%3A').replace('/', '%2F')
+            mcp_url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
+            
+            print(f"✅ 로컬 MCP Server 정보 로드 완료")
+            print(f"🔗 Agent ARN: {agent_arn}")
+            print(f"🌐 MCP URL: {mcp_url}")
+            
+            return {
+                "agent_arn": agent_arn,
+                "bearer_token": bearer_token,
+                "mcp_url": mcp_url,
+                "region": region
+            }
+        else:
+            raise FileNotFoundError("로컬 MCP Server 배포 정보 파일 없음")
+            
     except Exception as e:
+        print(f"❌ 로컬 정보 로드 실패: {str(e)}")
         raise Exception(f"MCP Server 정보 로드 실패: {str(e)}")
 
 def create_streamable_http_transport(mcp_url: str, bearer_token: str):

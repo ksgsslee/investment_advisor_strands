@@ -39,6 +39,37 @@ class Config:
 # MCP Server 배포 함수들
 # ================================
 
+def load_mcp_server_info():
+    """
+    MCP Server 배포 정보 로드
+    
+    Portfolio Architect 배포에 필요한 MCP Server 정보를 JSON 파일에서 로드합니다.
+    MCP Server가 먼저 배포되어 있어야 합니다.
+    
+    Returns:
+        dict: MCP Server 배포 정보 (agent_arn, bearer_token 등)
+        
+    Raises:
+        FileNotFoundError: MCP Server 배포 정보 파일이 없을 때
+    """
+    print("📋 MCP Server 배포 정보 로드 중...")
+    
+    current_dir = Path(__file__).parent
+    mcp_dir = current_dir / "mcp"
+    info_file = mcp_dir / "mcp_deployment_info.json"
+    
+    if not info_file.exists():
+        raise FileNotFoundError(
+            f"MCP Server 배포 정보를 찾을 수 없습니다: {info_file}\n"
+            "먼저 'python mcp/deploy.py'를 실행하세요."
+        )
+    
+    with open(info_file, 'r') as f:
+        mcp_server_info = json.load(f)
+    
+    print(f"✅ MCP Server ARN: {mcp_server_info['agent_arn']}")
+    return mcp_server_info
+
 def deploy_mcp_server():
     """
     MCP Server 배포 (mcp 폴더의 deploy.py 호출)
@@ -66,11 +97,7 @@ def deploy_mcp_server():
     print("✅ MCP Server 배포 완료!")
     
     # 배포 정보 로드
-    mcp_info_file = current_dir / "mcp" / "deployment_info.json"
-    with open(mcp_info_file, 'r') as f:
-        mcp_deployment_info = json.load(f)
-    
-    return mcp_deployment_info["mcp_server"]
+    return load_mcp_server_info()
 
 # ================================
 # Portfolio Architect Runtime 배포 함수들
@@ -166,8 +193,12 @@ def save_deployment_info(mcp_server_info, portfolio_architect_info):
     
     current_dir = Path(__file__).parent
     deployment_info = {
-        "mcp_server": mcp_server_info,
-        "portfolio_architect": portfolio_architect_info,
+        "agent_name": Config.AGENT_NAME,
+        "agent_arn": portfolio_architect_info["agent_arn"],
+        "agent_id": portfolio_architect_info["agent_id"],
+        "region": portfolio_architect_info["region"],
+        "mcp_server_arn": mcp_server_info["agent_arn"],
+        "mcp_server_id": mcp_server_info["agent_id"],
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
@@ -187,6 +218,7 @@ def main():
     메인 배포 함수
     
     MCP Server와 Portfolio Architect를 순차적으로 배포합니다.
+    MCP Server가 이미 배포되어 있으면 재사용하고, 없으면 새로 배포합니다.
     
     Returns:
         int: 성공 시 0, 실패 시 1
@@ -200,11 +232,18 @@ def main():
         print("   2. Portfolio Architect (AI 포트폴리오 설계사)")
         print("=" * 70)
         
-        # 1. MCP Server 배포
-        mcp_server_info = deploy_mcp_server()
+        # 1. MCP Server 정보 확인 및 배포
+        try:
+            # 기존 MCP Server 정보 로드 시도
+            mcp_server_info = load_mcp_server_info()
+            print("✅ 기존 MCP Server 정보 사용")
+        except FileNotFoundError:
+            # MCP Server가 없으면 새로 배포
+            print("📋 MCP Server 배포 정보가 없습니다. 새로 배포합니다.")
+            mcp_server_info = deploy_mcp_server()
         
         print("\n" + "=" * 50)
-        print("🎉 MCP Server 배포 성공!")
+        print("🎉 MCP Server 준비 완료!")
         print(f"🔗 MCP Server ARN: {mcp_server_info['agent_arn']}")
         print("=" * 50)
         
@@ -237,7 +276,8 @@ def main():
         print("💡 문제 해결 방법:")
         print("1. AWS 권한 확인")
         print("2. 필수 파일 존재 확인")
-        print("3. 로그 확인 후 재시도")
+        print("3. MCP Server 먼저 배포: cd mcp && python deploy.py")
+        print("4. 로그 확인 후 재시도")
         print("=" * 70)
         return 1
 

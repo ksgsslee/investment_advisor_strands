@@ -32,8 +32,8 @@ CURRENT_DIR = Path(__file__).parent.resolve()
 try:
     with open(CURRENT_DIR / "deployment_info.json", "r") as f:
         deployment_info = json.load(f)
-    AGENT_ARN = deployment_info["portfolio_architect"]["agent_arn"]
-    REGION = deployment_info["portfolio_architect"]["region"]
+    AGENT_ARN = deployment_info["agent_arn"]
+    REGION = deployment_info["region"]
 except Exception as e:
     st.error("배포 정보를 찾을 수 없습니다. deploy.py를 먼저 실행해주세요.")
     st.stop()

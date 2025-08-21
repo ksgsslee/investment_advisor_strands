@@ -9,14 +9,13 @@ import sys
 import os
 import time
 import json
-import boto3
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
 # 공통 utils 모듈 import
 utils_path = str(Path(__file__).parent.parent.parent)
 sys.path.append(utils_path)
-from utils import create_agentcore_role, setup_cognito_user_pool
+from utils import create_agentcore_role
 
 # ================================
 # 설정 상수
@@ -111,32 +110,6 @@ def deploy_mcp_server():
     # 6. 배포 정보를 AWS에 저장
     print("📄 MCP Server 정보 AWS에 저장 중...")
     
-    # Parameter Store에 Agent ARN 저장
-    ssm_client = boto3.client('ssm', region_name=Config.REGION)
-    ssm_client.put_parameter(
-        Name='/mcp_server/runtime/agent_arn',
-        Value=launch_result.agent_arn,
-        Type='String',
-        Description='MCP Server Agent ARN for Portfolio Architect',
-        Overwrite=True
-    )
-    
-    # Secrets Manager에 Cognito 인증 정보 저장
-    secrets_client = boto3.client('secretsmanager', region_name=Config.REGION)
-    try:
-        secrets_client.create_secret(
-            Name='mcp_server/cognito/credentials',
-            Description='Cognito credentials for MCP server',
-            SecretString=json.dumps(cognito_config)
-        )
-    except secrets_client.exceptions.ResourceExistsException:
-        secrets_client.update_secret(
-            SecretId='mcp_server/cognito/credentials',
-            SecretString=json.dumps(cognito_config)
-        )
-    
-    print("✅ MCP Server 정보 AWS 저장 완료")
-    
     return {
         "agent_arn": launch_result.agent_arn,
         "agent_id": launch_result.agent_id,
@@ -162,11 +135,15 @@ def save_deployment_info(mcp_server_info):
     
     current_dir = Path(__file__).parent
     deployment_info = {
-        "mcp_server": mcp_server_info,
+        "agent_name": Config.MCP_SERVER_NAME,
+        "agent_arn": mcp_server_info["agent_arn"],
+        "agent_id": mcp_server_info["agent_id"],
+        "bearer_token": mcp_server_info["bearer_token"],
+        "region": mcp_server_info["region"],
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
-    info_file = current_dir / "deployment_info.json"
+    info_file = current_dir / "mcp_deployment_info.json"
     with open(info_file, 'w') as f:
         json.dump(deployment_info, f, indent=2)
     

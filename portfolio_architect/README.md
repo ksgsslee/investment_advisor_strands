@@ -21,7 +21,7 @@ portfolio_architect/
 │   ├── deploy.py               # MCP Server 배포 스크립트
 │   ├── test_local.py           # 로컬 MCP Server 테스트
 │   ├── test_remote.py          # 원격 MCP Server 테스트
-│   └── deployment_info.json    # MCP Server 배포 정보 (자동 생성)
+│   └── mcp_deployment_info.json # MCP Server 배포 정보 (자동 생성)
 ├── portfolio_architect.py       # Portfolio Architect Agent
 ├── deploy.py                    # 전체 시스템 배포 스크립트
 ├── app.py                      # Streamlit 웹 애플리케이션
@@ -46,11 +46,13 @@ python deploy.py
    - IAM 역할 생성
    - MCP Server Runtime 배포
    - AWS Parameter Store/Secrets Manager에 정보 저장
+   - `mcp_deployment_info.json` 파일 생성
 
 2. **Portfolio Architect 배포**
+   - MCP Server 배포 정보 로드 (`mcp_deployment_info.json` 참조)
    - IAM 역할 생성
    - Portfolio Architect Runtime 배포
-   - MCP Server 연동 설정
+   - 전체 시스템 배포 정보 저장 (`deployment_info.json`)
 
 ### 2. MCP Server만 별도 배포 (선택사항)
 ```bash

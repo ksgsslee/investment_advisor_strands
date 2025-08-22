@@ -12,13 +12,22 @@ import json
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
-# MCP utils 모듈 import
-from utils import (
-    create_agentcore_role,
+import sys
+from pathlib import Path
+
+# shared 모듈 경로 추가
+shared_path = Path(__file__).parent.parent.parent / "shared"
+sys.path.insert(0, str(shared_path))
+
+# 공통 유틸리티 import
+from cognito_utils import (
     get_or_create_user_pool,
     get_or_create_resource_server,
     get_or_create_m2m_client,
     get_token
+)
+from runtime_utils import (
+    create_agentcore_runtime_role
 )
 
 
@@ -47,7 +56,7 @@ def deploy_mcp_server():
     print("🚀 MCP Server 배포 시작...")
     
     # 1. IAM 역할 생성
-    iam_role = create_agentcore_role(Config.MCP_SERVER_NAME, Config.REGION)
+    iam_role = create_agentcore_runtime_role(Config.MCP_SERVER_NAME, Config.REGION)
     role_arn = iam_role['Role']['Arn']
     time.sleep(10)
     
@@ -107,7 +116,8 @@ def _setup_cognito_authentication():
         cognito,
         user_pool_id,
         f"{Config.MCP_SERVER_NAME}-client",
-        resource_server_id
+        resource_server_id,
+        ["runtime:read", "runtime:write"]
     )
     
     # OAuth2 토큰 획득 (Client Credentials Grant)

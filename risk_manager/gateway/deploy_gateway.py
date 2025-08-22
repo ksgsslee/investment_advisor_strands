@@ -19,11 +19,25 @@ import json
 from pathlib import Path
 import copy
 from target_config import TARGET_CONFIGURATION
-from utils import (
-    create_agentcore_gateway_role,
-    get_or_create_resource_server,
+import sys
+from pathlib import Path
+
+# shared 모듈 경로 추가
+shared_path = Path(__file__).parent.parent.parent / "shared"
+sys.path.insert(0, str(shared_path))
+
+# 공통 유틸리티 import
+from cognito_utils import (
     get_or_create_user_pool,
-    get_or_create_m2m_client
+    get_or_create_resource_server,
+    get_or_create_m2m_client,
+    get_token
+)
+from gateway_utils import (
+    create_agentcore_gateway_role,
+    delete_existing_gateway,
+    create_gateway,
+    create_gateway_target
 )
 
 # ================================
@@ -200,7 +214,8 @@ def _setup_cognito_authentication():
         cognito,
         user_pool_id,
         f"{Config.GATEWAY_NAME}-client",
-        resource_server_id
+        resource_server_id,
+        ["gateway:read", "gateway:write"]
     )
     
     return {
@@ -220,28 +235,11 @@ def _create_gateway(role_arn, auth_components):
     Returns:
         dict: 생성된 Gateway 정보
     """
-    print("🌉 Gateway 생성 중...")
-    gateway_client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
+    # Discovery URL 구성
+    discovery_url = f'https://cognito-idp.{Config.REGION}.amazonaws.com/{auth_components["user_pool_id"]}/.well-known/openid-configuration'
+    auth_components['discovery_url'] = discovery_url
     
-    # JWT 인증 설정
-    auth_config = {
-        'customJWTAuthorizer': {
-            'allowedClients': [auth_components['client_id']],
-            'discoveryUrl': f'https://cognito-idp.{Config.REGION}.amazonaws.com/{auth_components["user_pool_id"]}/.well-known/openid-configuration'
-        }
-    }
-    
-    gateway = gateway_client.create_gateway(
-        name=Config.GATEWAY_NAME,
-        roleArn=role_arn,
-        protocolType='MCP',
-        authorizerType='CUSTOM_JWT',
-        authorizerConfiguration=auth_config,
-        description='Risk Manager Gateway - News and market data analysis for portfolio risk management'
-    )
-    
-    print(f"✅ Gateway 생성 완료: {gateway['gatewayId']}")
-    return gateway
+    return create_gateway(Config.GATEWAY_NAME, role_arn, auth_components, Config.REGION)
 
 def _create_gateway_target(gateway_id, lambda_arn):
     """
@@ -254,28 +252,11 @@ def _create_gateway_target(gateway_id, lambda_arn):
     Returns:
         dict: 생성된 Target 정보
     """
-    print("🎯 Gateway Target 생성 중...")
-    gateway_client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
-    
     # Target 설정 로드 및 Lambda ARN 주입
     target_config = copy.deepcopy(TARGET_CONFIGURATION)
     target_config['mcp']['lambda']['lambdaArn'] = lambda_arn
     
-    tool_count = len(target_config["mcp"]["lambda"]["toolSchema"]["inlinePayload"])
-    print(f"📋 Target 설정: {tool_count}개 도구 구성")
-    
-    # Gateway Target 생성
-    target = gateway_client.create_gateway_target(
-        gatewayIdentifier=gateway_id,
-        name=Config.TARGET_NAME,
-        targetConfiguration=target_config,
-        credentialProviderConfigurations=[{
-            'credentialProviderType': 'GATEWAY_IAM_ROLE'
-        }]
-    )
-    
-    print(f"✅ Gateway Target 생성 완료: {target['targetId']}")
-    return target
+    return create_gateway_target(gateway_id, Config.TARGET_NAME, target_config, Config.REGION)
 
 # ================================
 # 배포 정보 관리

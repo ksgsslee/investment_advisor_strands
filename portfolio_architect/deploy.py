@@ -18,10 +18,12 @@ import boto3
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
-# 공통 utils 모듈 import
-utils_path = str(Path(__file__).parent.parent)
-sys.path.append(utils_path)
-from utils import create_agentcore_role, setup_cognito_user_pool
+# shared 모듈 경로 추가
+shared_path = Path(__file__).parent.parent / "shared"
+sys.path.insert(0, str(shared_path))
+
+# 공통 유틸리티 import
+from runtime_utils import create_agentcore_runtime_role
 
 # ================================
 # 설정 상수
@@ -119,7 +121,7 @@ def deploy_portfolio_architect(mcp_server_info):
     
     # 1. IAM 역할 생성
     print("🔐 Portfolio Architect IAM 역할 생성 중...")
-    agentcore_iam_role = create_agentcore_role(agent_name=Config.AGENT_NAME)
+    agentcore_iam_role = create_agentcore_runtime_role(Config.AGENT_NAME, Config.REGION)
     print("✅ IAM 역할 생성 완료")
     
     # 2. Runtime 구성

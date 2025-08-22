@@ -19,10 +19,13 @@ import json
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
-# 공통 utils 모듈 import
-utils_path = str(Path(__file__).parent.parent)
-sys.path.append(utils_path)
-from utils import create_agentcore_role
+# shared 모듈 경로 추가
+shared_path = Path(__file__).parent.parent / "shared"
+sys.path.insert(0, str(shared_path))
+
+# 공통 유틸리티 import
+from runtime_utils import create_agentcore_runtime_role
+
 
 # ================================
 # 설정 상수
@@ -85,7 +88,7 @@ def create_iam_role():
     print("🔐 IAM 역할 생성 중...")
     
     # AgentCore Runtime용 IAM 역할 생성
-    role_info = create_agentcore_role(Config.AGENT_NAME, Config.REGION)
+    role_info = create_agentcore_runtime_role(Config.AGENT_NAME, Config.REGION)
     role_arn = role_info['Role']['Arn']
     
     print(f"✅ IAM 역할 준비 완료: {role_arn}")

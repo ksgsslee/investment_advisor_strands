@@ -85,18 +85,8 @@ def parse_tool_result(result_text):
         dict: 파싱된 데이터
     """
     try:
-        # MCP Server 응답은 직접 JSON 형태일 수 있음
-        if isinstance(result_text, str):
-            parsed_result = json.loads(result_text)
-        else:
-            parsed_result = result_text
-            
-        # Lambda 형식인 경우
-        if "response" in parsed_result and "payload" in parsed_result["response"]:
-            return parsed_result["response"]["payload"]["body"]
-        # 직접 데이터인 경우
-        else:
-            return parsed_result
+        parsed_result = json.loads(result_text)
+        return parsed_result
             
     except json.JSONDecodeError as e:
         print(f"JSON 파싱 에러: {e}")

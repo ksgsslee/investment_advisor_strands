@@ -4,7 +4,7 @@ MCP Server 배포 스크립트
 
 ETF 데이터 조회를 위한 MCP Server를 AWS Bedrock AgentCore Runtime에 배포합니다.
 """
-
+import boto3
 import sys
 import os
 import time
@@ -12,19 +12,14 @@ import json
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
-# 공통 utils 모듈 import
-utils_path = str(Path(__file__).parent.parent.parent)
-sys.path.append(utils_path)
-from utils import create_agentcore_role
-
 # MCP utils 모듈 import
 from utils import (
+    create_agentcore_role,
     get_or_create_user_pool,
     get_or_create_m2m_client,
     get_token
 )
 
-import boto3
 
 # ================================
 # 설정 상수
@@ -75,7 +70,7 @@ def deploy_mcp_server():
 
 def _setup_cognito_authentication():
     """
-    Cognito M2M 인증 구성 요소 설정 (risk_manager 패턴 - 스코프 없는 M2M)
+    Cognito M2M 인증 구성 요소 설정 (OAuth2 Client Credentials)
     
     Returns:
         dict: 인증 구성 요소
@@ -97,7 +92,7 @@ def _setup_cognito_authentication():
         f"{Config.MCP_SERVER_NAME}-client"
     )
     
-    # OAuth2 토큰 획득 (스코프 없는 M2M)
+    # OAuth2 토큰 획득 (Client Credentials Grant)
     token_response = get_token(
         user_pool_id, 
         client_id, 

@@ -139,12 +139,19 @@ def deploy_portfolio_architect(mcp_server_info):
     )
     print("✅ Portfolio Architect Runtime 구성 완료")
     
-    # 3. 배포 실행
+    # 3. MCP Server 정보를 환경변수로 설정
+    env_vars = {
+        "MCP_AGENT_ARN": mcp_server_info['agent_arn'],
+        "MCP_BEARER_TOKEN": mcp_server_info['bearer_token'],
+        "AWS_REGION": mcp_server_info['region']
+    }
+    
+    # 4. 배포 실행 (환경변수와 함께)
     print("🚀 Portfolio Architect 배포 중...")
-    launch_result = agentcore_runtime.launch(auto_update_on_conflict=True)
+    launch_result = agentcore_runtime.launch(auto_update_on_conflict=True, env_vars=env_vars)
     print("✅ Portfolio Architect 배포 시작 완료")
     
-    # 4. 배포 상태 대기
+    # 5. 배포 상태 대기
     print("⏳ Portfolio Architect 배포 상태 모니터링 중...")
     end_statuses = ['READY', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED']
     max_checks = (Config.MAX_DEPLOY_MINUTES * 60) // Config.STATUS_CHECK_INTERVAL

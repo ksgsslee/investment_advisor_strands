@@ -9,8 +9,6 @@ MCP Server와 연동하여 실시간 시장 데이터를 분석하고
 import json
 import os
 import sys
-import boto3
-import time
 from pathlib import Path
 from typing import Dict, Any
 from strands import Agent
@@ -18,6 +16,8 @@ from strands.models.bedrock import BedrockModel
 from strands.tools.mcp.mcp_client import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+import requests
+
 
 # ================================
 # 전역 설정
@@ -37,10 +37,10 @@ class Config:
 
 def load_mcp_server_info():
     """
-    MCP Server 배포 정보 로드 (로컬 JSON 우선)
+    MCP Server 배포 정보 로드
     
     Returns:
-        dict: MCP Server 설정 정보 (agent_arn, bearer_token 등)
+        dict: MCP Server 설정 정보 (agent_arn, bearer_token, cognito 정보 등)
         
     Raises:
         Exception: 배포 정보 로드 실패 시
@@ -48,38 +48,43 @@ def load_mcp_server_info():
     region = os.getenv("AWS_REGION", "us-west-2")
     
     try:
-        # 로컬 배포 정보에서 먼저 로드 시도
-        print("📋 로컬 MCP Server 정보 로드 중...")
+        # MCP Server 배포 정보 로드
+        print("📋 MCP Server 정보 로드 중...")
         current_dir = Path(__file__).parent
         info_file = current_dir / "mcp" / "mcp_deployment_info.json"
         
-        if info_file.exists():
-            with open(info_file, 'r') as f:
-                local_info = json.load(f)
-            
-            agent_arn = local_info['agent_arn']
-            bearer_token = local_info['bearer_token']
-            
-            # MCP URL 구성
-            encoded_arn = agent_arn.replace(':', '%3A').replace('/', '%2F')
-            mcp_url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
-            
-            print(f"✅ 로컬 MCP Server 정보 로드 완료")
-            print(f"🔗 Agent ARN: {agent_arn}")
-            print(f"🌐 MCP URL: {mcp_url}")
-            
-            return {
-                "agent_arn": agent_arn,
-                "bearer_token": bearer_token,
-                "mcp_url": mcp_url,
-                "region": region
-            }
-        else:
-            raise FileNotFoundError("로컬 MCP Server 배포 정보 파일 없음")
+        if not info_file.exists():
+            raise FileNotFoundError(
+                f"MCP Server 배포 정보 파일을 찾을 수 없습니다: {info_file}\n"
+                "먼저 'python mcp/deploy_mcp.py'를 실행하세요."
+            )
+        
+        with open(info_file, 'r') as f:
+            mcp_info = json.load(f)
+        
+        agent_arn = mcp_info['agent_arn']
+        bearer_token = mcp_info['bearer_token']
+        
+        # MCP URL 구성
+        encoded_arn = agent_arn.replace(':', '%3A').replace('/', '%2F')
+        mcp_url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
+        
+        print(f"✅ MCP Server 정보 로드 완료")
+        print(f"🔗 Agent ARN: {agent_arn}")
+        print(f"🌐 MCP URL: {mcp_url}")
+        
+        return {
+            "agent_arn": agent_arn,
+            "bearer_token": bearer_token,
+            "mcp_url": mcp_url,
+            "region": region
+        }
             
     except Exception as e:
-        print(f"❌ 로컬 정보 로드 실패: {str(e)}")
+        print(f"❌ MCP Server 정보 로드 실패: {str(e)}")
         raise Exception(f"MCP Server 정보 로드 실패: {str(e)}")
+
+
 
 def create_streamable_http_transport(mcp_url: str, bearer_token: str):
     """
@@ -115,19 +120,29 @@ class PortfolioArchitect:
         포트폴리오 설계사 초기화
         
         Args:
-            mcp_server_info (dict, optional): MCP Server 정보. None이면 AWS에서 자동 로드
+            mcp_server_info (dict, optional): MCP Server 정보. None이면 파일에서 자동 로드
         """
         # MCP Server 정보 설정
         self.mcp_server_info = mcp_server_info or load_mcp_server_info()
+        self._setup_mcp_connection()
         self._initialize_mcp_client()
         self._create_architect_agent()
+    
+    def _setup_mcp_connection(self):
+        """MCP 연결 정보 설정"""
+        self.agent_arn = self.mcp_server_info['agent_arn']
+        self.bearer_token = self.mcp_server_info['bearer_token']
+        self.mcp_url = self.mcp_server_info['mcp_url']
+        
+        print(f"🔐 MCP 인증 설정 완료")
+        print(f"🌐 MCP Server URL: {self.mcp_url}")
     
     def _initialize_mcp_client(self):
         """MCP 클라이언트 초기화"""
         self.mcp_client = MCPClient(
             lambda: create_streamable_http_transport(
-                self.mcp_server_info["mcp_url"], 
-                self.mcp_server_info["bearer_token"]
+                self.mcp_url, 
+                self.bearer_token
             )
         )
     
@@ -285,7 +300,7 @@ async def portfolio_architect(payload):
     AgentCore Runtime 엔트리포인트
     
     AWS AgentCore Runtime 환경에서 호출되는 메인 함수입니다.
-    AWS에서 MCP Server 정보를 로드하여 포트폴리오 설계를 수행합니다.
+    환경변수 또는 로컬 파일에서 MCP Server 정보를 로드하여 포트폴리오 설계를 수행합니다.
     
     Args:
         payload (dict): 요청 페이로드
@@ -293,13 +308,38 @@ async def portfolio_architect(payload):
     
     Yields:
         dict: 스트리밍 응답 이벤트들
+        
+    Environment Variables:
+        - MCP_AGENT_ARN: MCP Server Agent ARN
+        - MCP_BEARER_TOKEN: MCP Server Bearer Token
+        - AWS_REGION: AWS 리전 (기본값: us-west-2)
     """
     global architect
     
     # Runtime 환경에서 지연 초기화
     if architect is None:
-        # PortfolioArchitect 인스턴스 생성 (AWS에서 MCP Server 정보 자동 로드)
-        architect = PortfolioArchitect()
+        # 환경변수에서 MCP Server 정보 확인
+        mcp_agent_arn = os.getenv("MCP_AGENT_ARN")
+        mcp_bearer_token = os.getenv("MCP_BEARER_TOKEN")
+        
+        if mcp_agent_arn and mcp_bearer_token:
+            # 환경변수에서 MCP Server 정보 구성
+            region = os.getenv("AWS_REGION", "us-west-2")
+            encoded_arn = mcp_agent_arn.replace(':', '%3A').replace('/', '%2F')
+            mcp_url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
+            
+            mcp_server_info = {
+                "agent_arn": mcp_agent_arn,
+                "bearer_token": mcp_bearer_token,
+                "mcp_url": mcp_url,
+                "region": region
+            }
+            
+            # PortfolioArchitect 인스턴스 생성 (환경변수 사용)
+            architect = PortfolioArchitect(mcp_server_info)
+        else:
+            # PortfolioArchitect 인스턴스 생성 (로컬 파일에서 MCP Server 정보 자동 로드)
+            architect = PortfolioArchitect()
 
     # 재무 분석 결과 추출 및 포트폴리오 설계 실행
     financial_analysis = payload.get("financial_analysis")

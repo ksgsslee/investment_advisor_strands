@@ -71,6 +71,9 @@ def deploy_mcp_server():
         'agent_arn': runtime_result['agent_arn'],
         'agent_id': runtime_result['agent_id'],
         'bearer_token': auth_components['bearer_token'],
+        'user_pool_id': auth_components['user_pool_id'],
+        'client_id': auth_components['client_id'],
+        'client_secret': auth_components['client_secret'],
         'region': Config.REGION,
         'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")
     }

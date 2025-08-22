@@ -3,6 +3,9 @@ strands-agents
 strands-agents-tools
 bedrock-agentcore-starter-toolkit
 
+# MCP (Model Context Protocol)
+mcp
+
 # Data & Finance
 yfinance
 pandas

@@ -81,10 +81,10 @@ def deploy_mcp_server():
     """
     print("🚀 MCP Server 배포 시작...")
     
-    # mcp 폴더의 deploy.py 실행
+    # mcp 폴더의 deploy_mcp.py 실행
     import subprocess
     current_dir = Path(__file__).parent
-    mcp_deploy_script = current_dir / "mcp" / "deploy.py"
+    mcp_deploy_script = current_dir / "mcp" / "deploy_mcp.py"
     
     result = subprocess.run([
         sys.executable, str(mcp_deploy_script)
@@ -278,7 +278,7 @@ def main():
         print("💡 문제 해결 방법:")
         print("1. AWS 권한 확인")
         print("2. 필수 파일 존재 확인")
-        print("3. MCP Server 먼저 배포: cd mcp && python deploy.py")
+        print("3. MCP Server 먼저 배포: cd mcp && python deploy_mcp.py")
         print("4. 로그 확인 후 재시도")
         print("=" * 70)
         return 1

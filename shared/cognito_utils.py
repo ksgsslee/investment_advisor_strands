@@ -162,8 +162,9 @@ def get_token(user_pool_id, client_id, client_secret, scope_string, region):
         dict: 토큰 정보 또는 오류 메시지
     """
     try:
-        user_pool_id_without_underscore = user_pool_id.replace("_", "")
-        url = f"https://{user_pool_id_without_underscore}.auth.{region}.amazoncognito.com/oauth2/token"
+        # User Pool ID에서 도메인 생성 (get_or_create_user_pool과 동일한 방식)
+        domain_prefix = user_pool_id.replace("_", "").lower()
+        url = f"https://{domain_prefix}.auth.{region}.amazoncognito.com/oauth2/token"
         
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = {

@@ -1,5 +1,5 @@
 """
-deploy.py
+deploy_mcp.py
 MCP Server 배포 스크립트
 
 ETF 데이터 조회를 위한 MCP Server를 AWS Bedrock AgentCore Runtime에 배포합니다.
@@ -37,7 +37,7 @@ from runtime_utils import (
 
 class Config:
     """MCP Server 배포 설정 상수"""
-    MCP_SERVER_NAME = "runtime_mcp_server"
+    MCP_SERVER_NAME = "mcp_server"
     REGION = "us-west-2"
     MAX_DEPLOY_MINUTES = 15
     STATUS_CHECK_INTERVAL = 30

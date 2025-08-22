@@ -79,13 +79,29 @@ def parse_tool_result(result_text):
     도구 실행 결과에서 실제 데이터를 추출하는 함수
     
     Args:
-        result_text (str): Lambda 응답 JSON 문자열
+        result_text (str): MCP Server 응답 JSON 문자열
         
     Returns:
         dict: 파싱된 데이터
     """
-    parsed_result = json.loads(result_text)
-    return parsed_result["response"]["payload"]["body"]
+    try:
+        # MCP Server 응답은 직접 JSON 형태일 수 있음
+        if isinstance(result_text, str):
+            parsed_result = json.loads(result_text)
+        else:
+            parsed_result = result_text
+            
+        # Lambda 형식인 경우
+        if "response" in parsed_result and "payload" in parsed_result["response"]:
+            return parsed_result["response"]["payload"]["body"]
+        # 직접 데이터인 경우
+        else:
+            return parsed_result
+            
+    except json.JSONDecodeError as e:
+        print(f"JSON 파싱 에러: {e}")
+        print(f"원본 텍스트: {result_text}")
+        return result_text
 
 # ================================
 # 데이터 표시 함수들
@@ -267,12 +283,9 @@ def invoke_portfolio_architect(financial_analysis):
         current_thinking = ""
         current_text_placeholder = placeholder.empty()
         tool_id_to_name = {}  # tool_use_id와 tool_name 매핑
-        
+
         # 스트리밍 응답 처리
         for line in response["response"].iter_lines(chunk_size=1):
-            if not line or not line.decode("utf-8").startswith("data: "):
-                continue
-                
             try:
                 event_data = json.loads(line.decode("utf-8")[6:])
                 event_type = event_data.get("type")

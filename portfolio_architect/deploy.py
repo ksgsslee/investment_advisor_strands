@@ -57,7 +57,7 @@ def load_mcp_server_info():
     print("📋 MCP Server 배포 정보 로드 중...")
     
     current_dir = Path(__file__).parent
-    mcp_dir = current_dir / "mcp"
+    mcp_dir = current_dir / "mcp_server"
     info_file = mcp_dir / "mcp_deployment_info.json"
     
     if not info_file.exists():

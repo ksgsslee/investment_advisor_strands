@@ -37,10 +37,10 @@ class Config:
 
 def load_mcp_server_info():
     """
-    MCP Server 배포 정보 로드
+    MCP Server 배포 정보 로드 (Cognito 인증 방식)
     
     Returns:
-        dict: MCP Server 설정 정보 (agent_arn, bearer_token, cognito 정보 등)
+        dict: MCP Server 설정 정보 (agent_arn, cognito 정보 등)
         
     Raises:
         Exception: 배포 정보 로드 실패 시
@@ -51,21 +51,20 @@ def load_mcp_server_info():
         # MCP Server 배포 정보 로드
         print("📋 MCP Server 정보 로드 중...")
         current_dir = Path(__file__).parent
-        info_file = current_dir / "mcp" / "mcp_deployment_info.json"
+        info_file = current_dir / "mcp_server" / "mcp_deployment_info.json"
         
         if not info_file.exists():
             raise FileNotFoundError(
                 f"MCP Server 배포 정보 파일을 찾을 수 없습니다: {info_file}\n"
-                "먼저 'python mcp/deploy_mcp.py'를 실행하세요."
+                "먼저 'python mcp_server/deploy_mcp.py'를 실행하세요."
             )
         
         with open(info_file, 'r') as f:
             mcp_info = json.load(f)
         
         agent_arn = mcp_info['agent_arn']
-        bearer_token = mcp_info['bearer_token']
         
-        # MCP URL 구성
+        # MCP URL 구성 (Runtime 직접 연결)
         encoded_arn = agent_arn.replace(':', '%3A').replace('/', '%2F')
         mcp_url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
         
@@ -75,33 +74,49 @@ def load_mcp_server_info():
         
         return {
             "agent_arn": agent_arn,
-            "bearer_token": bearer_token,
             "mcp_url": mcp_url,
-            "region": region
+            "region": region,
+            "client_id": mcp_info.get('client_id'),
+            "client_secret": mcp_info.get('client_secret'),
+            "user_pool_id": mcp_info.get('user_pool_id')
         }
             
     except Exception as e:
         print(f"❌ MCP Server 정보 로드 실패: {str(e)}")
         raise Exception(f"MCP Server 정보 로드 실패: {str(e)}")
 
+def fetch_access_token(client_id, client_secret, token_url):
+    """
+    OAuth2 클라이언트 자격 증명으로 액세스 토큰 획득
+    
+    Args:
+        client_id (str): OAuth2 클라이언트 ID
+        client_secret (str): OAuth2 클라이언트 시크릿
+        token_url (str): 토큰 엔드포인트 URL
+        
+    Returns:
+        str: 액세스 토큰
+    """
+    response = requests.post(
+        token_url,
+        data=f"grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}",
+        headers={'Content-Type': 'application/x-www-form-urlencoded'}
+    )
+    response.raise_for_status()
+    return response.json()['access_token']
 
-
-def create_streamable_http_transport(mcp_url: str, bearer_token: str):
+def create_streamable_http_transport(mcp_url: str, access_token: str):
     """
     MCP HTTP 전송 클라이언트 생성
     
     Args:
-        mcp_url (str): MCP Server URL
-        bearer_token (str): JWT Bearer 토큰
+        mcp_url (str): MCP Server URL (Runtime 직접 연결)
+        access_token (str): Cognito에서 획득한 액세스 토큰
         
     Returns:
         StreamableHTTPTransport: MCP 클라이언트 전송 객체
     """
-    headers = {
-        "authorization": f"Bearer {bearer_token}",
-        "Content-Type": "application/json"
-    }
-    return streamablehttp_client(mcp_url, headers, timeout=120, terminate_on_close=False)
+    return streamablehttp_client(mcp_url, headers={"Authorization": f"Bearer {access_token}"})
 
 # ================================
 # 메인 클래스
@@ -109,7 +124,7 @@ def create_streamable_http_transport(mcp_url: str, bearer_token: str):
 
 class PortfolioArchitect:
     """
-    AI 포트폴리오 설계사 - MCP Server 연동
+    AI 포트폴리오 설계사 - MCP Server 연동 (Cognito OAuth2 인증)
     
     실시간 시장 데이터를 분석하여 고객의 재무 상황에 맞는
     맞춤형 투자 포트폴리오를 설계하는 AI 에이전트입니다.
@@ -124,27 +139,46 @@ class PortfolioArchitect:
         """
         # MCP Server 정보 설정
         self.mcp_server_info = mcp_server_info or load_mcp_server_info()
-        self._setup_mcp_connection()
+        self._setup_authentication()
         self._initialize_mcp_client()
         self._create_architect_agent()
     
-    def _setup_mcp_connection(self):
-        """MCP 연결 정보 설정"""
+    def _setup_authentication(self):
+        """Cognito OAuth2 인증 정보 설정"""
         self.agent_arn = self.mcp_server_info['agent_arn']
-        self.bearer_token = self.mcp_server_info['bearer_token']
         self.mcp_url = self.mcp_server_info['mcp_url']
+        self.client_id = self.mcp_server_info['client_id']
+        self.client_secret = self.mcp_server_info['client_secret']
         
-        print(f"🔐 MCP 인증 설정 완료")
+        # Cognito 토큰 URL 구성
+        user_pool_id = self.mcp_server_info['user_pool_id']
+        region = self.mcp_server_info['region']
+        pool_domain = user_pool_id.replace("_", "").lower()
+        self.token_url = f"https://{pool_domain}.auth.{region}.amazoncognito.com/oauth2/token"
+        
+        print(f"🔐 Cognito 인증 설정: {self.token_url}")
         print(f"🌐 MCP Server URL: {self.mcp_url}")
+        
+        # 액세스 토큰 획득
+        self.access_token = fetch_access_token(
+            self.client_id, 
+            self.client_secret, 
+            self.token_url
+        )
     
     def _initialize_mcp_client(self):
         """MCP 클라이언트 초기화"""
-        self.mcp_client = MCPClient(
-            lambda: create_streamable_http_transport(
-                self.mcp_url, 
-                self.bearer_token
+        try:
+            self.mcp_client = MCPClient(
+                lambda: create_streamable_http_transport(
+                    self.mcp_url, 
+                    self.access_token
+                )
             )
-        )
+            print("🔗 MCP 클라이언트 초기화 성공")
+        except Exception as e:
+            print(f"⚠️ MCP 클라이언트 초기화 실패: {e}")
+            raise
     
     def _create_architect_agent(self):
         """포트폴리오 설계사 에이전트 생성"""
@@ -311,18 +345,22 @@ async def portfolio_architect(payload):
         
     Environment Variables:
         - MCP_AGENT_ARN: MCP Server Agent ARN
-        - MCP_BEARER_TOKEN: MCP Server Bearer Token
+        - MCP_CLIENT_ID: OAuth2 클라이언트 ID
+        - MCP_CLIENT_SECRET: OAuth2 클라이언트 시크릿
+        - MCP_USER_POOL_ID: Cognito User Pool ID
         - AWS_REGION: AWS 리전 (기본값: us-west-2)
     """
     global architect
     
     # Runtime 환경에서 지연 초기화
     if architect is None:
-        # 환경변수에서 MCP Server 정보 확인
+        # 필수 환경변수 확인
         mcp_agent_arn = os.getenv("MCP_AGENT_ARN")
-        mcp_bearer_token = os.getenv("MCP_BEARER_TOKEN")
+        mcp_client_id = os.getenv("MCP_CLIENT_ID")
+        mcp_client_secret = os.getenv("MCP_CLIENT_SECRET")
+        mcp_user_pool_id = os.getenv("MCP_USER_POOL_ID")
         
-        if mcp_agent_arn and mcp_bearer_token:
+        if mcp_agent_arn and mcp_client_id and mcp_client_secret and mcp_user_pool_id:
             # 환경변수에서 MCP Server 정보 구성
             region = os.getenv("AWS_REGION", "us-west-2")
             encoded_arn = mcp_agent_arn.replace(':', '%3A').replace('/', '%2F')
@@ -330,9 +368,11 @@ async def portfolio_architect(payload):
             
             mcp_server_info = {
                 "agent_arn": mcp_agent_arn,
-                "bearer_token": mcp_bearer_token,
                 "mcp_url": mcp_url,
-                "region": region
+                "region": region,
+                "client_id": mcp_client_id,
+                "client_secret": mcp_client_secret,
+                "user_pool_id": mcp_user_pool_id
             }
             
             # PortfolioArchitect 인스턴스 생성 (환경변수 사용)

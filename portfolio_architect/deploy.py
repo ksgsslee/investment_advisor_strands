@@ -81,14 +81,14 @@ def deploy_mcp_server():
     """
     print("🚀 MCP Server 배포 시작...")
     
-    # mcp 폴더의 deploy_mcp.py 실행
+    # mcp_server 폴더의 deploy_mcp.py 실행
     import subprocess
     current_dir = Path(__file__).parent
-    mcp_deploy_script = current_dir / "mcp" / "deploy_mcp.py"
+    mcp_deploy_script = current_dir / "mcp_server" / "deploy_mcp.py"
     
     result = subprocess.run([
         sys.executable, str(mcp_deploy_script)
-    ], capture_output=True, text=True, cwd=str(current_dir / "mcp"))
+    ], capture_output=True, text=True, cwd=str(current_dir / "mcp_server"))
     
     if result.returncode != 0:
         print(f"❌ MCP Server 배포 실패:")
@@ -139,10 +139,12 @@ def deploy_portfolio_architect(mcp_server_info):
     )
     print("✅ Portfolio Architect Runtime 구성 완료")
     
-    # 3. MCP Server 정보를 환경변수로 설정
+    # 3. MCP Server 정보를 환경변수로 설정 (Cognito OAuth2 방식)
     env_vars = {
         "MCP_AGENT_ARN": mcp_server_info['agent_arn'],
-        "MCP_BEARER_TOKEN": mcp_server_info['bearer_token'],
+        "MCP_CLIENT_ID": mcp_server_info['client_id'],
+        "MCP_CLIENT_SECRET": mcp_server_info['client_secret'],
+        "MCP_USER_POOL_ID": mcp_server_info['user_pool_id'],
         "AWS_REGION": mcp_server_info['region']
     }
     
@@ -208,6 +210,8 @@ def save_deployment_info(mcp_server_info, portfolio_architect_info):
         "region": portfolio_architect_info["region"],
         "mcp_server_arn": mcp_server_info["agent_arn"],
         "mcp_server_id": mcp_server_info["agent_id"],
+        "mcp_client_id": mcp_server_info["client_id"],
+        "mcp_user_pool_id": mcp_server_info["user_pool_id"],
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
@@ -273,7 +277,7 @@ def main():
         print("=" * 70)
         
         print("\n📋 다음 단계:")
-        print("1. MCP Server 테스트: cd mcp && python test_remote.py")
+        print("1. MCP Server 테스트: cd mcp_server && python test_remote.py")
         print("2. Streamlit 앱 실행: streamlit run app.py")
         print("3. 전체 시스템 테스트")
         
@@ -285,7 +289,7 @@ def main():
         print("💡 문제 해결 방법:")
         print("1. AWS 권한 확인")
         print("2. 필수 파일 존재 확인")
-        print("3. MCP Server 먼저 배포: cd mcp && python deploy_mcp.py")
+        print("3. MCP Server 먼저 배포: cd mcp_server && python deploy_mcp.py")
         print("4. 로그 확인 후 재시도")
         print("=" * 70)
         return 1

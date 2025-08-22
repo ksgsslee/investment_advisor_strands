@@ -6,6 +6,3 @@ strands-agents
 
 # AWS Bedrock AgentCore Runtime
 bedrock-agentcore
-
-# MCP (Model Context Protocol) 패키지
-mcp

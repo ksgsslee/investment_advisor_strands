@@ -191,14 +191,50 @@ def get_or_create_user_pool(cognito, user_pool_name, region):
     return user_pool_id
 
 
-def get_or_create_m2m_client(cognito, user_pool_id, client_name):
+def get_or_create_resource_server(cognito, user_pool_id, resource_server_id, resource_server_name, scopes):
     """
-    Machine-to-Machine 클라이언트 조회 또는 생성 (OAuth2 Client Credentials)
+    Cognito 리소스 서버 조회 또는 생성
+    
+    Args:
+        cognito: Cognito 클라이언트
+        user_pool_id (str): Cognito 사용자 풀 ID
+        resource_server_id (str): 리소스 서버 식별자
+        resource_server_name (str): 리소스 서버 이름
+        scopes (list): 스코프 목록
+    
+    Returns:
+        str: 리소스 서버 ID
+    """
+    print("🔍 리소스 서버 확인 중...")
+    
+    try:
+        cognito.describe_resource_server(
+            UserPoolId=user_pool_id,
+            Identifier=resource_server_id
+        )
+        print(f"♻️ 기존 리소스 서버 사용: {resource_server_id}")
+        return resource_server_id
+        
+    except cognito.exceptions.ResourceNotFoundException:
+        print("🆕 새 리소스 서버 생성 중...")
+        cognito.create_resource_server(
+            UserPoolId=user_pool_id,
+            Identifier=resource_server_id,
+            Name=resource_server_name,
+            Scopes=scopes
+        )
+        print(f"✅ 리소스 서버 생성 완료: {resource_server_id}")
+        return resource_server_id
+
+def get_or_create_m2m_client(cognito, user_pool_id, client_name, resource_server_id):
+    """
+    Machine-to-Machine 클라이언트 조회 또는 생성 (risk_manager 패턴)
     
     Args:
         cognito: Cognito 클라이언트
         user_pool_id (str): 사용자 풀 ID
         client_name (str): 클라이언트 이름
+        resource_server_id (str): 리소스 서버 ID
     
     Returns:
         tuple: (클라이언트 ID, 클라이언트 시크릿)
@@ -218,14 +254,17 @@ def get_or_create_m2m_client(cognito, user_pool_id, client_name):
             print(f"♻️ 기존 M2M 클라이언트 사용: {client_id}")
             return client_id, client_secret
     
-    # 새 M2M 클라이언트 생성 (OAuth2 Client Credentials)
+    # 새 M2M 클라이언트 생성
     print("🆕 새 M2M 클라이언트 생성 중...")
     created = cognito.create_user_pool_client(
         UserPoolId=user_pool_id,
         ClientName=client_name,
         GenerateSecret=True,
         AllowedOAuthFlows=["client_credentials"],
-        AllowedOAuthScopes=["openid"],  # 기본 스코프 추가
+        AllowedOAuthScopes=[
+            f"{resource_server_id}/runtime:read", 
+            f"{resource_server_id}/runtime:write"
+        ],
         AllowedOAuthFlowsUserPoolClient=True,
         SupportedIdentityProviders=["COGNITO"],
         ExplicitAuthFlows=["ALLOW_REFRESH_TOKEN_AUTH"]
@@ -238,7 +277,7 @@ def get_or_create_m2m_client(cognito, user_pool_id, client_name):
     return client_id, client_secret
 
 
-def get_token(user_pool_id, client_id, client_secret, region):
+def get_token(user_pool_id, client_id, client_secret, scope_string, region):
     """
     Cognito OAuth2 토큰 획득 (Client Credentials Grant)
     
@@ -246,6 +285,7 @@ def get_token(user_pool_id, client_id, client_secret, region):
         user_pool_id (str): Cognito 사용자 풀 ID
         client_id (str): 클라이언트 ID
         client_secret (str): 클라이언트 시크릿
+        scope_string (str): OAuth2 스코프 문자열
         region (str): AWS 리전
     
     Returns:
@@ -260,7 +300,7 @@ def get_token(user_pool_id, client_id, client_secret, region):
             "grant_type": "client_credentials",
             "client_id": client_id,
             "client_secret": client_secret,
-            "scope": "openid",  # 스코프 추가
+            "scope": scope_string,
         }
 
         response = requests.post(url, headers=headers, data=data)

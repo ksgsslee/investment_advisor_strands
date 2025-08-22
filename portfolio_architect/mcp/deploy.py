@@ -16,6 +16,7 @@ from bedrock_agentcore_starter_toolkit import Runtime
 from utils import (
     create_agentcore_role,
     get_or_create_user_pool,
+    get_or_create_resource_server,
     get_or_create_m2m_client,
     get_token
 )
@@ -70,7 +71,7 @@ def deploy_mcp_server():
 
 def _setup_cognito_authentication():
     """
-    Cognito M2M 인증 구성 요소 설정 (OAuth2 Client Credentials)
+    Cognito M2M 인증 구성 요소 설정 (risk_manager 패턴)
     
     Returns:
         dict: 인증 구성 요소
@@ -85,18 +86,37 @@ def _setup_cognito_authentication():
         Config.REGION
     )
     
+    # 리소스 서버 생성/조회
+    resource_server_id = f"{Config.MCP_SERVER_NAME}-server"
+    resource_server_name = f"{Config.MCP_SERVER_NAME} Resource Server"
+    scopes = [
+        {"ScopeName": "runtime:read", "ScopeDescription": "Runtime read access"},
+        {"ScopeName": "runtime:write", "ScopeDescription": "Runtime write access"}
+    ]
+    
+    resource_server_id = get_or_create_resource_server(
+        cognito, 
+        user_pool_id, 
+        resource_server_id, 
+        resource_server_name, 
+        scopes
+    )
+    
     # M2M 클라이언트 생성/조회
     client_id, client_secret = get_or_create_m2m_client(
         cognito,
         user_pool_id,
-        f"{Config.MCP_SERVER_NAME}-client"
+        f"{Config.MCP_SERVER_NAME}-client",
+        resource_server_id
     )
     
     # OAuth2 토큰 획득 (Client Credentials Grant)
+    scope_string = f"{resource_server_id}/runtime:read {resource_server_id}/runtime:write"
     token_response = get_token(
         user_pool_id, 
         client_id, 
         client_secret, 
+        scope_string,
         Config.REGION
     )
     

@@ -132,45 +132,87 @@ def delete_lambda_function(deployment_info):
     except Exception as e:
         print(f"  ⚠️ Lambda 삭제 실패: {e}")
 
+def delete_gateway(deployment_info):
+    """Gateway 및 Target들 삭제"""
+    print("🗑️ Gateway 삭제 중...")
+    
+    try:
+        gateway_client = boto3.client('bedrock-agentcore-gateway', region_name=Config.REGION)
+        
+        # 배포 정보에서 Gateway ID 가져오기
+        gateway_id = None
+        if 'gateway' in deployment_info and 'gateway_id' in deployment_info['gateway']:
+            gateway_id = deployment_info['gateway']['gateway_id']
+        
+        # Gateway Target들 삭제
+        try:
+            print(f"  🎯 Gateway Target들 삭제: {gateway_id}")
+            list_response = gateway_client.list_gateway_targets(
+                gatewayIdentifier=gateway_id,
+                maxResults=100
+            )
+            
+            for item in list_response['items']:
+                target_id = item["targetId"]
+                print(f"    🗑️ Target 삭제: {target_id}")
+                gateway_client.delete_gateway_target(
+                    gatewayIdentifier=gateway_id,
+                    targetId=target_id
+                )
+        except Exception as e:
+            print(f"  ⚠️ Gateway Target 삭제 실패: {e}")
+        
+        # Gateway 삭제
+        print(f"  🌉 Gateway 삭제: {gateway_id}")
+        gateway_client.delete_gateway(gatewayIdentifier=gateway_id)
+        print(f"✅ Gateway 삭제 완료: {gateway_id}")
+        
+    except Exception as e:
+        print(f"⚠️ Gateway 삭제 실패: {e}")
+
 def delete_cognito_resources(deployment_info):
     """Cognito User Pool 삭제"""
-    print("🗑️ Cognito 리소스 삭제 중...")
-    
     if 'gateway' not in deployment_info or 'user_pool_id' not in deployment_info['gateway']:
-        print("  ⚠️ Cognito 정보 없음")
+        print("⚠️ Cognito User Pool 정보가 없어 삭제를 건너뜁니다.")
         return
     
     try:
-        cognito = boto3.client('cognito-idp', region_name=Config.REGION)
+        print("🗑️ Cognito 리소스 삭제 중...")
+        region = deployment_info['gateway'].get('region', Config.REGION)
+        cognito = boto3.client('cognito-idp', region_name=region)
+        
         user_pool_id = deployment_info['gateway']['user_pool_id']
+        
+        # User Pool 클라이언트들 삭제
+        try:
+            clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id)
+            for client in clients['UserPoolClients']:
+                cognito.delete_user_pool_client(
+                    UserPoolId=user_pool_id,
+                    ClientId=client['ClientId']
+                )
+                print(f"  ✅ User Pool 클라이언트 삭제: {client['ClientId']}")
+        except Exception as e:
+            print(f"  ⚠️ User Pool 클라이언트 삭제 실패: {e}")
         
         # User Pool 도메인 삭제 (있는 경우)
         try:
-            # describe_user_pool로 도메인 정보 확인
-            pool_info = cognito.describe_user_pool(UserPoolId=user_pool_id)
-            if 'Domain' in pool_info['UserPool']:
-                domain = pool_info['UserPool']['Domain']
-                cognito.delete_user_pool_domain(
-                    Domain=domain,
-                    UserPoolId=user_pool_id
-                )
-                print(f"  ✅ User Pool 도메인: {domain}")
-        except Exception as e:
-            print(f"  ⚠️ 도메인 삭제 실패: {e}")
-        
-        # User Pool 클라이언트들 삭제
-        clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id)
-        for client in clients['UserPoolClients']:
-            cognito.delete_user_pool_client(
-                UserPoolId=user_pool_id,
-                ClientId=client['ClientId']
+            domain_name = user_pool_id.replace("_", "").lower()
+            cognito.delete_user_pool_domain(
+                Domain=domain_name,
+                UserPoolId=user_pool_id
             )
+            print(f"  ✅ User Pool 도메인 삭제: {domain_name}")
+        except Exception as e:
+            # 도메인이 없을 수 있으므로 경고만 출력
+            print(f"  ⚠️ User Pool 도메인 삭제 실패 (없을 수 있음): {e}")
         
         # User Pool 삭제
         cognito.delete_user_pool(UserPoolId=user_pool_id)
-        print(f"  ✅ User Pool: {user_pool_id}")
+        print(f"✅ Cognito User Pool 삭제: {user_pool_id}")
+        
     except Exception as e:
-        print(f"  ⚠️ Cognito 삭제 실패: {e}")
+        print(f"⚠️ Cognito 삭제 실패: {e}")
 
 def delete_ecr_repositories():
     """ECR 리포지토리들 삭제"""
@@ -178,9 +220,9 @@ def delete_ecr_repositories():
     
     ecr = boto3.client('ecr', region_name=Config.REGION)
     
+    # 실제 생성되는 리포지토리만 삭제
     repos = [
-        f"bedrock-agentcore-{Config.AGENT_NAME}",
-        "bedrock-agentcore-gateway-risk-manager"
+        f"bedrock-agentcore-{Config.AGENT_NAME}"
     ]
     
     for repo_name in repos:
@@ -196,10 +238,10 @@ def delete_iam_roles():
     
     iam = boto3.client('iam')
     
+    # 실제 생성되는 역할들만 삭제
     roles = [
         f'agentcore-runtime-{Config.AGENT_NAME}-role',
-        'agentcore-gateway-gateway-risk-manager-role',
-        'agentcore-lambda-risk-manager-role'
+        'agentcore-gateway-gateway-risk-manager-role'
     ]
     
     for role_name in roles:
@@ -272,16 +314,19 @@ def main():
     # 3. Runtime들 삭제
     delete_runtimes(deployment_info)
     
-    # 4. Cognito 리소스 삭제
+    # 4. Gateway 삭제
+    delete_gateway(deployment_info)
+    
+    # 5. Cognito 리소스 삭제
     delete_cognito_resources(deployment_info)
     
-    # 5. ECR 리포지토리들 삭제
+    # 6. ECR 리포지토리들 삭제
     delete_ecr_repositories()
     
-    # 6. IAM 역할들 삭제
+    # 7. IAM 역할들 삭제
     delete_iam_roles()
     
-    # 7. 파일들 정리
+    # 8. 파일들 정리
     cleanup_files()
     
     print("\n🎉 정리 완료!")
@@ -289,6 +334,7 @@ def main():
     print("• Lambda Layer")
     print("• Lambda 함수")
     print("• Risk Manager Runtime")
+    print("• Gateway 및 Target들")
     print("• Cognito User Pool")
     print("• ECR 리포지토리들")
     print("• IAM 역할들")

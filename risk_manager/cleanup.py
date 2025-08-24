@@ -51,6 +51,44 @@ def delete_runtimes(deployment_info):
         except Exception as e:
             print(f"  ⚠️ Main Runtime 실패: {e}")
 
+def delete_lambda_layer_s3_bucket():
+    """Lambda Layer용 S3 버킷 삭제"""
+    print("🗑️ Lambda Layer S3 버킷 삭제 중...")
+    
+    try:
+        s3_client = boto3.client('s3', region_name=Config.REGION)
+        sts_client = boto3.client('sts', region_name=Config.REGION)
+        
+        # 계정 ID로 버킷명 생성 (deploy_lambda_layer.py와 동일한 패턴)
+        account_id = sts_client.get_caller_identity()["Account"]
+        bucket_name = f"layer-yfinance-risk-manager-{account_id}"
+        
+        # 버킷 존재 확인
+        try:
+            s3_client.head_bucket(Bucket=bucket_name)
+        except s3_client.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                print("  ⚠️ S3 버킷이 존재하지 않음")
+                return
+            else:
+                raise
+        
+        # 버킷 내 모든 객체 삭제
+        objects = s3_client.list_objects_v2(Bucket=bucket_name)
+        if 'Contents' in objects:
+            delete_keys = [{'Key': obj['Key']} for obj in objects['Contents']]
+            s3_client.delete_objects(
+                Bucket=bucket_name,
+                Delete={'Objects': delete_keys}
+            )
+        
+        # 버킷 삭제
+        s3_client.delete_bucket(Bucket=bucket_name)
+        print(f"  ✅ S3 버킷: {bucket_name}")
+        
+    except Exception as e:
+        print(f"  ⚠️ S3 버킷 삭제 실패: {e}")
+
 def delete_lambda_layer(deployment_info):
     """Lambda Layer 삭제 (먼저 삭제해야 함)"""
     print("🗑️ Lambda Layer 삭제 중...")
@@ -74,6 +112,9 @@ def delete_lambda_layer(deployment_info):
         print(f"  ✅ Lambda Layer: {layer_name}")
     except Exception as e:
         print(f"  ⚠️ Layer 삭제 실패: {e}")
+    
+    # S3 버킷도 삭제
+    delete_lambda_layer_s3_bucket()
 
 def delete_lambda_function(deployment_info):
     """Lambda 함수 삭제"""
@@ -105,15 +146,15 @@ def delete_cognito_resources(deployment_info):
         
         # User Pool 도메인 삭제 (있는 경우)
         try:
-            # 도메인 목록 조회
-            domains = cognito.list_user_pool_domains()
-            for domain in domains['Domains']:
-                if domain['UserPoolId'] == user_pool_id:
-                    cognito.delete_user_pool_domain(
-                        Domain=domain['Domain'],
-                        UserPoolId=user_pool_id
-                    )
-                    print(f"  ✅ User Pool 도메인: {domain['Domain']}")
+            # describe_user_pool로 도메인 정보 확인
+            pool_info = cognito.describe_user_pool(UserPoolId=user_pool_id)
+            if 'Domain' in pool_info['UserPool']:
+                domain = pool_info['UserPool']['Domain']
+                cognito.delete_user_pool_domain(
+                    Domain=domain,
+                    UserPoolId=user_pool_id
+                )
+                print(f"  ✅ User Pool 도메인: {domain}")
         except Exception as e:
             print(f"  ⚠️ 도메인 삭제 실패: {e}")
         

@@ -70,7 +70,6 @@ def deploy_mcp_server():
     result = {
         'agent_arn': runtime_result['agent_arn'],
         'agent_id': runtime_result['agent_id'],
-        'bearer_token': auth_components['bearer_token'],
         'user_pool_id': auth_components['user_pool_id'],
         'client_id': auth_components['client_id'],
         'client_secret': auth_components['client_secret'],
@@ -123,30 +122,16 @@ def _setup_cognito_authentication():
         ["runtime:read", "runtime:write"]
     )
     
-    # OAuth2 토큰 획득 (Client Credentials Grant)
-    scope_string = f"{resource_server_id}/runtime:read {resource_server_id}/runtime:write"
-    token_response = get_token(
-        user_pool_id, 
-        client_id, 
-        client_secret, 
-        scope_string,
-        Config.REGION
-    )
-    
-    if "error" in token_response:
-        raise Exception(f"토큰 획득 실패: {token_response['error']}")
-    
-    bearer_token = token_response["access_token"]
-    
     # Discovery URL 구성
     discovery_url = f'https://cognito-idp.{Config.REGION}.amazonaws.com/{user_pool_id}/.well-known/openid-configuration'
+    
+    print("✅ Cognito 인증 설정 완료 (토큰은 런타임에서 동적 획득)")
     
     return {
         'user_pool_id': user_pool_id,
         'client_id': client_id,
         'client_secret': client_secret,
-        'discovery_url': discovery_url,
-        'bearer_token': bearer_token
+        'discovery_url': discovery_url
     }
 
 def _create_mcp_runtime(role_arn, auth_components):

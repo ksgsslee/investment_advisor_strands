@@ -154,31 +154,41 @@ def deploy_and_wait(runtime):
     
     return success, agent_arn, status
 
-def save_deployment_info(agent_arn):
+def save_deployment_info(agent_arn, role_arn):
     """
     Runtime 배포 정보 저장
     
     배포된 Runtime의 정보를 JSON 파일로 저장합니다.
-    다른 시스템에서 Runtime을 호출할 때 참조할 수 있습니다.
+    cleanup 시 정확한 리소스 삭제를 위해 모든 생성된 리소스 정보를 포함합니다.
     
     Args:
         agent_arn (str): 배포된 Agent ARN
+        role_arn (str): 생성된 IAM 역할 ARN
         
     Returns:
         str: 저장된 JSON 파일 경로
         
     Note:
         - 파일명: deployment_info.json
-        - Agent ARN, 리전 등 포함
+        - Agent ARN, IAM 역할, ECR 리포지토리 등 모든 리소스 정보 포함
         - 배포 시각 기록
     """
     print("📄 배포 정보 저장 중...")
     
     current_dir = Path(__file__).parent
+    
+    # ECR 리포지토리 이름 생성
+    ecr_repo_name = f"bedrock-agentcore-{Config.AGENT_NAME}"
+    
+    # IAM 역할 이름 추출
+    iam_role_name = role_arn.split('/')[-1]
+    
     deployment_info = {
         "agent_name": Config.AGENT_NAME,
         "agent_arn": agent_arn,
         "region": Config.REGION,
+        "iam_role_name": iam_role_name,
+        "ecr_repo_name": ecr_repo_name,
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
@@ -187,6 +197,10 @@ def save_deployment_info(agent_arn):
         json.dump(deployment_info, f, indent=2)
     
     print(f"✅ 배포 정보 저장: {info_file}")
+    print(f"   📍 Agent ARN: {agent_arn}")
+    print(f"   🔐 IAM Role: {iam_role_name}")
+    print(f"   📦 ECR Repo: {ecr_repo_name}")
+    
     return str(info_file)
 
 # ================================
@@ -269,7 +283,7 @@ def main():
         
         if success:
             # 5. 배포 정보 저장
-            info_file = save_deployment_info(agent_arn)
+            info_file = save_deployment_info(agent_arn, role_arn)
             
             print("=" * 60)
             print("🎉 배포 성공!")

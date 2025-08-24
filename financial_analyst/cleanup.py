@@ -46,10 +46,11 @@ def main():
     if info_file.exists():
         with open(info_file) as f:
             deployment_info = json.load(f)
+        
         print(f"✅ 배포 정보 로드:")
         print(f"   📍 Agent: {deployment_info.get('agent_arn', 'N/A')}")
-        print(f"   🔐 IAM Role: {deployment_info.get('iam_role_name', 'N/A')}")
-        print(f"   📦 ECR Repo: {deployment_info.get('ecr_repo_name', 'N/A')}")
+        print(f"   🔐 IAM Role: agentcore-runtime-{Config.AGENT_NAME}-role")
+        print(f"   📦 ECR Repo: bedrock-agentcore-{Config.AGENT_NAME}")
     else:
         print("⚠️ 배포 정보 파일이 없습니다. 기본값으로 진행합니다.")
     
@@ -78,8 +79,8 @@ def main():
         region = deployment_info.get('region', Config.REGION) if deployment_info else Config.REGION
         ecr = boto3.client('ecr', region_name=region)
         
-        # 배포 정보에서 ECR 리포지토리 이름 가져오기, 없으면 기본값 사용
-        repo_name = deployment_info.get('ecr_repo_name', f"bedrock-agentcore-{Config.AGENT_NAME}") if deployment_info else f"bedrock-agentcore-{Config.AGENT_NAME}"
+        # Config에서 ECR 리포지토리 이름 생성
+        repo_name = f"bedrock-agentcore-{Config.AGENT_NAME}"
         
         ecr.delete_repository(repositoryName=repo_name, force=True)
         print(f"✅ ECR 리포지토리 삭제: {repo_name}")
@@ -90,8 +91,8 @@ def main():
     try:
         iam = boto3.client('iam')
         
-        # 배포 정보에서 IAM 역할 이름 가져오기, 없으면 기본값 사용
-        role_name = deployment_info.get('iam_role_name', f'agentcore-runtime-{Config.AGENT_NAME}-role') if deployment_info else f'agentcore-runtime-{Config.AGENT_NAME}-role'
+        # Config에서 IAM 역할 이름 생성
+        role_name = f'agentcore-runtime-{Config.AGENT_NAME}-role'
         
         # 정책 삭제
         policies = iam.list_role_policies(RoleName=role_name)

@@ -154,7 +154,7 @@ def deploy_and_wait(runtime):
     
     return success, agent_arn, status
 
-def save_deployment_info(agent_arn, role_arn):
+def save_deployment_info(agent_arn):
     """
     Runtime 배포 정보 저장
     
@@ -177,18 +177,10 @@ def save_deployment_info(agent_arn, role_arn):
     
     current_dir = Path(__file__).parent
     
-    # ECR 리포지토리 이름 생성
-    ecr_repo_name = f"bedrock-agentcore-{Config.AGENT_NAME}"
-    
-    # IAM 역할 이름 추출
-    iam_role_name = role_arn.split('/')[-1]
-    
     deployment_info = {
         "agent_name": Config.AGENT_NAME,
         "agent_arn": agent_arn,
         "region": Config.REGION,
-        "iam_role_name": iam_role_name,
-        "ecr_repo_name": ecr_repo_name,
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
@@ -198,8 +190,6 @@ def save_deployment_info(agent_arn, role_arn):
     
     print(f"✅ 배포 정보 저장: {info_file}")
     print(f"   📍 Agent ARN: {agent_arn}")
-    print(f"   🔐 IAM Role: {iam_role_name}")
-    print(f"   📦 ECR Repo: {ecr_repo_name}")
     
     return str(info_file)
 
@@ -283,7 +273,7 @@ def main():
         
         if success:
             # 5. 배포 정보 저장
-            info_file = save_deployment_info(agent_arn, role_arn)
+            info_file = save_deployment_info(agent_arn)
             
             print("=" * 60)
             print("🎉 배포 성공!")

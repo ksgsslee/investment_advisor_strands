@@ -137,7 +137,8 @@ def delete_gateway(deployment_info):
     print("🗑️ Gateway 삭제 중...")
     
     try:
-        gateway_client = boto3.client('bedrock-agentcore-gateway', region_name=Config.REGION)
+        # 올바른 서비스명 사용
+        gateway_client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
         
         # 배포 정보에서 Gateway ID 가져오기
         gateway_id = None
@@ -147,13 +148,10 @@ def delete_gateway(deployment_info):
         # Gateway Target들 삭제
         try:
             print(f"  🎯 Gateway Target들 삭제: {gateway_id}")
-            list_response = gateway_client.list_gateway_targets(
-                gatewayIdentifier=gateway_id,
-                maxResults=100
-            )
+            targets = gateway_client.list_gateway_targets(gatewayIdentifier=gateway_id).get('items', [])
             
-            for item in list_response['items']:
-                target_id = item["targetId"]
+            for target in targets:
+                target_id = target['targetId']
                 print(f"    🗑️ Target 삭제: {target_id}")
                 gateway_client.delete_gateway_target(
                     gatewayIdentifier=gateway_id,
@@ -162,6 +160,12 @@ def delete_gateway(deployment_info):
         except Exception as e:
             print(f"  ⚠️ Gateway Target 삭제 실패: {e}")
         
+        # Gateway 삭제
+        print(f"  🌉 Gateway 삭제: {gateway_id}")
+        gateway_client.delete_gateway(gatewayIdentifier=gateway_id)
+        print(f"✅ Gateway 삭제 완료: {gateway_id}")
+        
+    except Exception as e:
         # Gateway 삭제
         print(f"  🌉 Gateway 삭제: {gateway_id}")
         gateway_client.delete_gateway(gatewayIdentifier=gateway_id)
@@ -305,32 +309,36 @@ def main():
     
     print("\n🚀 정리 시작...")
     
-    # 1. Lambda Layer 삭제 (먼저 삭제)
+    # 1. Lambda Layer S3 버킷 삭제 (먼저 삭제)
+    delete_lambda_layer_s3_bucket()
+    
+    # 2. Lambda Layer 삭제
     delete_lambda_layer(deployment_info)
     
-    # 2. Lambda 함수 삭제
+    # 3. Lambda 함수 삭제
     delete_lambda_function(deployment_info)
     
-    # 3. Runtime들 삭제
+    # 4. Runtime들 삭제
     delete_runtimes(deployment_info)
     
-    # 4. Gateway 삭제
+    # 5. Gateway 삭제
     delete_gateway(deployment_info)
     
-    # 5. Cognito 리소스 삭제
+    # 6. Cognito 리소스 삭제
     delete_cognito_resources(deployment_info)
     
-    # 6. ECR 리포지토리들 삭제
+    # 7. ECR 리포지토리들 삭제
     delete_ecr_repositories()
     
-    # 7. IAM 역할들 삭제
+    # 8. IAM 역할들 삭제
     delete_iam_roles()
     
-    # 8. 파일들 정리
+    # 9. 파일들 정리
     cleanup_files()
     
     print("\n🎉 정리 완료!")
     print("\n📋 정리된 항목:")
+    print("• Lambda Layer S3 버킷")
     print("• Lambda Layer")
     print("• Lambda 함수")
     print("• Risk Manager Runtime")

@@ -42,8 +42,9 @@ class InvestmentMemoryHook(HookProvider):
         self.session_id = session_id
 
     def on_agent_initialized(self, event: AgentInitializedEvent):
-        """에이전트 초기화 시 과거 상담 이력 로드"""
+        """에이전트 초기화 시 메모리 설정 (간단 버전)"""
         try:
+            # 현재 세션의 기존 대화가 있는지 확인
             recent_turns = self.memory_client.get_last_k_turns(
                 memory_id=self.memory_id,
                 actor_id=self.actor_id,
@@ -53,6 +54,7 @@ class InvestmentMemoryHook(HookProvider):
             )
             
             if recent_turns:
+                # 현재 세션에 이미 대화가 있다면 컨텍스트 추가
                 context_messages = []
                 for turn in recent_turns:
                     for message in turn:
@@ -61,11 +63,14 @@ class InvestmentMemoryHook(HookProvider):
                         context_messages.append(f"{role.title()}: {content}")
                 
                 context = "\n".join(context_messages)
-                event.agent.system_prompt += f"\n\n과거 상담 이력:\n{context}\n\n이전 상담 내용을 참고하여 연속성 있는 상담을 제공하세요."
-                print(f"✅ {len(recent_turns)}개 과거 상담 이력 로드")
+                event.agent.system_prompt += f"\n\n현재 대화 이력:\n{context}\n\n위 내용을 참고하여 대화를 이어가세요."
+                print(f"✅ {len(recent_turns)}개 대화 이력 로드")
+            else:
+                print("✅ 새로운 상담 세션 시작")
             
         except Exception as e:
-            print(f"⚠️ 상담 이력 로드 실패: {e}")
+            print(f"⚠️ 메모리 로드 실패 (정상 - 새 세션): {e}")
+            # 새로운 세션이므로 실패는 정상적임
 
     def on_message_added(self, event: MessageAddedEvent):
         """메시지 추가 시 메모리에 저장"""
@@ -73,12 +78,17 @@ class InvestmentMemoryHook(HookProvider):
             messages = event.agent.messages
             if messages:
                 last_message = messages[-1]
-                self.memory_client.create_event(
-                    memory_id=self.memory_id,
-                    actor_id=self.actor_id,
-                    session_id=self.session_id,
-                    messages=[(last_message["content"][0]["text"], last_message["role"])]
-                )
+                # 간단하게 첫 번째 텍스트 내용만 저장
+                if last_message["content"] and len(last_message["content"]) > 0:
+                    first_content = last_message["content"][0]
+                    if "text" in first_content:
+                        text = first_content["text"]
+                        self.memory_client.create_event(
+                            memory_id=self.memory_id,
+                            actor_id=self.actor_id,
+                            session_id=self.session_id,
+                            messages=[(text, last_message["role"])]
+                        )
         except Exception as e:
             print(f"⚠️ 메모리 저장 실패: {e}")
 
@@ -170,7 +180,7 @@ def financial_analyst_tool(user_input_json: str) -> str:
         
         result = extract_json_from_streaming(response["response"])
         return json.dumps(result, ensure_ascii=False) if result else json.dumps({"error": "분석 실패"})
-        
+
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 

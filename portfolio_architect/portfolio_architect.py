@@ -263,7 +263,7 @@ class PortfolioArchitect:
                     if "result" in event:
                         yield {
                             "type": "streaming_complete",
-                            "message": "포트폴리오 설계 완료!"
+                            "portfolio_result": str(event["result"])
                         }
 
         except Exception as e:

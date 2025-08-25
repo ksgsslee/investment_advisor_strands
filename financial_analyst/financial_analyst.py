@@ -21,6 +21,13 @@ from strands import Agent
 from strands.models.bedrock import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
+# shared 모듈 경로 추가
+shared_path = Path(__file__).parent.parent / "shared"
+sys.path.insert(0, str(shared_path))
+
+# 공통 JSON 유틸리티 import
+from json_utils import extract_json_from_text
+
 # ================================
 # 전역 설정
 # ================================
@@ -191,10 +198,11 @@ class FinancialAnalyst:
                 "reflection_result": reflection_result
             }
             
-            # 분석 완료 신호
+            # 분석 완료 신호 (최종 결과 포함)
             yield {
                 "type": "streaming_complete",
-                "message": "재무 분석 및 검증 완료!"
+                "analysis_data": analysis_data,
+                "reflection_result": reflection_result
             }
 
         except Exception as e:

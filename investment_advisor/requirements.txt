@@ -4,7 +4,7 @@
 # AI 에이전트 프레임워크
 strands-agents
 
-# AWS Bedrock AgentCore Runtime
+# AWS Bedrock AgentCore (Runtime + Memory)
 bedrock-agentcore
 
 # AWS SDK

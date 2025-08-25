@@ -21,13 +21,6 @@ from strands import Agent
 from strands.models.bedrock import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-# shared 모듈 경로 추가
-shared_path = Path(__file__).parent.parent / "shared"
-sys.path.insert(0, str(shared_path))
-
-# 공통 JSON 유틸리티 import
-from json_utils import extract_json_from_text
-
 # ================================
 # 전역 설정
 # ================================

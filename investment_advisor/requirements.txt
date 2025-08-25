@@ -1,15 +1,11 @@
-# Investment Advisor Orchestrator 의존성
+# requirements.txt
+# Investment Advisor AgentCore Runtime 의존성
 
-# Strands Agents SDK
-strands>=0.1.0
+# AI 에이전트 프레임워크
+strands-agents
 
-# AWS Bedrock AgentCore
-bedrock-agentcore>=0.1.0
+# AWS Bedrock AgentCore Runtime
+bedrock-agentcore
 
 # AWS SDK
-boto3>=1.34.0
-
-# Streamlit 앱용 (로컬 실행)
-streamlit>=1.28.0
-plotly>=5.17.0
-pandas>=2.0.0
+boto3

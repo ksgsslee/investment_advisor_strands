@@ -1,393 +1,279 @@
 """
 deploy.py
-Investment Advisor Orchestrator 배포 스크립트
+Investment Advisor AgentCore Runtime 배포 스크립트
 
-Agents as Tools 패턴을 활용한 투자 자문 오케스트레이터를 AWS AgentCore Runtime에 배포합니다.
-기존에 배포된 전문 에이전트들(Financial Analyst, Portfolio Architect, Risk Manager)의 
-ARN을 환경변수로 설정하여 도구로 활용합니다.
+Graph 기반 통합 투자 자문 시스템을 AWS 서버리스 환경에 배포합니다.
+3개의 독립적인 에이전트를 순차 호출하고 Memory에 결과를 저장하는 시스템입니다.
+
+주요 기능:
+- IAM 역할 자동 생성 및 권한 설정
+- Docker 이미지 빌드 및 ECR 배포
+- AgentCore Memory 설정
+- 배포 상태 실시간 모니터링
 """
 
-import json
-import os
 import sys
-import boto3
+import os
 import time
+import json
 from pathlib import Path
+from bedrock_agentcore_starter_toolkit import Runtime
+
+# shared 모듈 경로 추가
+shared_path = Path(__file__).parent.parent / "shared"
+sys.path.insert(0, str(shared_path))
+
+# 공통 유틸리티 import
+from runtime_utils import create_agentcore_runtime_role
 
 # ================================
-# 설정 및 초기화
+# 설정 상수
 # ================================
 
-CURRENT_DIR = Path(__file__).parent.resolve()
-PROJECT_ROOT = CURRENT_DIR.parent
-REGION = "us-west-2"
+class Config:
+    """AgentCore Runtime 배포 설정 상수"""
+    AGENT_NAME = "investment_advisor"
+    ENTRYPOINT_FILE = "investment_advisor.py"
+    REQUIREMENTS_FILE = "requirements.txt"
+    MAX_DEPLOY_MINUTES = 15
+    STATUS_CHECK_INTERVAL = 30
+    REGION = "us-west-2"
 
-# AWS 클라이언트 초기화
-agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
-iam_client = boto3.client('iam', region_name=REGION)
+# ================================
+# 유틸리티 함수들
+# ================================
 
-def load_specialist_agents_info():
+def validate_prerequisites():
     """
-    기존에 배포된 전문 에이전트들의 배포 정보를 로드
+    배포 전 필수 조건 검증
     
     Returns:
-        dict: 전문 에이전트들의 ARN 정보
+        bool: 모든 조건이 충족되면 True
+        
+    Raises:
+        FileNotFoundError: 필수 파일이나 에이전트 배포 정보가 없을 때
     """
-    agents_info = {}
+    print("🔍 배포 전 필수 조건 검증 중...")
     
-    # Financial Analyst 정보 로드
-    financial_analyst_info_file = PROJECT_ROOT / "financial_analyst" / "deployment_info.json"
-    if financial_analyst_info_file.exists():
-        with open(financial_analyst_info_file, 'r') as f:
-            info = json.load(f)
-            agents_info["FINANCIAL_ANALYST_ARN"] = info["agent_arn"]
-            print(f"✅ Financial Analyst ARN: {info['agent_arn']}")
-    else:
-        print("❌ Financial Analyst 배포 정보를 찾을 수 없습니다.")
-        return None
+    current_dir = Path(__file__).parent
+    base_path = current_dir.parent
     
-    # Portfolio Architect 정보 로드  
-    portfolio_architect_info_file = PROJECT_ROOT / "portfolio_architect" / "deployment_info.json"
-    if portfolio_architect_info_file.exists():
-        with open(portfolio_architect_info_file, 'r') as f:
-            info = json.load(f)
-            agents_info["PORTFOLIO_ARCHITECT_ARN"] = info["agent_arn"]
-            print(f"✅ Portfolio Architect ARN: {info['agent_arn']}")
-    else:
-        print("❌ Portfolio Architect 배포 정보를 찾을 수 없습니다.")
-        return None
+    # 필수 파일 확인
+    required_files = [Config.ENTRYPOINT_FILE, Config.REQUIREMENTS_FILE]
+    missing_files = [f for f in required_files if not (current_dir / f).exists()]
     
-    # Risk Manager 정보 로드
-    risk_manager_info_file = PROJECT_ROOT / "risk_manager" / "deployment_info.json"  
-    if risk_manager_info_file.exists():
-        with open(risk_manager_info_file, 'r') as f:
-            info = json.load(f)
-            agents_info["RISK_MANAGER_ARN"] = info["agent_arn"]
-            print(f"✅ Risk Manager ARN: {info['agent_arn']}")
-    else:
-        print("❌ Risk Manager 배포 정보를 찾을 수 없습니다.")
-        return None
+    if missing_files:
+        raise FileNotFoundError(f"필수 파일 누락: {', '.join(missing_files)}")
     
-    return agents_info
+    # 각 에이전트 배포 정보 확인
+    required_agents = [
+        ("Financial Analyst", base_path / "financial_analyst" / "deployment_info.json"),
+        ("Portfolio Architect", base_path / "portfolio_architect" / "deployment_info.json"),
+        ("Risk Manager", base_path / "risk_manager" / "deployment_info.json")
+    ]
+    
+    missing_agents = []
+    for agent_name, info_file in required_agents:
+        if not info_file.exists():
+            missing_agents.append(agent_name)
+    
+    if missing_agents:
+        raise FileNotFoundError(
+            f"다음 에이전트들이 먼저 배포되어야 합니다: {', '.join(missing_agents)}\n"
+            "각 에이전트 폴더에서 'python deploy.py'를 실행하세요."
+        )
+    
+    print("✅ 필수 조건 확인 완료")
+    return True
 
 def create_iam_role():
     """
-    Investment Advisor Orchestrator용 IAM 역할 생성
+    AgentCore Runtime용 IAM 역할 생성
     
     Returns:
         str: 생성된 IAM 역할 ARN
     """
-    role_name = "InvestmentAdvisorOrchestratorRole"
+    print("🔐 IAM 역할 생성 중...")
     
-    # 신뢰 정책 (AgentCore가 이 역할을 assume할 수 있도록)
-    trust_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {
-                    "Service": "bedrock-agentcore.amazonaws.com"
-                },
-                "Action": "sts:AssumeRole"
-            }
-        ]
-    }
+    # AgentCore Runtime용 IAM 역할 생성 (Memory 권한 포함)
+    role_info = create_agentcore_runtime_role(Config.AGENT_NAME, Config.REGION)
+    role_arn = role_info['Role']['Arn']
     
-    # 권한 정책 (다른 AgentCore Runtime 호출 권한)
-    permissions_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
-                ],
-                "Resource": [
-                    f"arn:aws:bedrock:{REGION}::foundation-model/*"
-                ]
-            },
-            {
-                "Effect": "Allow", 
-                "Action": [
-                    "bedrock-agentcore:InvokeAgentRuntime"
-                ],
-                "Resource": "*"
-            },
-            {
-                "Effect": "Allow",
-                "Action": [
-                    "logs:CreateLogGroup",
-                    "logs:CreateLogStream", 
-                    "logs:PutLogEvents"
-                ],
-                "Resource": f"arn:aws:logs:{REGION}:*:*"
-            }
-        ]
-    }
-    
-    try:
-        # IAM 역할 생성
-        print(f"🔐 IAM 역할 생성 중: {role_name}")
-        
-        response = iam_client.create_role(
-            RoleName=role_name,
-            AssumeRolePolicyDocument=json.dumps(trust_policy),
-            Description="Investment Advisor Orchestrator를 위한 IAM 역할"
-        )
-        
-        role_arn = response['Role']['Arn']
-        print(f"✅ IAM 역할 생성 완료: {role_arn}")
-        
-        # 권한 정책 연결
-        policy_name = "InvestmentAdvisorOrchestratorPolicy"
-        
-        iam_client.put_role_policy(
-            RoleName=role_name,
-            PolicyName=policy_name,
-            PolicyDocument=json.dumps(permissions_policy)
-        )
-        
-        print(f"✅ 권한 정책 연결 완료: {policy_name}")
-        
-        # IAM 역할 전파 대기
-        print("⏳ IAM 역할 전파 대기 중...")
-        time.sleep(10)
-        
-        return role_arn
-        
-    except iam_client.exceptions.EntityAlreadyExistsException:
-        print(f"ℹ️ IAM 역할이 이미 존재합니다: {role_name}")
-        response = iam_client.get_role(RoleName=role_name)
-        return response['Role']['Arn']
+    print(f"✅ IAM 역할 준비 완료: {role_arn}")
+    return role_arn
 
-def create_bedrock_agentcore_yaml(agents_info):
+def configure_runtime(role_arn):
     """
-    .bedrock_agentcore.yaml 설정 파일 생성
+    AgentCore Runtime 구성
     
     Args:
-        agents_info (dict): 전문 에이전트들의 ARN 정보
-    """
-    yaml_content = f"""# Investment Advisor Orchestrator AgentCore 설정
-# Agents as Tools 패턴을 활용한 투자 자문 오케스트레이터
-
-agent_name: investment-advisor-orchestrator
-description: "AI 투자 자문 오케스트레이터 - 전문 에이전트들을 조율하여 완전한 투자 자문 서비스 제공"
-
-# 런타임 설정
-runtime:
-  type: python
-  version: "3.9"
-  entry_point: investment_advisor.py
-  handler: investment_advisor_orchestrator
-
-# 환경변수 (전문 에이전트 ARN들)
-environment:
-  FINANCIAL_ANALYST_ARN: "{agents_info['FINANCIAL_ANALYST_ARN']}"
-  PORTFOLIO_ARCHITECT_ARN: "{agents_info['PORTFOLIO_ARCHITECT_ARN']}"
-  RISK_MANAGER_ARN: "{agents_info['RISK_MANAGER_ARN']}"
-  AWS_REGION: "{REGION}"
-
-# 리소스 설정
-resources:
-  memory: 1024
-  timeout: 300
-
-# 로깅 설정
-logging:
-  level: INFO
-  
-# 태그
-tags:
-  Project: "Investment Advisor System"
-  Pattern: "Agents as Tools"
-  Component: "Orchestrator"
-"""
-    
-    yaml_file = CURRENT_DIR / ".bedrock_agentcore.yaml"
-    with open(yaml_file, 'w') as f:
-        f.write(yaml_content)
-    
-    print(f"✅ AgentCore 설정 파일 생성: {yaml_file}")
-
-def create_dockerfile():
-    """Dockerfile 생성"""
-    dockerfile_content = """# Investment Advisor Orchestrator Dockerfile
-FROM public.ecr.aws/lambda/python:3.9
-
-# 작업 디렉토리 설정
-WORKDIR ${LAMBDA_TASK_ROOT}
-
-# 의존성 파일 복사 및 설치
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 소스 코드 복사
-COPY investment_advisor.py .
-
-# 엔트리포인트 설정
-CMD ["investment_advisor.investment_advisor_orchestrator"]
-"""
-    
-    dockerfile_path = CURRENT_DIR / "Dockerfile"
-    with open(dockerfile_path, 'w') as f:
-        f.write(dockerfile_content)
-    
-    print(f"✅ Dockerfile 생성: {dockerfile_path}")
-
-def create_requirements_txt():
-    """requirements.txt 생성"""
-    requirements_content = """# Investment Advisor Orchestrator 의존성
-strands>=0.1.0
-bedrock-agentcore>=0.1.0
-boto3>=1.34.0
-"""
-    
-    requirements_path = CURRENT_DIR / "requirements.txt"
-    with open(requirements_path, 'w') as f:
-        f.write(requirements_content)
-    
-    print(f"✅ requirements.txt 생성: {requirements_path}")
-
-def deploy_agent_runtime(role_arn):
-    """
-    Investment Advisor Orchestrator를 AgentCore Runtime에 배포
-    
-    Args:
-        role_arn (str): IAM 역할 ARN
+        role_arn (str): Runtime 실행용 IAM 역할 ARN
         
     Returns:
-        str: 배포된 Agent ARN
+        Runtime: 구성된 Runtime 객체
     """
-    agent_name = "investment-advisor-orchestrator"
+    print("🔧 Runtime 구성 중...")
+    current_dir = Path(__file__).parent
     
-    print(f"🚀 AgentCore Runtime 배포 시작: {agent_name}")
+    runtime = Runtime()
+    runtime.configure(
+        entrypoint=str(current_dir / Config.ENTRYPOINT_FILE),
+        execution_role=role_arn,
+        auto_create_ecr=True,
+        requirements_file=str(current_dir / Config.REQUIREMENTS_FILE),
+        region=Config.REGION,
+        agent_name=Config.AGENT_NAME
+    )
     
-    try:
-        # AgentCore Runtime 생성
-        response = agentcore_client.create_agent_runtime(
-            agentRuntimeName=agent_name,
-            description="AI 투자 자문 오케스트레이터 - Agents as Tools 패턴 구현",
-            runtimeRoleArn=role_arn,
-            runtimeConfig={
-                "sourceLocation": str(CURRENT_DIR),
-                "environmentVariables": {
-                    "AWS_REGION": REGION
-                }
-            }
-        )
-        
-        agent_arn = response['agentRuntimeArn']
-        print(f"✅ AgentCore Runtime 생성 완료: {agent_arn}")
-        
-        # 배포 상태 확인
-        print("⏳ 배포 상태 확인 중...")
-        max_attempts = 30
-        
-        for attempt in range(max_attempts):
-            try:
-                status_response = agentcore_client.get_agent_runtime(
-                    agentRuntimeArn=agent_arn
-                )
-                
-                status = status_response['agentRuntime']['status']
-                print(f"📊 배포 상태 ({attempt + 1}/{max_attempts}): {status}")
-                
-                if status == 'ACTIVE':
-                    print("✅ 배포 완료!")
-                    break
-                elif status in ['FAILED', 'STOPPED']:
-                    print(f"❌ 배포 실패: {status}")
-                    return None
-                    
-                time.sleep(10)
-                
-            except Exception as e:
-                print(f"⚠️ 상태 확인 중 오류: {e}")
-                time.sleep(5)
-        else:
-            print("⏰ 배포 시간 초과")
-            return None
-        
-        return agent_arn
-        
-    except Exception as e:
-        print(f"❌ AgentCore Runtime 배포 실패: {e}")
-        return None
+    print("✅ Runtime 구성 완료")
+    return runtime
 
-def save_deployment_info(agent_arn, agents_info):
+def deploy_and_wait(runtime):
     """
-    배포 정보를 JSON 파일로 저장
+    Runtime 배포 및 상태 대기
+    
+    Args:
+        runtime (Runtime): 구성된 Runtime 객체
+        
+    Returns:
+        tuple: (성공 여부, Agent ARN, 최종 상태)
+    """
+    print("🚀 Runtime 배포 시작...")
+    print("   - Docker 이미지 빌드")
+    print("   - ECR 업로드")
+    print("   - 서비스 생성/업데이트")
+    
+    # 배포 시작
+    launch_result = runtime.launch(auto_update_on_conflict=True)
+    
+    # 배포 완료 상태 목록
+    end_statuses = ['READY', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED']
+    max_checks = (Config.MAX_DEPLOY_MINUTES * 60) // Config.STATUS_CHECK_INTERVAL
+    
+    print(f"⏳ 배포 상태 모니터링 중... (최대 {Config.MAX_DEPLOY_MINUTES}분)")
+    
+    for i in range(max_checks):
+        try:
+            status = runtime.status().endpoint['status']
+            elapsed_time = (i + 1) * Config.STATUS_CHECK_INTERVAL
+            print(f"📊 상태: {status} ({elapsed_time//60}분 {elapsed_time%60}초 경과)")
+            
+            if status in end_statuses:
+                break
+                
+        except Exception as e:
+            print(f"⚠️ 상태 확인 오류: {str(e)}")
+            
+        time.sleep(Config.STATUS_CHECK_INTERVAL)
+    
+    success = status == 'READY'
+    agent_arn = launch_result.agent_arn if success else ""
+    
+    if success:
+        print("✅ Runtime 배포 완료!")
+    else:
+        print(f"❌ Runtime 배포 실패: {status}")
+    
+    return success, agent_arn, status
+
+def save_deployment_info(agent_arn):
+    """
+    Runtime 배포 정보 저장
     
     Args:
         agent_arn (str): 배포된 Agent ARN
-        agents_info (dict): 전문 에이전트들의 ARN 정보
+        
+    Returns:
+        str: 저장된 JSON 파일 경로
     """
+    print("📄 배포 정보 저장 중...")
+    
+    current_dir = Path(__file__).parent
     deployment_info = {
+        "agent_name": Config.AGENT_NAME,
         "agent_arn": agent_arn,
-        "region": REGION,
-        "deployment_time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "specialist_agents": agents_info,
-        "pattern": "Agents as Tools",
-        "description": "AI 투자 자문 오케스트레이터"
+        "region": Config.REGION,
+        "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "description": "Graph 기반 통합 투자 자문 시스템 (Memory 포함)"
     }
     
-    info_file = CURRENT_DIR / "deployment_info.json"
+    info_file = current_dir / "deployment_info.json"
     with open(info_file, 'w') as f:
-        json.dump(deployment_info, f, indent=2, ensure_ascii=False)
+        json.dump(deployment_info, f, indent=2)
     
     print(f"✅ 배포 정보 저장: {info_file}")
+    return str(info_file)
+
+# ================================
+# 메인 실행 함수
+# ================================
 
 def main():
-    """메인 배포 함수"""
-    print("🎯 Investment Advisor Orchestrator 배포 시작")
-    print("=" * 60)
+    """
+    메인 배포 함수
     
+    Investment Advisor Runtime의 전체 배포 프로세스를 관리합니다.
+    Graph 패턴으로 3개 에이전트를 순차 호출하고 Memory에 결과를 저장하는
+    통합 투자 자문 시스템을 AWS 서버리스 환경에 배포합니다.
+    
+    Returns:
+        int: 성공 시 0, 실패 시 1
+    """
     try:
-        # 1. 전문 에이전트들의 배포 정보 로드
-        print("\n📋 1단계: 전문 에이전트 정보 로드")
-        agents_info = load_specialist_agents_info()
-        if not agents_info:
-            print("❌ 전문 에이전트들이 먼저 배포되어야 합니다.")
-            print("다음 순서로 배포를 진행하세요:")
-            print("1. cd financial_analyst && python deploy.py")
-            print("2. cd portfolio_architect && python deploy.py") 
-            print("3. cd risk_manager && python deploy.py")
-            return
+        print("=" * 70)
+        print("🎯 Investment Advisor Runtime 배포")
+        print(f"📍 Agent명: {Config.AGENT_NAME}")
+        print(f"🌍 리전: {Config.REGION}")
+        print(f"⏱️ 최대 대기시간: {Config.MAX_DEPLOY_MINUTES}분")
+        print("📋 주요 기능:")
+        print("   - Graph 패턴으로 3개 에이전트 순차 실행")
+        print("   - 통합 투자 리포트 생성")
+        print("   - AgentCore Memory에 상담 히스토리 저장")
+        print("=" * 70)
+        
+        # 1. 필수 조건 검증
+        validate_prerequisites()
         
         # 2. IAM 역할 생성
-        print("\n🔐 2단계: IAM 역할 생성")
         role_arn = create_iam_role()
         
-        # 3. 설정 파일들 생성
-        print("\n📝 3단계: 설정 파일 생성")
-        create_bedrock_agentcore_yaml(agents_info)
-        create_dockerfile()
-        create_requirements_txt()
+        # 3. Runtime 구성
+        runtime = configure_runtime(role_arn)
         
-        # 4. AgentCore Runtime 배포
-        print("\n🚀 4단계: AgentCore Runtime 배포")
-        agent_arn = deploy_agent_runtime(role_arn)
+        # 4. 배포 및 대기
+        success, agent_arn, status = deploy_and_wait(runtime)
         
-        if not agent_arn:
-            print("❌ 배포 실패")
-            return
-        
-        # 5. 배포 정보 저장
-        print("\n💾 5단계: 배포 정보 저장")
-        save_deployment_info(agent_arn, agents_info)
-        
-        print("\n" + "=" * 60)
-        print("🎉 Investment Advisor Orchestrator 배포 완료!")
-        print(f"📍 Agent ARN: {agent_arn}")
-        print(f"🌍 Region: {REGION}")
-        print("\n📱 다음 단계:")
-        print("   streamlit run app.py")
+        if success:
+            # 5. 배포 정보 저장
+            info_file = save_deployment_info(agent_arn)
+            
+            print("=" * 70)
+            print("🎉 배포 성공!")
+            print(f"🔗 Agent ARN: {agent_arn}")
+            print(f"📄 배포 정보: {info_file}")
+            print("=" * 70)
+            
+            print("\n📋 다음 단계:")
+            print("1. Streamlit 앱 실행: streamlit run app.py")
+            print("2. 투자 상담 히스토리 확인")
+            print("3. Graph 기반 통합 분석 테스트")
+            
+            return 0
+        else:
+            print("=" * 70)
+            print(f"❌ 배포 실패: {status}")
+            print("💡 문제 해결 방법:")
+            print("1. 모든 에이전트가 배포되었는지 확인")
+            print("2. IAM 권한 확인")
+            print("3. 로그 확인 후 재시도")
+            print("=" * 70)
+            return 1
         
     except Exception as e:
-        print(f"\n❌ 배포 중 오류 발생: {e}")
-        import traceback
-        traceback.print_exc()
+        print("=" * 70)
+        print(f"❌ 배포 오류: {str(e)}")
+        print("=" * 70)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

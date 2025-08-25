@@ -1,493 +1,383 @@
 """
 investment_advisor.py
-Investment Advisor Orchestrator - AI 투자 자문 오케스트레이터
+Strands Agents as Tools 기반 Investment Advisor (간단 버전)
 
-Agents as Tools 패턴을 활용하여 전문 에이전트들을 조율하는 메인 오케스트레이터입니다.
-사용자의 복합적인 투자 자문 요청을 분석하여 적절한 전문 에이전트에게 위임하고,
-결과를 종합하여 완전한 투자 자문 서비스를 제공합니다.
-
-전문 에이전트들:
-- Financial Analyst: 개인 재무 분석 및 위험 성향 평가 (Reflection 패턴)
-- Portfolio Architect: 실시간 데이터 기반 포트폴리오 설계 (Tool Use 패턴)  
-- Risk Manager: 뉴스 기반 리스크 분석 및 시나리오 플래닝 (Planning 패턴)
+배포된 3개 에이전트를 @tool로 래핑하고 오케스트레이터가 조정하는 간단한 구조
 """
 
 import json
-import os
-import sys
+import time
 import boto3
 from pathlib import Path
-from typing import Dict, Any, Optional
+from datetime import datetime
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
-from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 # ================================
-# 전역 설정
+# 설정
 # ================================
 
-app = BedrockAgentCoreApp()
+REGION = "us-west-2"
 
-class Config:
-    """Investment Advisor Orchestrator 설정 상수"""
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-    TEMPERATURE = 0.2  # 조율 역할에 적합한 균형잡힌 설정
-    MAX_TOKENS = 4000  # 종합적인 분석을 위한 충분한 토큰
+# 전역 변수
+agentcore_client = None
+agent_arns = {}
+memory_storage = {}
 
 # ================================
-# 전문 에이전트 도구들 (Agents as Tools)
+# 간단한 유틸리티 함수들
 # ================================
 
-@tool
-def financial_analyst_tool(user_financial_data: dict) -> str:
-    """
-    개인 재무 상황을 분석하여 투자 성향과 목표 수익률을 계산하는 전문 에이전트
-    
-    Reflection 패턴을 활용하여 분석 결과의 정확성과 신뢰성을 보장합니다.
-    나이, 투자 경험, 자산 규모, 목표 금액을 종합적으로 분석하여 
-    5단계 위험 성향 평가와 필요 연간 수익률을 계산합니다.
-    
-    Args:
-        user_financial_data (dict): 사용자 재무 정보
-            - total_investable_amount: 총 투자 가능 금액 (원)
-            - age: 나이
-            - stock_investment_experience_years: 주식 투자 경험 년수
-            - target_amount: 1년 후 목표 금액 (원)
-    
-    Returns:
-        str: JSON 형태의 재무 분석 결과
-            - risk_profile: 위험 성향 (매우보수적~매우공격적)
-            - risk_profile_reason: 위험 성향 평가 근거
-            - required_annual_return_rate: 필요 연간 수익률 (%)
-            - return_rate_reason: 수익률 계산 과정 및 해석
-    """
+def extract_json_from_streaming(response_stream):
+    """스트리밍 응답에서 JSON 결과 추출 (간단 버전)"""
     try:
-        # 환경변수에서 Financial Analyst Agent ARN 가져오기
-        financial_analyst_arn = os.getenv("FINANCIAL_ANALYST_ARN")
-        if not financial_analyst_arn:
-            return json.dumps({"error": "Financial Analyst Agent ARN이 설정되지 않았습니다."})
+        all_text = ""
         
-        # AgentCore 클라이언트 생성
-        region = os.getenv("AWS_REGION", "us-west-2")
-        agentcore_client = boto3.client('bedrock-agentcore', region_name=region)
-        
-        print(f"📊 Financial Analyst 호출: {user_financial_data}")
-        
-        # Financial Analyst Agent 호출
-        response = agentcore_client.invoke_agent_runtime(
-            agentRuntimeArn=financial_analyst_arn,
-            qualifier="DEFAULT",
-            payload=json.dumps({"input_data": user_financial_data})
-        )
-        
-        # 스트리밍 응답에서 분석 결과 추출
-        analysis_result = None
-        reflection_result = None
-        
-        for line in response["response"].iter_lines(chunk_size=1):
+        for line in response_stream.iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
                     event_data = json.loads(line.decode("utf-8")[6:])
                     
-                    if event_data.get("type") == "data":
-                        if "analysis_data" in event_data:
-                            analysis_result = event_data["analysis_data"]
-                        elif "reflection_result" in event_data:
-                            reflection_result = event_data["reflection_result"]
+                    # text_chunk에서 텍스트 누적
+                    if event_data.get("type") == "text_chunk":
+                        all_text += event_data.get("data", "")
+                    
+                    # streaming_complete에서 최종 결과 시도
+                    elif event_data.get("type") == "streaming_complete":
+                        # 여러 필드에서 결과 찾기
+                        for field in ["analysis_data", "portfolio_result", "risk_result"]:
+                            if field in event_data:
+                                return json.loads(event_data[field])
+                        
+                        # 누적된 텍스트에서 JSON 추출
+                        if all_text:
+                            return extract_json_from_text(all_text)
                             
                 except json.JSONDecodeError:
                     continue
         
-        # 검증된 분석 결과 반환
-        if analysis_result and reflection_result and reflection_result.strip().lower().startswith("yes"):
-            return analysis_result
-        else:
-            return json.dumps({
-                "error": "재무 분석 검증 실패",
-                "analysis_result": analysis_result,
-                "reflection_result": reflection_result
-            })
+        # 마지막으로 누적된 텍스트에서 JSON 시도
+        if all_text:
+            return extract_json_from_text(all_text)
             
+        return None
+        
     except Exception as e:
-        return json.dumps({"error": f"Financial Analyst 호출 오류: {str(e)}"})
+        print(f"스트리밍 처리 오류: {e}")
+        return None
 
-
-@tool  
-def portfolio_architect_tool(financial_analysis: dict) -> str:
-    """
-    실시간 시장 데이터를 분석하여 맞춤형 투자 포트폴리오를 설계하는 전문 에이전트
-    
-    Tool Use 패턴을 활용하여 MCP Server를 통해 30개 ETF의 실시간 가격 데이터를 조회하고,
-    재무 분석 결과를 바탕으로 최적의 3종목 포트폴리오를 구성합니다.
-    
-    Args:
-        financial_analysis (dict): Financial Analyst의 분석 결과
-            - risk_profile: 위험 성향
-            - risk_profile_reason: 위험 성향 평가 근거  
-            - required_annual_return_rate: 필요 연간 수익률
-            - return_rate_reason: 수익률 계산 근거
-    
-    Returns:
-        str: JSON 형태의 포트폴리오 설계 결과
-            - portfolio_allocation: 자산별 배분 비율 (예: {"QQQ": 50, "SPY": 30, "GLD": 20})
-            - strategy: 투자 전략 설명
-            - reason: 포트폴리오 구성 근거
-    """
+def extract_json_from_text(text):
+    """텍스트에서 JSON 추출 (간단 버전)"""
+    if not text:
+        return None
+        
     try:
-        # 환경변수에서 Portfolio Architect Agent ARN 가져오기
-        portfolio_architect_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN")
-        if not portfolio_architect_arn:
-            return json.dumps({"error": "Portfolio Architect Agent ARN이 설정되지 않았습니다."})
+        # JSON 블록 찾기
+        start = text.find('{')
+        end = text.rfind('}') + 1
         
-        # AgentCore 클라이언트 생성
-        region = os.getenv("AWS_REGION", "us-west-2")
-        agentcore_client = boto3.client('bedrock-agentcore', region_name=region)
-        
-        print(f"🤖 Portfolio Architect 호출: {financial_analysis}")
-        
-        # Portfolio Architect Agent 호출
-        response = agentcore_client.invoke_agent_runtime(
-            agentRuntimeArn=portfolio_architect_arn,
-            qualifier="DEFAULT", 
-            payload=json.dumps({"financial_analysis": financial_analysis})
-        )
-        
-        # 스트리밍 응답에서 포트폴리오 결과 추출
-        portfolio_result = ""
-        
-        for line in response["response"].iter_lines(chunk_size=1):
-            if line and line.decode("utf-8").startswith("data: "):
-                try:
-                    event_data = json.loads(line.decode("utf-8")[6:])
-                    
-                    if event_data.get("type") == "text_chunk":
-                        portfolio_result += event_data.get("data", "")
-                        
-                except json.JSONDecodeError:
-                    continue
-        
-        # JSON 형태의 포트폴리오 결과 추출
-        start_idx = portfolio_result.find('{')
-        end_idx = portfolio_result.rfind('}') + 1
-        
-        if start_idx != -1 and end_idx != -1:
-            json_str = portfolio_result[start_idx:end_idx]
-            # JSON 유효성 검증
-            json.loads(json_str)  # 파싱 테스트
-            return json_str
-        else:
-            return json.dumps({"error": "포트폴리오 JSON 결과를 찾을 수 없습니다.", "raw_result": portfolio_result})
-            
-    except Exception as e:
-        return json.dumps({"error": f"Portfolio Architect 호출 오류: {str(e)}"})
+        if start != -1 and end != -1:
+            json_str = text[start:end]
+            return json.loads(json_str)
+    except:
+        pass
+    
+    return None
 
+def initialize_system():
+    """시스템 초기화"""
+    global agentcore_client, agent_arns
+    
+    if agentcore_client is None:
+        agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
+        
+        # ARN 로드
+        base_path = Path(__file__).parent.parent
+        
+        # Financial Analyst
+        with open(base_path / "financial_analyst" / "deployment_info.json") as f:
+            agent_arns["financial_analyst"] = json.load(f)["agent_arn"]
+        
+        # Portfolio Architect
+        with open(base_path / "portfolio_architect" / "deployment_info.json") as f:
+            agent_arns["portfolio_architect"] = json.load(f)["agent_arn"]
+        
+        # Risk Manager
+        with open(base_path / "risk_manager" / "deployment_info.json") as f:
+            agent_arns["risk_manager"] = json.load(f)["agent_arn"]
+        
+        print("✅ 모든 에이전트 ARN 로드 완료")
+
+# ================================
+# @tool 데코레이터로 에이전트들을 도구로 래핑
+# ================================
 
 @tool
-def risk_manager_tool(portfolio_data: dict) -> str:
-    """
-    포트폴리오 제안을 바탕으로 뉴스 기반 리스크 분석 및 시나리오 플래닝을 수행하는 전문 에이전트
-    
-    Planning 패턴을 활용하여 체계적으로 데이터를 수집하고 분석하여,
-    2개의 핵심 경제 시나리오를 도출하고 각 시나리오별 포트폴리오 조정 전략을 제시합니다.
-    
-    Args:
-        portfolio_data (dict): Portfolio Architect의 포트폴리오 설계 결과
-            - portfolio_allocation: 자산별 배분 비율
-            - strategy: 투자 전략 설명
-            - reason: 포트폴리오 구성 근거
-    
-    Returns:
-        str: JSON 형태의 리스크 분석 및 시나리오 플래닝 결과
-            - scenario1: 첫 번째 경제 시나리오 및 조정 전략
-            - scenario2: 두 번째 경제 시나리오 및 조정 전략
-            각 시나리오는 name, description, allocation_management, reason 포함
-    """
+def financial_analyst_tool(user_input_json: str, session_id: str) -> str:
+    """재무 분석 전문가 - 위험 성향과 목표 수익률 계산"""
     try:
-        # 환경변수에서 Risk Manager Agent ARN 가져오기
-        risk_manager_arn = os.getenv("RISK_MANAGER_ARN")
-        if not risk_manager_arn:
-            return json.dumps({"error": "Risk Manager Agent ARN이 설정되지 않았습니다."})
+        initialize_system()
+        print("🔍 Financial Analyst 호출 중...")
         
-        # AgentCore 클라이언트 생성
-        region = os.getenv("AWS_REGION", "us-west-2")
-        agentcore_client = boto3.client('bedrock-agentcore', region_name=region)
+        user_input = json.loads(user_input_json)
         
-        print(f"⚠️ Risk Manager 호출: {portfolio_data}")
-        
-        # Risk Manager Agent 호출
         response = agentcore_client.invoke_agent_runtime(
-            agentRuntimeArn=risk_manager_arn,
+            agentRuntimeArn=agent_arns["financial_analyst"],
             qualifier="DEFAULT",
-            payload=json.dumps({"portfolio_data": portfolio_data})
+            payload=json.dumps({"input_data": user_input})
         )
         
-        # 스트리밍 응답에서 리스크 분석 결과 추출
-        risk_analysis_result = ""
+        result = extract_json_from_streaming(response["response"])
         
-        for line in response["response"].iter_lines(chunk_size=1):
-            if line and line.decode("utf-8").startswith("data: "):
-                try:
-                    event_data = json.loads(line.decode("utf-8")[6:])
-                    
-                    if event_data.get("type") == "text_chunk":
-                        risk_analysis_result += event_data.get("data", "")
-                        
-                except json.JSONDecodeError:
-                    continue
-        
-        # JSON 형태의 리스크 분석 결과 추출
-        start_idx = risk_analysis_result.find('{')
-        end_idx = risk_analysis_result.rfind('}') + 1
-        
-        if start_idx != -1 and end_idx != -1:
-            json_str = risk_analysis_result[start_idx:end_idx]
-            # JSON 유효성 검증
-            json.loads(json_str)  # 파싱 테스트
-            return json_str
+        if result:
+            # 메모리에 저장
+            if session_id not in memory_storage:
+                memory_storage[session_id] = {}
+            memory_storage[session_id]["financial_analysis"] = result
+            
+            print("✅ Financial Analyst 완료!")
+            return json.dumps(result, ensure_ascii=False)
         else:
-            return json.dumps({"error": "리스크 분석 JSON 결과를 찾을 수 없습니다.", "raw_result": risk_analysis_result})
+            print("❌ 결과를 받지 못했습니다")
+            return json.dumps({"error": "결과를 받지 못했습니다"}, ensure_ascii=False)
             
     except Exception as e:
-        return json.dumps({"error": f"Risk Manager 호출 오류: {str(e)}"})
+        print(f"❌ Financial Analyst 실패: {e}")
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+@tool
+def portfolio_architect_tool(session_id: str) -> str:
+    """포트폴리오 설계 전문가 - 맞춤형 투자 포트폴리오 설계"""
+    try:
+        initialize_system()
+        print("📊 Portfolio Architect 호출 중...")
+        
+        # 메모리에서 재무 분석 결과 가져오기
+        if session_id not in memory_storage or "financial_analysis" not in memory_storage[session_id]:
+            print("❌ 재무 분석 결과가 없습니다")
+            return json.dumps({"error": "재무 분석 결과가 없습니다"}, ensure_ascii=False)
+        
+        financial_result = memory_storage[session_id]["financial_analysis"]
+        
+        response = agentcore_client.invoke_agent_runtime(
+            agentRuntimeArn=agent_arns["portfolio_architect"],
+            qualifier="DEFAULT",
+            payload=json.dumps({"financial_analysis": financial_result})
+        )
+        
+        result = extract_json_from_streaming(response["response"])
+        
+        if result:
+            # 메모리에 저장
+            memory_storage[session_id]["portfolio_design"] = result
+            
+            print("✅ Portfolio Architect 완료!")
+            return json.dumps(result, ensure_ascii=False)
+        else:
+            print("❌ 결과를 받지 못했습니다")
+            return json.dumps({"error": "결과를 받지 못했습니다"}, ensure_ascii=False)
+            
+    except Exception as e:
+        print(f"❌ Portfolio Architect 실패: {e}")
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+@tool
+def risk_manager_tool(session_id: str) -> str:
+    """리스크 관리 전문가 - 시나리오별 리스크 분석 및 조정 전략"""
+    try:
+        initialize_system()
+        print("⚠️ Risk Manager 호출 중...")
+        
+        # 메모리에서 포트폴리오 결과 가져오기
+        if session_id not in memory_storage or "portfolio_design" not in memory_storage[session_id]:
+            print("❌ 포트폴리오 설계 결과가 없습니다")
+            return json.dumps({"error": "포트폴리오 설계 결과가 없습니다"}, ensure_ascii=False)
+        
+        portfolio_result = memory_storage[session_id]["portfolio_design"]
+        
+        response = agentcore_client.invoke_agent_runtime(
+            agentRuntimeArn=agent_arns["risk_manager"],
+            qualifier="DEFAULT",
+            payload=json.dumps({"portfolio_data": portfolio_result})
+        )
+        
+        result = extract_json_from_streaming(response["response"])
+        
+        if result:
+            # 메모리에 저장
+            memory_storage[session_id]["risk_analysis"] = result
+            
+            print("✅ Risk Manager 완료!")
+            return json.dumps(result, ensure_ascii=False)
+        else:
+            print("❌ 결과를 받지 못했습니다")
+            return json.dumps({"error": "결과를 받지 못했습니다"}, ensure_ascii=False)
+            
+    except Exception as e:
+        print(f"❌ Risk Manager 실패: {e}")
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+@tool
+def get_memory_data(session_id: str) -> str:
+    """메모리에서 모든 분석 결과 조회"""
+    try:
+        print("🔍 메모리에서 모든 분석 결과 조회 중...")
+        
+        if session_id in memory_storage:
+            data = memory_storage[session_id]
+            print("📋 모든 데이터 조회 완료!")
+            return json.dumps(data, ensure_ascii=False)
+        else:
+            print("❌ 세션 데이터가 없습니다")
+            return json.dumps({"error": "세션 데이터가 없습니다"}, ensure_ascii=False)
+            
+    except Exception as e:
+        print(f"❌ 메모리 조회 실패: {e}")
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 # ================================
-# 메인 오케스트레이터 클래스
+# 오케스트레이터 에이전트
 # ================================
 
-class InvestmentAdvisorOrchestrator:
-    """
-    AI 투자 자문 오케스트레이터 - Agents as Tools 패턴 구현
-    
-    사용자의 투자 자문 요청을 분석하여 적절한 전문 에이전트들에게 순차적으로 위임하고,
-    각 에이전트의 결과를 종합하여 완전한 투자 자문 서비스를 제공합니다.
-    
-    워크플로우:
-    1. 사용자 재무 정보 → Financial Analyst (재무 분석)
-    2. 재무 분석 결과 → Portfolio Architect (포트폴리오 설계)  
-    3. 포트폴리오 결과 → Risk Manager (리스크 분석 및 시나리오 플래닝)
-    4. 모든 결과 종합 → 최종 투자 자문 보고서 생성
-    """
+class InvestmentAdvisor:
+    """간단한 Strands Agents as Tools 기반 Investment Advisor"""
     
     def __init__(self):
-        """투자 자문 오케스트레이터 초기화"""
-        self._create_orchestrator_agent()
-    
-    def _create_orchestrator_agent(self):
-        """오케스트레이터 에이전트 생성"""
-        self.orchestrator_agent = Agent(
-            name="investment_advisor_orchestrator",
+        initialize_system()
+        
+        self.orchestrator = Agent(
+            name="investment_advisor",
             model=BedrockModel(
-                model_id=Config.MODEL_ID,
-                temperature=Config.TEMPERATURE,
-                max_tokens=Config.MAX_TOKENS
+                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                temperature=0.2,
+                max_tokens=4000
             ),
-            system_prompt=self._get_orchestrator_prompt(),
-            tools=[financial_analyst_tool, portfolio_architect_tool, risk_manager_tool]
+            tools=[
+                financial_analyst_tool,
+                portfolio_architect_tool,
+                risk_manager_tool,
+                get_memory_data
+            ],
+            system_prompt="""당신은 투자 자문 전문가입니다.
+
+사용자의 투자 상담 요청을 받으면 다음 순서로 진행하세요:
+
+1. 세션 ID 생성 (consultation_현재시간)
+2. financial_analyst_tool(사용자입력JSON, 세션ID) 호출 - 재무 분석
+3. portfolio_architect_tool(세션ID) 호출 - 포트폴리오 설계  
+4. risk_manager_tool(세션ID) 호출 - 리스크 분석
+5. get_memory_data(세션ID) 호출 - 모든 결과 조회
+6. 종합 투자 리포트 생성
+
+각 단계의 결과를 사용자에게 명확히 설명하고, 최종적으로 실행 가능한 투자 가이드를 제공하세요."""
         )
     
-    def _get_orchestrator_prompt(self) -> str:
-        """
-        오케스트레이터 에이전트용 시스템 프롬프트 생성
-        
-        Returns:
-            str: 오케스트레이터 역할과 작업 지침이 포함된 프롬프트
-        """
-        return """당신은 전문적인 투자 자문 오케스트레이터입니다. 사용자의 투자 자문 요청을 받아 전문 에이전트들을 순차적으로 조율하여 완전한 투자 자문 서비스를 제공해야 합니다.
-
-사용 가능한 전문 에이전트 도구들:
-
-1. **financial_analyst_tool**: 개인 재무 분석 및 위험 성향 평가 전문가
-   - 입력: 사용자 재무 정보 (나이, 투자경험, 자산, 목표금액)
-   - 출력: 위험 성향 평가 및 필요 연간 수익률 계산
-   - 사용 시점: 사용자의 기본 재무 정보가 제공되었을 때
-
-2. **portfolio_architect_tool**: 실시간 데이터 기반 포트폴리오 설계 전문가  
-   - 입력: Financial Analyst의 분석 결과
-   - 출력: 30개 ETF 중 최적 3종목 포트폴리오 구성
-   - 사용 시점: 재무 분석이 완료된 후
-
-3. **risk_manager_tool**: 뉴스 기반 리스크 분석 및 시나리오 플래닝 전문가
-   - 입력: Portfolio Architect의 포트폴리오 설계 결과  
-   - 출력: 2개 경제 시나리오별 포트폴리오 조정 전략
-   - 사용 시점: 포트폴리오 설계가 완료된 후
-
-**작업 순서 (반드시 순차적으로 실행):**
-
-1. 사용자 재무 정보를 받으면 **financial_analyst_tool**을 먼저 호출
-2. 재무 분석 결과를 받으면 **portfolio_architect_tool**을 호출  
-3. 포트폴리오 설계 결과를 받으면 **risk_manager_tool**을 호출
-4. 모든 결과를 종합하여 최종 투자 자문 보고서 작성
-
-**최종 보고서 형식:**
-```
-# 🎯 종합 투자 자문 보고서
-
-## 📊 재무 분석 요약
-- 위험 성향: [결과]
-- 목표 수익률: [결과]
-- 분석 근거: [요약]
-
-## 🤖 추천 포트폴리오  
-- 자산 배분: [결과]
-- 투자 전략: [요약]
-- 구성 근거: [요약]
-
-## ⚠️ 리스크 관리 전략
-### 시나리오 1: [이름]
-- 상황: [설명]
-- 조정 전략: [배분 변경]
-- 근거: [이유]
-
-### 시나리오 2: [이름]  
-- 상황: [설명]
-- 조정 전략: [배분 변경]
-- 근거: [이유]
-
-## 💡 최종 권고사항
-[종합적인 투자 조언 및 주의사항]
-```
-
-**중요 지침:**
-- 반드시 순차적으로 도구를 호출하세요 (financial_analyst → portfolio_architect → risk_manager)
-- 각 도구의 결과를 다음 도구의 입력으로 정확히 전달하세요
-- 모든 결과를 종합하여 일관성 있는 최종 보고서를 작성하세요
-- 사용자가 이해하기 쉽도록 전문 용어는 간단히 설명하세요"""
-    
-    async def provide_investment_advice_async(self, user_request):
-        """
-        실시간 스트리밍 투자 자문 서비스 제공
-        
-        사용자의 투자 자문 요청을 받아 전문 에이전트들을 순차적으로 조율하여
-        완전한 투자 자문 서비스를 제공합니다. 전체 과정을 스트리밍으로 실시간 전송합니다.
-        
-        Args:
-            user_request (dict): 사용자 투자 자문 요청
-                - user_financial_data: 재무 정보
-                - additional_requirements: 추가 요구사항 (선택사항)
-            
-        Yields:
-            dict: 스트리밍 이벤트
-                - text_chunk: 오케스트레이터의 실시간 분석 과정
-                - tool_use: 전문 에이전트 호출 시작 알림
-                - tool_result: 전문 에이전트 실행 결과
-                - final_report: 최종 투자 자문 보고서
-                - streaming_complete: 자문 완료 신호
-                - error: 오류 발생 시
-        """
+    async def run_consultation_async(self, user_input, user_id=None):
+        """투자 상담 실행 (스트리밍)"""
         try:
-            # 사용자 요청을 JSON 문자열로 변환
-            request_str = json.dumps(user_request, ensure_ascii=False, indent=2)
+            session_id = f"consultation_{int(time.time())}"
             
-            # 오케스트레이터 에이전트 실행 (스트리밍)
-            async for event in self.orchestrator_agent.stream_async(request_str):
-                
-                # AI 생각 과정 텍스트 스트리밍
-                if "data" in event:
-                    yield {
-                        "type": "text_chunk",
-                        "data": event["data"],
-                        "complete": event.get("complete", False)
-                    }
-                
-                # 메시지 이벤트 처리 (도구 사용 및 결과)
-                if "message" in event:
-                    message = event["message"]
-                    
-                    # Assistant 메시지: 도구 사용 정보 추출
-                    if message.get("role") == "assistant":
-                        for content in message.get("content", []):
-                            if "toolUse" in content:
-                                tool_use = content["toolUse"]
-                                yield {
-                                    "type": "tool_use",
-                                    "tool_name": tool_use.get("name"),
-                                    "tool_use_id": tool_use.get("toolUseId"),
-                                    "tool_input": tool_use.get("input", {})
-                                }
-                    
-                    # User 메시지: 도구 실행 결과 추출
-                    if message.get("role") == "user":
-                        for content in message.get("content", []):
-                            if "toolResult" in content:
-                                tool_result = content["toolResult"]
-                                yield {
-                                    "type": "tool_result",
-                                    "tool_use_id": tool_result["toolUseId"],
-                                    "status": tool_result["status"],
-                                    "content": tool_result["content"]
-                                }
-                
-                # 최종 결과 처리
-                if "result" in event:
-                    yield {
-                        "type": "streaming_complete",
-                        "message": "종합 투자 자문 완료!"
-                    }
-
+            print(f"\n🚀 투자 상담 시작 (세션: {session_id})")
+            print("=" * 50)
+            
+            # 사용자 입력 준비
+            consultation_input = {
+                "user_input": user_input,
+                "session_id": session_id,
+                "user_id": user_id,
+                "instruction": f"세션 ID '{session_id}'를 사용하여 투자 상담을 진행해주세요."
+            }
+            
+            # 오케스트레이터 스트리밍 실행
+            async for event in self.orchestrator.stream_async(json.dumps(consultation_input, ensure_ascii=False)):
+                yield {
+                    "session_id": session_id,
+                    **event
+                }
+            
+            print("=" * 50)
+            print("🎉 투자 상담 완료!")
+            
         except Exception as e:
+            print(f"❌ 상담 실패: {e}")
             yield {
                 "type": "error",
                 "error": str(e),
-                "status": "error"
+                "session_id": session_id if 'session_id' in locals() else None
             }
-
-# ================================
-# AgentCore Runtime 엔트리포인트
-# ================================
-
-# 전역 인스턴스 (지연 초기화)
-advisor = None
-
-@app.entrypoint
-async def investment_advisor_orchestrator(payload):
-    """
-    AgentCore Runtime 엔트리포인트
     
-    AWS AgentCore Runtime 환경에서 호출되는 메인 함수입니다.
-    사용자의 투자 자문 요청을 받아 전문 에이전트들을 조율하여 완전한 투자 자문 서비스를 제공합니다.
-    
-    Args:
-        payload (dict): 요청 페이로드
-            - user_request: 사용자 투자 자문 요청
-                - user_financial_data: 재무 정보
-                - additional_requirements: 추가 요구사항 (선택사항)
-    
-    Yields:
-        dict: 스트리밍 응답 이벤트들
-    
-    Environment Variables:
-        - FINANCIAL_ANALYST_ARN: Financial Analyst Agent ARN
-        - PORTFOLIO_ARCHITECT_ARN: Portfolio Architect Agent ARN  
-        - RISK_MANAGER_ARN: Risk Manager Agent ARN
-        - AWS_REGION: AWS 리전 (기본값: us-west-2)
-    """
-    global advisor
-    
-    # Runtime 환경에서 지연 초기화
-    if advisor is None:
-        # 필수 환경변수 확인
-        required_vars = ["FINANCIAL_ANALYST_ARN", "PORTFOLIO_ARCHITECT_ARN", "RISK_MANAGER_ARN"]
-        missing_vars = [var for var in required_vars if not os.getenv(var)]
-        
-        if missing_vars:
-            yield {
-                "type": "error",
-                "error": f"필수 환경변수 누락: {', '.join(missing_vars)}",
-                "status": "error"
+    def run_consultation(self, user_input, user_id=None):
+        """투자 상담 실행 (동기 버전 - 호환성 유지)"""
+        try:
+            session_id = f"consultation_{int(time.time())}"
+            
+            print(f"\n🚀 투자 상담 시작 (세션: {session_id})")
+            print("=" * 50)
+            
+            # 사용자 입력 준비
+            consultation_input = {
+                "user_input": user_input,
+                "session_id": session_id,
+                "user_id": user_id,
+                "instruction": f"세션 ID '{session_id}'를 사용하여 투자 상담을 진행해주세요."
             }
-            return
+            
+            # 오케스트레이터 실행
+            response = self.orchestrator(json.dumps(consultation_input, ensure_ascii=False))
+            
+            print("=" * 50)
+            print("🎉 투자 상담 완료!")
+            
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "response": response.message['content'][0]['text'],
+                "memory_data": memory_storage.get(session_id, {})
+            }
+            
+        except Exception as e:
+            print(f"❌ 상담 실패: {e}")
+            return {"status": "error", "error": str(e)}
+
+# ================================
+# 메인 실행
+# ================================
+
+def main():
+    """간단한 테스트"""
+    print("🤖 Investment Advisor 테스트")
+    print("=" * 40)
+    
+    advisor = InvestmentAdvisor()
+    
+    # 테스트 데이터
+    user_input = {
+        "total_investable_amount": 50000000,    # 5천만원
+        "age": 35,                             # 35세
+        "stock_investment_experience_years": 7,  # 7년 경험
+        "target_amount": 65000000              # 6천5백만원 목표
+    }
+    
+    print(f"📝 테스트 데이터: {user_input}")
+    print()
+    
+    # 상담 실행
+    result = advisor.run_consultation(user_input, "test_user")
+    
+    if result["status"] == "success":
+        print(f"\n✅ 상담 성공!")
+        print(f"세션 ID: {result['session_id']}")
+        print(f"\n📋 AI 응답:")
+        print(result["response"])
         
-        # InvestmentAdvisorOrchestrator 인스턴스 생성
-        advisor = InvestmentAdvisorOrchestrator()
-
-    # 사용자 요청 추출 및 투자 자문 실행
-    user_request = payload.get("user_request")
-    async for chunk in advisor.provide_investment_advice_async(user_request):
-        yield chunk
-
-# ================================
-# 직접 실행 시 Runtime 서버 시작
-# ================================
+        # 결과 저장
+        output_file = f"consultation_result_{result['session_id']}.json"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"\n💾 결과 저장: {output_file}")
+        
+    else:
+        print(f"\n❌ 상담 실패: {result.get('error')}")
 
 if __name__ == "__main__":
-    app.run()
+    main()

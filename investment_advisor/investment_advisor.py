@@ -78,17 +78,31 @@ class InvestmentMemoryHook(HookProvider):
             messages = event.agent.messages
             if messages:
                 last_message = messages[-1]
-                # 간단하게 첫 번째 텍스트 내용만 저장
-                if last_message["content"] and len(last_message["content"]) > 0:
-                    first_content = last_message["content"][0]
-                    if "text" in first_content:
-                        text = first_content["text"]
+                role = last_message["role"]
+                
+                # content 각각을 별도로 저장
+                for content in last_message["content"]:
+                    text_to_save = None
+                    
+                    if "text" in content:
+                        text_to_save = content["text"]
+                    elif "toolUse" in content:
+                        tool_name = content["toolUse"].get("name", "unknown")
+                        text_to_save = f"Tool Use: {tool_name}"
+                    elif "toolResult" in content:
+                        tool_result = content["toolResult"]
+                        result_content = tool_result.get("content", [])
+                        if result_content and "text" in result_content[0]:
+                            text_to_save = f"Tool Result: {result_content[0]['text']}"
+                    
+                    if text_to_save:
                         self.memory_client.create_event(
                             memory_id=self.memory_id,
                             actor_id=self.actor_id,
                             session_id=self.session_id,
-                            messages=[(text, last_message["role"])]
+                            messages=[(text_to_save, role)]
                         )
+                    
         except Exception as e:
             print(f"⚠️ 메모리 저장 실패: {e}")
 

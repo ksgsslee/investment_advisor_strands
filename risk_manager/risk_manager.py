@@ -304,7 +304,7 @@ class RiskManager:
                     if "result" in event:
                         yield {
                             "type": "streaming_complete",
-                            "message": "리스크 분석 및 시나리오 플래닝 완료!"
+                            "risk_result": str(event["result"])
                         }
 
         except Exception as e:

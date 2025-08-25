@@ -324,11 +324,7 @@ def invoke_risk_manager(portfolio_data):
                     current_text_placeholder = placeholder.empty()
                 
                 elif event_type == "streaming_complete":
-                    # 마지막 AI 생각 표시 후 완료
-                    if current_thinking.strip():
-                        with current_text_placeholder.chat_message("assistant"):
-                            st.markdown(current_thinking.strip())
-                    break
+                    continue
                     
             except json.JSONDecodeError:
                 continue

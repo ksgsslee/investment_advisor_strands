@@ -8,12 +8,9 @@ Multi-Agent 패턴 기반 투자 자문 시스템의 웹 인터페이스
 
 import streamlit as st
 import json
-import os
-import sys
 import time
 import boto3
 import plotly.graph_objects as go
-import pandas as pd
 from pathlib import Path
 
 # ================================
@@ -41,46 +38,8 @@ agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 # 유틸리티 함수들
 # ================================
 
-def extract_json_from_text(text_content):
-    """
-    텍스트에서 JSON 데이터를 추출하는 함수
-    
-    Args:
-        text_content (str): JSON이 포함된 텍스트
-        
-    Returns:
-        dict: 파싱된 JSON 데이터 또는 None
-    """
-    if isinstance(text_content, dict):
-        return text_content
-    
-    if not isinstance(text_content, str):
-        return None
-    
-    # JSON 블록 찾기
-    start_idx = text_content.find('{')
-    end_idx = text_content.rfind('}') + 1
-    
-    if start_idx != -1 and end_idx != -1:
-        try:
-            json_str = text_content[start_idx:end_idx]
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            return None
-    
-    return None
-
 def create_pie_chart(allocation_data, chart_title=""):
-    """
-    포트폴리오 배분을 위한 파이 차트 생성
-    
-    Args:
-        allocation_data (dict): 자산 배분 데이터
-        chart_title (str): 차트 제목
-        
-    Returns:
-        plotly.graph_objects.Figure: 파이 차트
-    """
+    """포트폴리오 배분을 위한 파이 차트 생성"""
     fig = go.Figure(data=[go.Pie(
         labels=list(allocation_data.keys()),
         values=list(allocation_data.values()),
@@ -89,10 +48,6 @@ def create_pie_chart(allocation_data, chart_title=""):
     )])
     fig.update_layout(title=chart_title, showlegend=True, width=400, height=400)
     return fig
-
-# ================================
-# 데이터 표시 함수들
-# ================================
 
 def display_step1_financial_analysis(container, result_text):
     """1단계: 재무 분석 결과 표시"""
@@ -105,7 +60,6 @@ def display_step1_financial_analysis(container, result_text):
             with container:
                 st.success("✅ **1단계: 재무 분석 완료!**")
                 
-                # 메인 분석 결과
                 sub_col1, sub_col2 = st.columns(2)
                 
                 with sub_col1:
@@ -118,7 +72,6 @@ def display_step1_financial_analysis(container, result_text):
                     st.markdown("**수익률 분석**")
                     st.info(analysis_data.get("return_rate_reason", ""))
                 
-                # Reflection 결과 표시
                 st.markdown("**🔍 분석 검증 결과**")
                 if reflection_result.strip().lower().startswith("yes"):
                     st.success("재무분석 검토 성공 - 분석 결과가 검증되었습니다")
@@ -142,7 +95,6 @@ def display_step2_portfolio_design(container, result_text):
                 st.success("✅ **2단계: 포트폴리오 설계 완료!**")
                 
                 if "portfolio_allocation" in portfolio:
-                    # 포트폴리오 구성 표시
                     col1, col2 = st.columns([1, 1])
                     
                     with col1:
@@ -151,14 +103,12 @@ def display_step2_portfolio_design(container, result_text):
                             st.metric(f"**{etf}**", f"{ratio}%")
                     
                     with col2:
-                        # 파이 차트
                         fig = create_pie_chart(
                             portfolio["portfolio_allocation"], 
                             "포트폴리오 배분"
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     
-                    # 전략 및 근거
                     st.markdown("**💡 투자 전략**")
                     st.info(portfolio.get("strategy", ""))
                     
@@ -220,17 +170,8 @@ def display_step3_risk_analysis(container, result_text):
 # ================================
 
 def invoke_investment_advisor(input_data):
-    """
-    AgentCore Runtime을 호출하여 투자 상담 수행
-    
-    Args:
-        input_data (dict): 고객 투자 정보
-        
-    Returns:
-        dict: 실행 결과 (status, tool_results)
-    """
+    """AgentCore Runtime을 호출하여 투자 상담 수행"""
     try:
-        # AgentCore Runtime 호출
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=AGENT_ARN,
             qualifier="DEFAULT",
@@ -252,7 +193,7 @@ def invoke_investment_advisor(input_data):
         current_text_placeholder = placeholder.empty()
         tool_results = {}
         
-        # 스트리밍 응답 처리 (AgentCore Runtime 형식)
+        # 스트리밍 응답 처리
         for line in response["response"].iter_lines(chunk_size=1):
             if not line:
                 continue
@@ -260,28 +201,85 @@ def invoke_investment_advisor(input_data):
             try:
                 line_str = line.decode("utf-8")
                 
-                # SSE 형식 처리
                 if line_str.startswith("data: "):
-                    event_data = json.loads(line_str[6:])
+                    data_content = line_str[6:]
+                    
+                    # JSON 형태와 문자열 형태 모두 처리
+                    try:
+                        # 먼저 JSON으로 파싱 시도
+                        event_data = json.loads(data_content)
+                    except json.JSONDecodeError:
+                        # JSON 파싱 실패시 문자열로 eval 시도
+                        try:
+                            if data_content.startswith("'") and data_content.endswith("'"):
+                                import ast
+                                event_data = ast.literal_eval(data_content)
+                            else:
+                                continue
+                        except:
+                            continue
                 else:
-                    # 직접 JSON 형식도 처리
-                    event_data = json.loads(line_str)
+                    try:
+                        event_data = json.loads(line_str)
+                    except:
+                        continue
                 
-                # event_data가 dict인지 확인
                 if not isinstance(event_data, dict):
                     continue
                 
-                # 1. AI 대화 텍스트 스트리밍 (data 필드)
+                # AI 대화 텍스트 스트리밍 - 여러 방법으로 텍스트 추출
+                text_chunk = None
+                
+                # 방법 1: 직접 data 필드에서 텍스트 추출
                 if "data" in event_data and isinstance(event_data["data"], str):
-                    chunk_data = event_data["data"]
-                    current_thinking += chunk_data
+                    text_chunk = event_data["data"]
+                
+                # 방법 2: event.contentBlockDelta.delta.text에서 텍스트 추출
+                elif "event" in event_data and isinstance(event_data["event"], dict):
+                    event_obj = event_data["event"]
+                    if "contentBlockDelta" in event_obj:
+                        delta = event_obj["contentBlockDelta"].get("delta", {})
+                        if "text" in delta:
+                            text_chunk = delta["text"]
+                
+                # 방법 3: delta.text에서 직접 추출
+                elif "delta" in event_data and isinstance(event_data["delta"], dict):
+                    if "text" in event_data["delta"]:
+                        text_chunk = event_data["delta"]["text"]
+                
+                # 텍스트 청크가 있으면 실시간 업데이트
+                if text_chunk:
+                    current_thinking += text_chunk
                     
-                    # 실시간 대화 업데이트
                     if current_thinking.strip():
                         with current_text_placeholder.chat_message("assistant"):
                             st.markdown(current_thinking)
                 
-                # 2. 도구 사용 및 결과 처리 (message 필드)
+                # 도구 시작 감지 (contentBlockStart)
+                elif "event" in event_data and isinstance(event_data["event"], dict):
+                    event_obj = event_data["event"]
+                    if "contentBlockStart" in event_obj:
+                        start_info = event_obj["contentBlockStart"].get("start", {})
+                        if "toolUse" in start_info:
+                            tool_name = start_info["toolUse"].get("name", "")
+                            
+                            if "financial_analyst" in tool_name:
+                                with step1_container:
+                                    st.info("🔍 **1단계: 재무 분석 실행 중...** 고객님의 재무 상황을 분석하고 있습니다.")
+                                current_thinking = ""
+                                current_text_placeholder = placeholder.empty()
+                            elif "portfolio_architect" in tool_name:
+                                with step2_container:
+                                    st.info("📊 **2단계: 포트폴리오 설계 실행 중...** 맞춤형 투자 포트폴리오를 설계하고 있습니다.")
+                                current_thinking = ""
+                                current_text_placeholder = placeholder.empty()
+                            elif "risk_manager" in tool_name:
+                                with step3_container:
+                                    st.info("⚠️ **3단계: 리스크 분석 실행 중...** 시장 리스크를 분석하고 시나리오를 도출하고 있습니다.")
+                                current_thinking = ""
+                                current_text_placeholder = placeholder.empty()
+                
+                # 도구 사용 및 결과 처리
                 elif "message" in event_data:
                     message = event_data["message"]
                     
@@ -291,13 +289,12 @@ def invoke_investment_advisor(input_data):
                             if "toolUse" in content:
                                 tool_name = content["toolUse"].get("name", "")
                                 
-                                # 단계 진행 표시
                                 if "financial_analyst" in tool_name:
                                     with step1_container:
                                         st.info("🔍 **1단계: 재무 분석 실행 중...** 고객님의 재무 상황을 분석하고 있습니다.")
                                 elif "portfolio_architect" in tool_name:
                                     with step2_container:
-                                        st.info("� **12단계: 포트폴리오 설계 실행 중...** 맞춤형 투자 포트폴리오를 설계하고 있습니다.")
+                                        st.info("📊 **2단계: 포트폴리오 설계 실행 중...** 맞춤형 투자 포트폴리오를 설계하고 있습니다.")
                                 elif "risk_manager" in tool_name:
                                     with step3_container:
                                         st.info("⚠️ **3단계: 리스크 분석 실행 중...** 시장 리스크를 분석하고 시나리오를 도출하고 있습니다.")
@@ -312,7 +309,6 @@ def invoke_investment_advisor(input_data):
                                 if result_content and len(result_content) > 0:
                                     result_text = result_content[0].get("text", "")
                                     
-                                    # 도구 이름으로 결과 분류 및 표시
                                     if "financial_analyst" in str(tool_result):
                                         tool_results["financial_analysis"] = result_text
                                         display_step1_financial_analysis(step1_container, result_text)
@@ -323,21 +319,18 @@ def invoke_investment_advisor(input_data):
                                         tool_results["risk_analysis"] = result_text
                                         display_step3_risk_analysis(step3_container, result_text)
                                 
-                                # 도구 결과 처리 후 대화 텍스트 리셋
                                 current_thinking = ""
                                 current_text_placeholder = placeholder.empty()
                 
-                # 3. 최종 결과 처리
+                # 최종 결과 처리
                 elif "result" in event_data:
-                    # 최종 대화 표시
                     if current_thinking.strip():
                         with current_text_placeholder.chat_message("assistant"):
                             st.markdown(current_thinking)
                     st.success("🎉 **투자 상담이 완료되었습니다!** 모든 분석 결과를 확인해보세요.")
                     break
                     
-            except (json.JSONDecodeError, TypeError, AttributeError) as e:
-                # 파싱 오류는 무시하고 계속 진행
+            except (json.JSONDecodeError, TypeError, AttributeError):
                 continue
         
         return {
@@ -351,127 +344,6 @@ def invoke_investment_advisor(input_data):
             "status": "error",
             "error": str(e)
         }
-
-def display_step1_financial_analysis(container, result_text):
-    """1단계: 재무 분석 결과 표시 (financial_analyst 스타일)"""
-    try:
-        result_data = json.loads(result_text)
-        if "analysis_data" in result_data:
-            analysis_data = json.loads(result_data["analysis_data"])
-            reflection_result = result_data.get("reflection_result", "")
-            
-            with container:
-                st.success("✅ **1단계: 재무 분석 완료!**")
-                
-                # 메인 분석 결과 (financial_analyst 스타일)
-                sub_col1, sub_col2 = st.columns(2)
-                
-                with sub_col1:
-                    st.metric("**위험 성향**", analysis_data.get("risk_profile", "N/A"))
-                    st.markdown("**위험 성향 분석**")
-                    st.info(analysis_data.get("risk_profile_reason", ""))
-                
-                with sub_col2:
-                    st.metric("**필요 수익률**", f"{analysis_data.get('required_annual_return_rate', 'N/A')}%")
-                    st.markdown("**수익률 분석**")
-                    st.info(analysis_data.get("return_rate_reason", ""))
-                
-                # Reflection 결과 표시
-                st.markdown("**🔍 분석 검증 결과**")
-                if reflection_result.strip().lower().startswith("yes"):
-                    st.success("재무분석 검토 성공 - 분석 결과가 검증되었습니다")
-                else:
-                    st.error("재무분석 검토 실패")
-                    if "\n" in reflection_result:
-                        st.markdown(reflection_result.split("\n")[1])
-                
-    except Exception as e:
-        with container:
-            st.warning(f"재무 분석 결과 파싱 실패: {str(e)}")
-
-def display_step2_portfolio_design(container, result_text):
-    """2단계: 포트폴리오 설계 결과 표시"""
-    try:
-        result_data = json.loads(result_text)
-        if "portfolio_result" in result_data:
-            portfolio = json.loads(result_data["portfolio_result"])
-            
-            with container:
-                st.success("✅ **2단계: 포트폴리오 설계 완료!**")
-                
-                if "portfolio_allocation" in portfolio:
-                    # 포트폴리오 구성 표시
-                    col1, col2 = st.columns([1, 1])
-                    
-                    with col1:
-                        st.markdown("**📊 추천 포트폴리오 구성**")
-                        for etf, ratio in portfolio["portfolio_allocation"].items():
-                            st.metric(f"**{etf}**", f"{ratio}%")
-                    
-                    with col2:
-                        # 파이 차트
-                        fig = create_pie_chart(
-                            portfolio["portfolio_allocation"], 
-                            "포트폴리오 배분"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    # 전략 및 근거
-                    st.markdown("**💡 투자 전략**")
-                    st.info(portfolio.get("strategy", ""))
-                    
-                    st.markdown("**📝 구성 근거**")
-                    st.info(portfolio.get("reason", ""))
-                
-    except Exception as e:
-        with container:
-            st.warning(f"포트폴리오 결과 파싱 실패: {str(e)}")
-
-def display_step3_risk_analysis(container, result_text):
-    """3단계: 리스크 분석 결과 표시"""
-    try:
-        result_data = json.loads(result_text)
-        if "risk_result" in result_data:
-            risk = json.loads(result_data["risk_result"])
-            
-            with container:
-                st.success("✅ **3단계: 리스크 분석 완료!**")
-                
-                st.markdown("**⚠️ 시나리오별 리스크 분석**")
-                
-                col1, col2 = st.columns(2)
-                
-                if "scenario1" in risk:
-                    with col1:
-                        st.markdown("### 📈 시나리오 1")
-                        st.markdown(f"**{risk['scenario1'].get('name', 'N/A')}**")
-                        st.info(risk['scenario1'].get('description', ''))
-                        
-                        if "allocation_management" in risk['scenario1']:
-                            st.markdown("**조정된 포트폴리오:**")
-                            for etf, ratio in risk['scenario1']['allocation_management'].items():
-                                st.write(f"• **{etf}**: {ratio}%")
-                            
-                            st.markdown("**조정 이유:**")
-                            st.write(risk['scenario1'].get('reason', ''))
-                
-                if "scenario2" in risk:
-                    with col2:
-                        st.markdown("### 📉 시나리오 2")
-                        st.markdown(f"**{risk['scenario2'].get('name', 'N/A')}**")
-                        st.info(risk['scenario2'].get('description', ''))
-                        
-                        if "allocation_management" in risk['scenario2']:
-                            st.markdown("**조정된 포트폴리오:**")
-                            for etf, ratio in risk['scenario2']['allocation_management'].items():
-                                st.write(f"• **{etf}**: {ratio}%")
-                            
-                            st.markdown("**조정 이유:**")
-                            st.write(risk['scenario2'].get('reason', ''))
-                
-    except Exception as e:
-        with container:
-            st.warning(f"리스크 분석 결과 파싱 실패: {str(e)}")
 
 # ================================
 # UI 구성
@@ -529,7 +401,7 @@ with col3:
     )
 
 target_amount = st.number_input(
-    "💰1년 후 목표 금액 (억원 단위)",
+    "💰 1년 후 목표 금액 (억원 단위)",
     min_value=0.0,
     max_value=1000.0,
     value=0.7,
@@ -611,7 +483,7 @@ if submitted:
         except Exception as e:
             st.error(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")
 
-# 사이드바 - 상담 히스토리 (간단 버전)
+# 사이드바 - 상담 히스토리
 st.sidebar.header("📊 상담 히스토리")
 if st.sidebar.button("Memory 조회"):
     try:
@@ -627,6 +499,3 @@ if st.sidebar.button("Memory 조회"):
             st.sidebar.info("저장된 히스토리 없음")
     except Exception as e:
         st.sidebar.error(f"조회 실패: {str(e)}")
-
-# 필요한 import 추가
-import time

@@ -2,13 +2,13 @@
 deploy.py
 Investment Advisor AgentCore Runtime 배포 스크립트
 
-Graph 기반 통합 투자 자문 시스템을 AWS 서버리스 환경에 배포합니다.
+Multi-Agent 패턴 기반 투자 자문 시스템을 AWS 서버리스 환경에 배포합니다.
 3개의 독립적인 에이전트를 순차 호출하고 Memory에 결과를 저장하는 시스템입니다.
 
 주요 기능:
-- IAM 역할 자동 생성 및 권한 설정
+- 다른 에이전트 ARN 자동 로드 및 환경변수 주입
+- IAM 역할 자동 생성 및 권한 설정 (Memory 포함)
 - Docker 이미지 빌드 및 ECR 배포
-- AgentCore Memory 설정
 - 배포 상태 실시간 모니터링
 """
 
@@ -43,39 +43,42 @@ class Config:
 # 유틸리티 함수들
 # ================================
 
-def validate_prerequisites():
+def load_agent_arns():
     """
-    배포 전 필수 조건 검증
+    다른 에이전트들의 배포 정보 로드
+    
+    Investment Advisor가 호출할 3개 에이전트의 ARN을 로드합니다.
+    모든 에이전트가 먼저 배포되어 있어야 합니다.
     
     Returns:
-        bool: 모든 조건이 충족되면 True
+        dict: 각 에이전트의 ARN 정보
         
     Raises:
-        FileNotFoundError: 필수 파일이나 에이전트 배포 정보가 없을 때
+        FileNotFoundError: 필수 에이전트 배포 정보가 없을 때
     """
-    print("🔍 배포 전 필수 조건 검증 중...")
+    print("📋 다른 에이전트 배포 정보 로드 중...")
     
-    current_dir = Path(__file__).parent
-    base_path = current_dir.parent
+    base_path = Path(__file__).parent.parent
+    agent_arns = {}
     
-    # 필수 파일 확인
-    required_files = [Config.ENTRYPOINT_FILE, Config.REQUIREMENTS_FILE]
-    missing_files = [f for f in required_files if not (current_dir / f).exists()]
-    
-    if missing_files:
-        raise FileNotFoundError(f"필수 파일 누락: {', '.join(missing_files)}")
-    
-    # 각 에이전트 배포 정보 확인
+    # 필수 에이전트 목록
     required_agents = [
-        ("Financial Analyst", base_path / "financial_analyst" / "deployment_info.json"),
-        ("Portfolio Architect", base_path / "portfolio_architect" / "deployment_info.json"),
-        ("Risk Manager", base_path / "risk_manager" / "deployment_info.json")
+        ("financial_analyst", "Financial Analyst"),
+        ("portfolio_architect", "Portfolio Architect"), 
+        ("risk_manager", "Risk Manager")
     ]
     
     missing_agents = []
-    for agent_name, info_file in required_agents:
+    for agent_dir, agent_name in required_agents:
+        info_file = base_path / agent_dir / "deployment_info.json"
+        
         if not info_file.exists():
             missing_agents.append(agent_name)
+        else:
+            with open(info_file, 'r') as f:
+                deployment_info = json.load(f)
+                agent_arns[agent_dir] = deployment_info["agent_arn"]
+                print(f"✅ {agent_name}: {deployment_info['agent_arn']}")
     
     if missing_agents:
         raise FileNotFoundError(
@@ -83,12 +86,11 @@ def validate_prerequisites():
             "각 에이전트 폴더에서 'python deploy.py'를 실행하세요."
         )
     
-    print("✅ 필수 조건 확인 완료")
-    return True
+    return agent_arns
 
 def create_iam_role():
     """
-    AgentCore Runtime용 IAM 역할 생성
+    AgentCore Runtime용 IAM 역할 생성 (Memory 권한 포함)
     
     Returns:
         str: 생성된 IAM 역할 ARN
@@ -128,12 +130,16 @@ def configure_runtime(role_arn):
     print("✅ Runtime 구성 완료")
     return runtime
 
-def deploy_and_wait(runtime):
+def deploy_and_wait(runtime, agent_arns):
     """
     Runtime 배포 및 상태 대기
     
+    Runtime을 AWS에 배포하고 완료될 때까지 상태를 모니터링합니다.
+    다른 에이전트 ARN을 환경변수로 설정하여 Runtime에서 사용할 수 있도록 합니다.
+    
     Args:
         runtime (Runtime): 구성된 Runtime 객체
+        agent_arns (dict): 다른 에이전트들의 ARN 정보
         
     Returns:
         tuple: (성공 여부, Agent ARN, 최종 상태)
@@ -143,8 +149,16 @@ def deploy_and_wait(runtime):
     print("   - ECR 업로드")
     print("   - 서비스 생성/업데이트")
     
-    # 배포 시작
-    launch_result = runtime.launch(auto_update_on_conflict=True)
+    # 다른 에이전트 ARN을 환경변수로 설정
+    env_vars = {
+        "FINANCIAL_ANALYST_ARN": agent_arns["financial_analyst"],
+        "PORTFOLIO_ARCHITECT_ARN": agent_arns["portfolio_architect"],
+        "RISK_MANAGER_ARN": agent_arns["risk_manager"],
+        "AWS_REGION": Config.REGION
+    }
+    
+    # 배포 시작 (환경변수와 함께)
+    launch_result = runtime.launch(auto_update_on_conflict=True, env_vars=env_vars)
     
     # 배포 완료 상태 목록
     end_statuses = ['READY', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED']
@@ -176,12 +190,13 @@ def deploy_and_wait(runtime):
     
     return success, agent_arn, status
 
-def save_deployment_info(agent_arn):
+def save_deployment_info(agent_arn, agent_arns):
     """
     Runtime 배포 정보 저장
     
     Args:
         agent_arn (str): 배포된 Agent ARN
+        agent_arns (dict): 다른 에이전트들의 ARN 정보
         
     Returns:
         str: 저장된 JSON 파일 경로
@@ -193,8 +208,9 @@ def save_deployment_info(agent_arn):
         "agent_name": Config.AGENT_NAME,
         "agent_arn": agent_arn,
         "region": Config.REGION,
+        "dependent_agents": agent_arns,
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "description": "Graph 기반 통합 투자 자문 시스템 (Memory 포함)"
+        "description": "Multi-Agent 패턴 기반 통합 투자 자문 시스템 (Memory 포함)"
     }
     
     info_file = current_dir / "deployment_info.json"
@@ -205,6 +221,32 @@ def save_deployment_info(agent_arn):
     return str(info_file)
 
 # ================================
+# 배포 검증 함수들
+# ================================
+
+def validate_prerequisites():
+    """
+    배포 전 필수 조건 검증
+    
+    Returns:
+        bool: 모든 조건이 충족되면 True
+        
+    Raises:
+        FileNotFoundError: 필수 파일이나 에이전트 배포 정보가 없을 때
+    """
+    print("🔍 배포 전 필수 조건 검증 중...")
+    
+    current_dir = Path(__file__).parent
+    required_files = [Config.ENTRYPOINT_FILE, Config.REQUIREMENTS_FILE]
+    missing_files = [f for f in required_files if not (current_dir / f).exists()]
+    
+    if missing_files:
+        raise FileNotFoundError(f"필수 파일 누락: {', '.join(missing_files)}")
+    
+    print("✅ 필수 파일 확인 완료")
+    return True
+
+# ================================
 # 메인 실행 함수
 # ================================
 
@@ -213,7 +255,7 @@ def main():
     메인 배포 함수
     
     Investment Advisor Runtime의 전체 배포 프로세스를 관리합니다.
-    Graph 패턴으로 3개 에이전트를 순차 호출하고 Memory에 결과를 저장하는
+    Multi-Agent 패턴으로 3개 에이전트를 순차 호출하고 Memory에 결과를 저장하는
     통합 투자 자문 시스템을 AWS 서버리스 환경에 배포합니다.
     
     Returns:
@@ -226,7 +268,7 @@ def main():
         print(f"🌍 리전: {Config.REGION}")
         print(f"⏱️ 최대 대기시간: {Config.MAX_DEPLOY_MINUTES}분")
         print("📋 주요 기능:")
-        print("   - Graph 패턴으로 3개 에이전트 순차 실행")
+        print("   - Multi-Agent 패턴으로 3개 에이전트 순차 실행")
         print("   - 통합 투자 리포트 생성")
         print("   - AgentCore Memory에 상담 히스토리 저장")
         print("=" * 70)
@@ -234,18 +276,21 @@ def main():
         # 1. 필수 조건 검증
         validate_prerequisites()
         
-        # 2. IAM 역할 생성
+        # 2. 다른 에이전트 ARN 로드
+        agent_arns = load_agent_arns()
+        
+        # 3. IAM 역할 생성
         role_arn = create_iam_role()
         
-        # 3. Runtime 구성
+        # 4. Runtime 구성
         runtime = configure_runtime(role_arn)
         
-        # 4. 배포 및 대기
-        success, agent_arn, status = deploy_and_wait(runtime)
+        # 5. 배포 및 대기
+        success, agent_arn, status = deploy_and_wait(runtime, agent_arns)
         
         if success:
-            # 5. 배포 정보 저장
-            info_file = save_deployment_info(agent_arn)
+            # 6. 배포 정보 저장
+            info_file = save_deployment_info(agent_arn, agent_arns)
             
             print("=" * 70)
             print("🎉 배포 성공!")
@@ -256,7 +301,7 @@ def main():
             print("\n📋 다음 단계:")
             print("1. Streamlit 앱 실행: streamlit run app.py")
             print("2. 투자 상담 히스토리 확인")
-            print("3. Graph 기반 통합 분석 테스트")
+            print("3. Multi-Agent 통합 분석 테스트")
             
             return 0
         else:

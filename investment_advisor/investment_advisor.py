@@ -4,29 +4,89 @@ Multi-Agent Investment Advisor with AgentCore Memory
 
 AWS Bedrock AgentCore Memory를 활용한 투자 자문 시스템
 3개의 전문 에이전트가 협업하여 종합적인 투자 분석을 제공합니다.
+
+주요 기능:
+- Multi-Agent 패턴: 3개 전문 에이전트 순차 호출
+- AgentCore Memory: 상담 히스토리 자동 저장 및 관리
+- Agents as Tools: 각 에이전트를 도구로 활용
+- 실시간 스트리밍: 분석 과정 실시간 시각화
 """
 
 import json
-import boto3
+import os
+import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, Any
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
 from strands.hooks import AgentInitializedEvent, HookProvider, HookRegistry, MessageAddedEvent
 from bedrock_agentcore.memory import MemoryClient
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+import boto3
 
 # ================================
-# 설정
+# 전역 설정
 # ================================
 
 app = BedrockAgentCoreApp()
-REGION = "us-west-2"
 
-# 전역 변수 (지연 초기화)
-agentcore_client = None
-memory_client = None
-agent_arns = {}
+class Config:
+    """Investment Advisor 설정 상수"""
+    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    TEMPERATURE = 0.2
+    MAX_TOKENS = 4000
+    REGION = "us-west-2"
+
+# ================================
+# 유틸리티 함수들
+# ================================
+
+def extract_json_from_streaming(response_stream):
+    """
+    스트리밍 응답에서 JSON 결과 추출
+    
+    Args:
+        response_stream: AgentCore 스트리밍 응답
+        
+    Returns:
+        dict: 추출된 결과 데이터
+    """
+    try:
+        for line in response_stream.iter_lines(chunk_size=1):
+            if line and line.decode("utf-8").startswith("data: "):
+                try:
+                    event_data = json.loads(line.decode("utf-8")[6:])
+                    if event_data.get("type") == "streaming_complete":
+                        return event_data
+                except json.JSONDecodeError:
+                    continue
+        return None
+    except Exception as e:
+        print(f"스트리밍 처리 오류: {e}")
+        return None
+
+
+def extract_json_from_text(text):
+    """
+    텍스트에서 JSON 추출
+    
+    Args:
+        text (str): JSON이 포함된 텍스트
+        
+    Returns:
+        dict: 파싱된 JSON 데이터 또는 None
+    """
+    if not text:
+        return None
+    try:
+        start = text.find('{')
+        end = text.rfind('}') + 1
+        if start != -1 and end != -1:
+            return json.loads(text[start:end])
+    except:
+        pass
+    return None
 
 # ================================
 # AgentCore Memory Hook
@@ -42,7 +102,7 @@ class InvestmentMemoryHook(HookProvider):
         self.session_id = session_id
 
     def on_agent_initialized(self, event: AgentInitializedEvent):
-        """에이전트 초기화 시 메모리 설정 (간단 버전)"""
+        """에이전트 초기화 시 메모리 설정"""
         try:
             # 현재 세션의 기존 대화가 있는지 확인
             recent_turns = self.memory_client.get_last_k_turns(
@@ -70,7 +130,6 @@ class InvestmentMemoryHook(HookProvider):
             
         except Exception as e:
             print(f"⚠️ 메모리 로드 실패 (정상 - 새 세션): {e}")
-            # 새로운 세션이므로 실패는 정상적임
 
     def on_message_added(self, event: MessageAddedEvent):
         """메시지 추가 시 메모리에 저장"""
@@ -111,68 +170,56 @@ class InvestmentMemoryHook(HookProvider):
         registry.add_callback(AgentInitializedEvent, self.on_agent_initialized)
 
 # ================================
-# 유틸리티 함수
+# 전문 에이전트 도구들 (Agents as Tools)
 # ================================
 
-def initialize_system():
-    """시스템 초기화"""
-    global agentcore_client, memory_client, agent_arns
+# 전역 변수 (지연 초기화)
+agentcore_client = None
+agent_arns = {}
+
+def initialize_agent_clients():
+    """에이전트 클라이언트 초기화 (환경변수 우선, 파일 백업)"""
+    global agentcore_client, agent_arns
     
     if agentcore_client is None:
-        agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
-        memory_client = MemoryClient(region_name=REGION)
+        agentcore_client = boto3.client('bedrock-agentcore', region_name=Config.REGION)
         
-        # 에이전트 ARN 로드
-        base_path = Path(__file__).parent.parent
+        # 환경변수에서 Agent ARN 로드 (Runtime 환경)
+        financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
+        portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
+        risk_arn = os.getenv("RISK_MANAGER_ARN")
         
-        with open(base_path / "financial_analyst" / "deployment_info.json") as f:
-            agent_arns["financial_analyst"] = json.load(f)["agent_arn"]
-        
-        with open(base_path / "portfolio_architect" / "deployment_info.json") as f:
-            agent_arns["portfolio_architect"] = json.load(f)["agent_arn"]
-        
-        with open(base_path / "risk_manager" / "deployment_info.json") as f:
-            agent_arns["risk_manager"] = json.load(f)["agent_arn"]
-        
-        print("✅ 시스템 초기화 완료")
-
-def extract_json_from_streaming(response_stream):
-    """스트리밍 응답에서 JSON 결과 추출 (단순화)"""
-    try:
-        for line in response_stream.iter_lines(chunk_size=1):
-            if line and line.decode("utf-8").startswith("data: "):
-                try:
-                    event_data = json.loads(line.decode("utf-8")[6:])
-                    if event_data.get("type") == "streaming_complete":
-                        return event_data
-                except json.JSONDecodeError:
-                    continue
-        return None
-    except Exception as e:
-        print(f"스트리밍 처리 오류: {e}")
-        return None
-
-def extract_json_from_text(text):
-    """텍스트에서 JSON 추출"""
-    if not text:
-        return None
-    try:
-        start = text.find('{')
-        end = text.rfind('}') + 1
-        if start != -1 and end != -1:
-            return json.loads(text[start:end])
-    except:
-        pass
-    return None
-
-# ================================
-# 전문 에이전트 도구들
-# ================================
+        if financial_arn and portfolio_arn and risk_arn:
+            # Runtime 환경: 환경변수 사용
+            agent_arns = {
+                "financial_analyst": financial_arn,
+                "portfolio_architect": portfolio_arn,
+                "risk_manager": risk_arn
+            }
+            print("✅ 환경변수에서 Agent ARN 로드 완료")
+        else:
+            # 로컬 환경: 파일에서 로드
+            try:
+                base_path = Path(__file__).parent.parent
+                
+                with open(base_path / "financial_analyst" / "deployment_info.json") as f:
+                    agent_arns["financial_analyst"] = json.load(f)["agent_arn"]
+                
+                with open(base_path / "portfolio_architect" / "deployment_info.json") as f:
+                    agent_arns["portfolio_architect"] = json.load(f)["agent_arn"]
+                
+                with open(base_path / "risk_manager" / "deployment_info.json") as f:
+                    agent_arns["risk_manager"] = json.load(f)["agent_arn"]
+                
+                print("✅ 파일에서 Agent ARN 로드 완료")
+            except Exception as e:
+                raise RuntimeError(f"Agent ARN 로드 실패: {e}")
 
 @tool
 def financial_analyst_tool(user_input_json: str) -> str:
     """재무 분석 전문가 - 위험 성향과 목표 수익률 계산"""
     try:
+        initialize_agent_clients()
         user_input = json.loads(user_input_json)
         
         response = agentcore_client.invoke_agent_runtime(
@@ -195,6 +242,7 @@ def financial_analyst_tool(user_input_json: str) -> str:
 def portfolio_architect_tool(financial_analysis_json: str) -> str:
     """포트폴리오 설계 전문가 - 맞춤형 투자 포트폴리오 설계"""
     try:
+        initialize_agent_clients()
         financial_analysis = json.loads(financial_analysis_json)
         
         # analysis_data만 추출해서 전달
@@ -223,6 +271,7 @@ def portfolio_architect_tool(financial_analysis_json: str) -> str:
 def risk_manager_tool(portfolio_data_json: str) -> str:
     """리스크 관리 전문가 - 시나리오별 리스크 분석 및 조정 전략"""
     try:
+        initialize_agent_clients()
         portfolio_data = json.loads(portfolio_data_json)
         
         response = agentcore_client.invoke_agent_runtime(
@@ -249,7 +298,15 @@ class InvestmentAdvisor:
     """AgentCore Memory 기반 Multi-Agent 투자 자문 시스템"""
     
     def __init__(self, memory_id=None, user_id=None):
-        initialize_system()
+        """
+        투자 자문 시스템 초기화
+        
+        Args:
+            memory_id (str, optional): 기존 메모리 ID. None이면 새로 생성
+            user_id (str, optional): 사용자 ID. None이면 자동 생성
+        """
+        # 메모리 클라이언트 초기화
+        self.memory_client = MemoryClient(region_name=Config.REGION)
         
         # 메모리 설정
         self.memory_id = memory_id or self._create_memory()
@@ -258,7 +315,7 @@ class InvestmentAdvisor:
 
         # 메모리 Hook 생성
         self.memory_hook = InvestmentMemoryHook(
-            memory_client=memory_client,
+            memory_client=self.memory_client,
             memory_id=self.memory_id,
             actor_id=self.user_id,
             session_id=self.session_id
@@ -268,29 +325,55 @@ class InvestmentAdvisor:
         self.advisor_agent = Agent(
             name="investment_advisor",
             model=BedrockModel(
-                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-                temperature=0.2,
-                max_tokens=4000
+                model_id=Config.MODEL_ID,
+                temperature=Config.TEMPERATURE,
+                max_tokens=Config.MAX_TOKENS
             ),
             tools=[financial_analyst_tool, portfolio_architect_tool, risk_manager_tool],
             hooks=[self.memory_hook],
-            system_prompt="""당신은 종합 투자 자문 전문가입니다.
-
-사용자의 투자 상담 요청을 받으면 다음 순서로 진행하세요:
-
-1. financial_analyst_tool 호출 - 재무 분석 및 위험 성향 평가
-2. portfolio_architect_tool 호출 - 포트폴리오 설계 (1단계 결과 사용)
-3. risk_manager_tool 호출 - 리스크 분석 (2단계 결과 사용)
-4. 모든 결과를 종합하여 실행 가능한 투자 가이드 제공
-
-각 단계의 결과를 명확히 설명하고, 최종적으로 고객이 바로 실행할 수 있는 구체적인 투자 계획을 제시하세요."""
+            system_prompt=self._get_system_prompt()
         )
+    
+    def _get_system_prompt(self) -> str:
+        """
+        투자 자문 에이전트용 시스템 프롬프트 생성
+        
+        Returns:
+            str: 투자 자문사 역할과 작업 지침이 포함된 프롬프트
+        """
+        return """당신은 친근하고 전문적인 투자 상담사입니다.
+
+투자 상담을 3단계로 대화형으로 진행하세요:
+
+**1단계: 재무 분석 🔍**
+- "안녕하세요! 투자 상담을 시작하겠습니다. 먼저 재무 상황을 분석해보겠습니다."
+- financial_analyst_tool 호출
+- 결과를 간단하게 설명
+- "이 분석 결과가 맞는지 확인해주세요. 다음 단계로 진행할까요?"
+
+**2단계: 포트폴리오 설계 📊**  
+- "이제 맞춤형 포트폴리오를 설계해보겠습니다"
+- portfolio_architect_tool 호출 (1단계 결과 사용)
+- 결과를 간단하게 설명
+- "이 포트폴리오 구성이 어떠신가요? 리스크 분석으로 넘어갈까요?"
+
+**3단계: 리스크 분석 ⚠️**
+- "마지막으로 리스크를 분석해보겠습니다"  
+- risk_manager_tool 호출 (2단계 결과 사용)
+- 결과를 간단하게 설명
+- "이 리스크 수준이 괜찮으신가요?"
+
+**최종 정리**
+- 3단계 결과를 종합해서 실행 가능한 투자 가이드 제공
+- "추가 질문이나 조정 요청이 있으시면 언제든 말씀하세요!"
+
+각 단계마다 사용자와 소통하며 친근하게 진행하세요."""
     
     def _create_memory(self):
         """새로운 메모리 생성"""
         try:
             memory_name = f"InvestmentAdvisor_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            memory = memory_client.create_memory_and_wait(
+            memory = self.memory_client.create_memory_and_wait(
                 name=memory_name,
                 description="Investment Advisor Consultation History",
                 strategies=[],
@@ -305,7 +388,28 @@ class InvestmentAdvisor:
             return None
 
     async def run_consultation_async(self, user_input):
-        """투자 상담 실행 (스트리밍)"""
+        """
+        실시간 스트리밍 투자 상담 수행 (Multi-Agent 패턴)
+        
+        3개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
+        분석 과정과 결과를 스트리밍 이벤트로 실시간 전송합니다.
+        
+        Args:
+            user_input (dict): 고객 투자 정보
+                - total_investable_amount: 총 투자 가능 금액
+                - age: 나이
+                - stock_investment_experience_years: 주식 투자 경험 년수
+                - target_amount: 1년 후 목표 금액
+            
+        Yields:
+            dict: 스트리밍 이벤트
+                - type: 이벤트 타입 (data, message, result, error)
+                - data: AI 대화 텍스트 (실시간)
+                - message: 도구 사용 및 결과 메시지
+                - result: 최종 상담 결과
+                - session_id: 세션 ID
+                - memory_id: 메모리 ID
+        """
         try:
             print(f"🚀 투자 상담 시작 (세션: {self.session_id})")
             
@@ -334,24 +438,50 @@ class InvestmentAdvisor:
 # AgentCore Runtime 엔트리포인트
 # ================================
 
+# 전역 인스턴스 (지연 초기화)
+advisor = None
+
 @app.entrypoint
 async def investment_advisor_entrypoint(payload):
-    """AgentCore Runtime 엔트리포인트"""
-    try:
-        user_input = payload.get("input_data")
+    """
+    AgentCore Runtime 엔트리포인트
+    
+    AWS AgentCore Runtime 환경에서 호출되는 메인 함수입니다.
+    환경변수에서 다른 에이전트 ARN을 로드하여 Multi-Agent 상담을 수행합니다.
+    
+    Args:
+        payload (dict): 요청 페이로드
+            - input_data: 고객 투자 정보
+            - user_id: 사용자 ID (선택적)
+            - memory_id: 메모리 ID (선택적)
+    
+    Yields:
+        dict: 스트리밍 응답 이벤트들
+    
+    Environment Variables:
+        - FINANCIAL_ANALYST_ARN: Financial Analyst Agent ARN
+        - PORTFOLIO_ARCHITECT_ARN: Portfolio Architect Agent ARN
+        - RISK_MANAGER_ARN: Risk Manager Agent ARN
+        - AWS_REGION: AWS 리전 (기본값: us-west-2)
+    
+    Note:
+        - 지연 초기화로 첫 호출 시에만 InvestmentAdvisor 인스턴스 생성
+        - 실시간 스트리밍으로 상담 과정 전송
+        - Multi-Agent 패턴으로 3개 에이전트 순차 협업
+        - AgentCore Memory에 상담 히스토리 자동 저장
+    """
+    global advisor
+    
+    # Runtime 환경에서 지연 초기화
+    if advisor is None:
         user_id = payload.get("user_id")
         memory_id = payload.get("memory_id")
-        
         advisor = InvestmentAdvisor(memory_id=memory_id, user_id=user_id)
-        
-        async for event in advisor.run_consultation_async(user_input):
-            yield event
-            
-    except Exception as e:
-        yield {
-            "type": "error",
-            "error": str(e)
-        }
+
+    # 고객 정보 추출 및 투자 상담 실행
+    user_input = payload.get("input_data")
+    async for chunk in advisor.run_consultation_async(user_input):
+        yield chunk
 
 # ================================
 # 직접 실행

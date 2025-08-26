@@ -10,6 +10,7 @@ import streamlit as st
 import json
 import os
 import sys
+import time
 import boto3
 import plotly.graph_objects as go
 import pandas as pd
@@ -249,92 +250,94 @@ def invoke_investment_advisor(input_data):
         # 상태 변수 초기화
         current_thinking = ""
         current_text_placeholder = placeholder.empty()
-        tool_id_to_name = {}  # tool_use_id와 tool_name 매핑
         tool_results = {}
-        current_step = 0
-
-        # 스트리밍 응답 처리
+        
+        # 스트리밍 응답 처리 (AgentCore Runtime 형식)
         for line in response["response"].iter_lines(chunk_size=1):
-            if not line or not line.decode("utf-8").startswith("data: "):
+            if not line:
                 continue
                 
             try:
-                event_data = json.loads(line.decode("utf-8")[6:])
-                event_type = event_data.get("type")
+                line_str = line.decode("utf-8")
                 
-                if event_type == "data":
-                    # AI 대화 텍스트를 실시간으로 표시
-                    chunk_data = event_data.get("data", "")
+                # SSE 형식 처리
+                if line_str.startswith("data: "):
+                    event_data = json.loads(line_str[6:])
+                else:
+                    # 직접 JSON 형식도 처리
+                    event_data = json.loads(line_str)
+                
+                # event_data가 dict인지 확인
+                if not isinstance(event_data, dict):
+                    continue
+                
+                # 1. AI 대화 텍스트 스트리밍 (data 필드)
+                if "data" in event_data and isinstance(event_data["data"], str):
+                    chunk_data = event_data["data"]
                     current_thinking += chunk_data
                     
+                    # 실시간 대화 업데이트
                     if current_thinking.strip():
                         with current_text_placeholder.chat_message("assistant"):
                             st.markdown(current_thinking)
                 
-                elif event_type == "message":
-                    message = event_data.get("message", {})
+                # 2. 도구 사용 및 결과 처리 (message 필드)
+                elif "message" in event_data:
+                    message = event_data["message"]
                     
+                    # Assistant 메시지: 도구 사용 시작
                     if message.get("role") == "assistant":
                         for content in message.get("content", []):
                             if "toolUse" in content:
-                                tool_use = content["toolUse"]
-                                tool_name = tool_use.get("name", "")
-                                tool_use_id = tool_use.get("toolUseId", "")
-                                
-                                # 실제 함수명 추출
-                                actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
-                                tool_id_to_name[tool_use_id] = actual_tool_name
+                                tool_name = content["toolUse"].get("name", "")
                                 
                                 # 단계 진행 표시
-                                if "financial_analyst" in actual_tool_name:
-                                    current_step = 1
+                                if "financial_analyst" in tool_name:
                                     with step1_container:
                                         st.info("🔍 **1단계: 재무 분석 실행 중...** 고객님의 재무 상황을 분석하고 있습니다.")
-                                elif "portfolio_architect" in actual_tool_name:
-                                    current_step = 2
+                                elif "portfolio_architect" in tool_name:
                                     with step2_container:
-                                        st.info("📊 **2단계: 포트폴리오 설계 실행 중...** 맞춤형 투자 포트폴리오를 설계하고 있습니다.")
-                                elif "risk_manager" in actual_tool_name:
-                                    current_step = 3
+                                        st.info("� **12단계: 포트폴리오 설계 실행 중...** 맞춤형 투자 포트폴리오를 설계하고 있습니다.")
+                                elif "risk_manager" in tool_name:
                                     with step3_container:
                                         st.info("⚠️ **3단계: 리스크 분석 실행 중...** 시장 리스크를 분석하고 시나리오를 도출하고 있습니다.")
                     
+                    # User 메시지: 도구 결과
                     elif message.get("role") == "user":
                         for content in message.get("content", []):
                             if "toolResult" in content:
                                 tool_result = content["toolResult"]
-                                tool_use_id = tool_result.get("toolUseId", "")
-                                actual_tool_name = tool_id_to_name.get(tool_use_id, "unknown")
+                                result_content = tool_result.get("content", [])
                                 
-                                result_content = tool_result.get("content", [{}])
                                 if result_content and len(result_content) > 0:
                                     result_text = result_content[0].get("text", "")
                                     
-                                    # 도구 결과 저장 및 표시
-                                    if "financial_analyst" in actual_tool_name:
+                                    # 도구 이름으로 결과 분류 및 표시
+                                    if "financial_analyst" in str(tool_result):
                                         tool_results["financial_analysis"] = result_text
                                         display_step1_financial_analysis(step1_container, result_text)
-                                    elif "portfolio_architect" in actual_tool_name:
+                                    elif "portfolio_architect" in str(tool_result):
                                         tool_results["portfolio_design"] = result_text
                                         display_step2_portfolio_design(step2_container, result_text)
-                                    elif "risk_manager" in actual_tool_name:
+                                    elif "risk_manager" in str(tool_result):
                                         tool_results["risk_analysis"] = result_text
                                         display_step3_risk_analysis(step3_container, result_text)
                                 
-                                # 도구 결과 처리 후 생각 텍스트 리셋
+                                # 도구 결과 처리 후 대화 텍스트 리셋
                                 current_thinking = ""
-                                if tool_use_id in tool_id_to_name:
-                                    del tool_id_to_name[tool_use_id]
                                 current_text_placeholder = placeholder.empty()
                 
-                elif event_type == "result":
+                # 3. 최종 결과 처리
+                elif "result" in event_data:
                     # 최종 대화 표시
-                    with current_text_placeholder.chat_message("assistant"):
-                        st.markdown(current_thinking)
+                    if current_thinking.strip():
+                        with current_text_placeholder.chat_message("assistant"):
+                            st.markdown(current_thinking)
                     st.success("🎉 **투자 상담이 완료되었습니다!** 모든 분석 결과를 확인해보세요.")
                     break
                     
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError, AttributeError) as e:
+                # 파싱 오류는 무시하고 계속 진행
                 continue
         
         return {
@@ -343,6 +346,7 @@ def invoke_investment_advisor(input_data):
         }
         
     except Exception as e:
+        st.error(f"❌ AgentCore Runtime 호출 오류: {str(e)}")
         return {
             "status": "error",
             "error": str(e)

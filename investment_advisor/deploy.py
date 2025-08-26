@@ -90,18 +90,56 @@ def load_agent_arns():
 
 def create_iam_role():
     """
-    AgentCore Runtime용 IAM 역할 생성 (Memory 권한 포함)
+    Investment Advisor용 특별 IAM 역할 생성 (다른 에이전트 호출 권한 포함)
     
     Returns:
         str: 생성된 IAM 역할 ARN
     """
-    print("🔐 IAM 역할 생성 중...")
+    print("🔐 Investment Advisor 전용 IAM 역할 생성 중...")
     
-    # AgentCore Runtime용 IAM 역할 생성 (Memory 권한 포함)
+    # 기본 AgentCore Runtime용 IAM 역할 생성
     role_info = create_agentcore_runtime_role(Config.AGENT_NAME, Config.REGION)
     role_arn = role_info['Role']['Arn']
     
-    print(f"✅ IAM 역할 준비 완료: {role_arn}")
+    # Investment Advisor 전용 추가 권한 정책 생성
+    print("🔐 다른 에이전트 호출 권한 추가 중...")
+    
+    import boto3
+    iam_client = boto3.client('iam')
+    account_id = boto3.client("sts").get_caller_identity()["Account"]
+    role_name = f'agentcore-runtime-{Config.AGENT_NAME}-role'
+    
+    # 다른 에이전트 호출을 위한 추가 정책
+    additional_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "InvestmentAdvisorAgentCalls",
+                "Effect": "Allow",
+                "Action": [
+                    "bedrock-agentcore:InvokeAgentRuntime",
+                    "bedrock-agentcore:GetAgentRuntime"
+                ],
+                "Resource": [
+                    f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/financial_analyst-*",
+                    f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/portfolio_architect-*",
+                    f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/risk_manager-*"
+                ]
+            }
+        ]
+    }
+    
+    try:
+        iam_client.put_role_policy(
+            PolicyDocument=json.dumps(additional_policy),
+            PolicyName="InvestmentAdvisorAgentCallsPolicy",
+            RoleName=role_name
+        )
+        print("✅ 다른 에이전트 호출 권한 추가 완료")
+    except Exception as e:
+        print(f"⚠️ 추가 권한 설정 오류: {e}")
+    
+    print(f"✅ Investment Advisor IAM 역할 준비 완료: {role_arn}")
     return role_arn
 
 def configure_runtime(role_arn):

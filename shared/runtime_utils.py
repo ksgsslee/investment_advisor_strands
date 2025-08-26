@@ -43,6 +43,35 @@ def create_agentcore_runtime_role(agent_name, region):
                 "Resource": "*"
             },
             {
+                "Sid": "AgentCoreRuntimePermissions",
+                "Effect": "Allow",
+                "Action": [
+                    "bedrock-agentcore:InvokeAgentRuntime",
+                    "bedrock-agentcore:GetAgentRuntime",
+                    "bedrock-agentcore:ListAgentRuntimes"
+                ],
+                "Resource": [
+                    f"arn:aws:bedrock-agentcore:{region}:{account_id}:runtime/*"
+                ]
+            },
+            {
+                "Sid": "AgentCoreMemoryPermissions",
+                "Effect": "Allow",
+                "Action": [
+                    "bedrock-agentcore:CreateMemory",
+                    "bedrock-agentcore:GetMemory",
+                    "bedrock-agentcore:ListMemories",
+                    "bedrock-agentcore:DeleteMemory",
+                    "bedrock-agentcore:CreateEvent",
+                    "bedrock-agentcore:GetEvent",
+                    "bedrock-agentcore:ListEvents",
+                    "bedrock-agentcore:SearchMemory"
+                ],
+                "Resource": [
+                    f"arn:aws:bedrock-agentcore:{region}:{account_id}:memory/*"
+                ]
+            },
+            {
                 "Sid": "ECRImageAccess",
                 "Effect": "Allow",
                 "Action": [

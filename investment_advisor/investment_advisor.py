@@ -137,28 +137,17 @@ def initialize_system():
         print("✅ 시스템 초기화 완료")
 
 def extract_json_from_streaming(response_stream):
-    """스트리밍 응답에서 JSON 결과 추출"""
+    """스트리밍 응답에서 JSON 결과 추출 (단순화)"""
     try:
-        all_text = ""
-        
         for line in response_stream.iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
                     event_data = json.loads(line.decode("utf-8")[6:])
-                    
-                    if event_data.get("type") == "text_chunk":
-                        all_text += event_data.get("data", "")
-                    elif event_data.get("type") == "streaming_complete":
-                        for field in ["analysis_data", "portfolio_result", "risk_result"]:
-                            if field in event_data:
-                                return json.loads(event_data[field])
-                        if all_text:
-                            return extract_json_from_text(all_text)
+                    if event_data.get("type") == "streaming_complete":
+                        return event_data
                 except json.JSONDecodeError:
                     continue
-        
-        return extract_json_from_text(all_text) if all_text else None
-        
+        return None
     except Exception as e:
         print(f"스트리밍 처리 오류: {e}")
         return None
@@ -192,8 +181,12 @@ def financial_analyst_tool(user_input_json: str) -> str:
             payload=json.dumps({"input_data": user_input})
         )
         
-        result = extract_json_from_streaming(response["response"])
-        return json.dumps(result, ensure_ascii=False) if result else json.dumps({"error": "분석 실패"})
+        streaming_result = extract_json_from_streaming(response["response"])
+        
+        if streaming_result:
+            return json.dumps(streaming_result, ensure_ascii=False)
+        else:
+            return json.dumps({"error": "재무 분석 결과를 가져올 수 없습니다"}, ensure_ascii=False)
 
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -204,14 +197,24 @@ def portfolio_architect_tool(financial_analysis_json: str) -> str:
     try:
         financial_analysis = json.loads(financial_analysis_json)
         
+        # analysis_data만 추출해서 전달
+        if "analysis_data" in financial_analysis:
+            portfolio_input = financial_analysis["analysis_data"]
+        else:
+            portfolio_input = financial_analysis
+        
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=agent_arns["portfolio_architect"],
             qualifier="DEFAULT",
-            payload=json.dumps({"financial_analysis": financial_analysis})
+            payload=json.dumps({"financial_analysis": portfolio_input})
         )
         
-        result = extract_json_from_streaming(response["response"])
-        return json.dumps(result, ensure_ascii=False) if result else json.dumps({"error": "설계 실패"})
+        streaming_result = extract_json_from_streaming(response["response"])
+        
+        if streaming_result:
+            return json.dumps(streaming_result, ensure_ascii=False)
+        else:
+            return json.dumps({"error": "포트폴리오 설계 실패"}, ensure_ascii=False)
         
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
@@ -228,8 +231,12 @@ def risk_manager_tool(portfolio_data_json: str) -> str:
             payload=json.dumps({"portfolio_data": portfolio_data})
         )
         
-        result = extract_json_from_streaming(response["response"])
-        return json.dumps(result, ensure_ascii=False) if result else json.dumps({"error": "분석 실패"})
+        streaming_result = extract_json_from_streaming(response["response"])
+        
+        if streaming_result:
+            return json.dumps(streaming_result, ensure_ascii=False)
+        else:
+            return json.dumps({"error": "리스크 분석 실패"}, ensure_ascii=False)
         
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)

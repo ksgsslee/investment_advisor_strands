@@ -11,6 +11,7 @@ import json
 import boto3
 import plotly.graph_objects as go
 from pathlib import Path
+import plotly.express as px
 import os
 
 # ================================
@@ -44,10 +45,12 @@ def create_pie_chart(allocation_data, chart_title=""):
         labels=list(allocation_data.keys()),
         values=list(allocation_data.values()),
         hole=.3,
-        textinfo='label+percent'
+        textinfo='label+percent',
+        marker=dict(colors=px.colors.qualitative.Set3)
     )])
     fig.update_layout(title=chart_title, showlegend=True, width=400, height=400)
     return fig
+
 
 def extract_json_from_text(text_content):
     """

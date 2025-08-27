@@ -361,7 +361,7 @@ class InvestmentAdvisor:
                 "step_name": "financial_analyst",
                 "data": financial_result
             }
-            self._save_report_to_memory(user_input, financial_result)
+            
             # 2단계: 포트폴리오 설계 수행
             yield {
                 "type": "data", 
@@ -430,7 +430,7 @@ class InvestmentAdvisor:
                 return
             
             # 메모리에 리포트 저장
-            # self._save_report_to_memory(user_input, final_report)
+            self._save_report_to_memory(user_input, final_report)
             
             # 분석 완료 신호 (최종 결과 포함)
             yield {

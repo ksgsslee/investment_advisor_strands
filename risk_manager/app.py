@@ -352,41 +352,46 @@ def invoke_risk_manager(portfolio_data):
 
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
-    st.markdown("""
-    ### 🔄 AgentCore Runtime Architecture (Planning Pattern)
-    ```
-    포트폴리오 제안 → AgentCore Runtime → 리스크 관리사 AI → 도구 사용 → 시나리오 플래닝
-    ```
-    
-    **구성 요소:**
-    - **Risk Manager Agent**: 뉴스 기반 리스크 분석 및 시나리오 플래닝
-    - **Planning Pattern**: 체계적인 데이터 수집 → 분석 → 계획 수립
-    - **AgentCore Runtime**: AWS 서버리스 실행 환경
-    
-    **사용 도구:**
-    - `get_product_news(ticker)`: ETF별 최신 뉴스 조회
-    - `get_market_data()`: 주요 거시경제 지표 조회
-    """)
+    st.image(os.path.join("../static/risk_manager.png"), width=800)
+
 
 # 입력 폼
-st.markdown("**포트폴리오 구성 입력 (🤖 Portfolio Architect)**")
+st.markdown("**포트폴리오 구성 입력**")
 
-portfolio_data = st.text_area(
-    "JSON 형식",
-    value='{"portfolio_allocation": {"QQQ": 60, "SPY": 30, "GLD": 10}, "strategy": "고성장 기술주 중심의 공격적 포트폴리오로, 시장 전반의 익스포저와 위험 헤지를 결합한 전략", "reason": "고객의 공격적인 위험 성향과 40%의 높은 목표 수익률을 달성하기 위해, 성장성이 높은 기술주(QQQ) 60%를 주축으로 하고, 시장 전반의 성장을 담는 SPY 30%를 배분했습니다. 변동성 위험을 관리하기 위해 GLD 10%를 배분하여 포트폴리오의 안정성을 보완했습니다."}',
-    height=200
-)
+# 포트폴리오 배분 입력
+st.markdown("**포트폴리오 배분**")
+col1, col2, col3 = st.columns(3)
+with col1:
+    ticker1 = st.text_input("ETF 1", value="QQQ")
+    allocation1 = st.number_input("비율 1 (%)", min_value=0, max_value=100, value=60)
+with col2:
+    ticker2 = st.text_input("ETF 2", value="SPY")
+    allocation2 = st.number_input("비율 2 (%)", min_value=0, max_value=100, value=30)
+with col3:
+    ticker3 = st.text_input("ETF 3", value="GLD")
+    allocation3 = st.number_input("비율 3 (%)", min_value=0, max_value=100, value=10)
+
+strategy = st.text_input("투자 전략", value="고성장 기술주 중심의 공격적 포트폴리오")
+reason = st.text_area("구성 근거", value="고객의 공격적인 위험 성향과 높은 목표 수익률 달성을 위한 전략", height=100)
 
 submitted = st.button("리스크 분석 시작", use_container_width=True)
 
 # 메인 실행 로직
-if submitted and portfolio_data:
+if submitted:
     st.divider()
     
     with st.spinner("AI 리스크 분석 중..."):
         try:
-            # JSON 파싱
-            portfolio_dict = json.loads(portfolio_data)
+            # 포트폴리오 데이터 구성
+            portfolio_dict = {
+                "portfolio_allocation": {
+                    ticker1: allocation1,
+                    ticker2: allocation2,
+                    ticker3: allocation3
+                },
+                "strategy": strategy,
+                "reason": reason
+            }
             
             result = invoke_risk_manager(portfolio_dict)
             

@@ -351,22 +351,7 @@ def invoke_portfolio_architect(financial_analysis):
 
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
-    st.markdown("""
-    ### 🔄 MCP Server Architecture (Tool Use Pattern)
-    ```
-    재무 분석 결과 → Portfolio Architect → MCP Server → ETF 데이터 → 최종 포트폴리오
-    ```
-    
-    **구성 요소:**
-    - **Portfolio Architect Agent**: AI 포트폴리오 설계사 (AgentCore Runtime)
-    - **MCP Server**: ETF 데이터 조회 도구 서버 (AgentCore Runtime)
-    - **Tool Use Pattern**: MCP 프로토콜을 통한 도구 활용
-    - **yfinance**: 실시간 ETF 가격 데이터 소스
-    
-    **사용 도구:**
-    - `get_available_products()`: 30개 ETF 상품 목록 조회
-    - `get_product_data(ticker)`: 실시간 가격 데이터 조회 (최근 3개월)
-    """)
+    st.image(os.path.join("../static/portfolio_architect.png"), width=800)
 
 # 입력 폼
 st.markdown("**재무 분석 결과 입력**")

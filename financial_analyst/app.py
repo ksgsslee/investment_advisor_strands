@@ -160,17 +160,8 @@ def invoke_financial_advisor(input_data):
 
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
-    st.markdown("""
-    ### 🔄 AgentCore Runtime Architecture
-    ```
-    사용자 입력 → AgentCore Runtime → 재무 분석가 AI → Reflection AI → 최종 결과
-    ```
-    
-    **구성 요소:**
-    - **Financial Analyst Agent**: 재무 상황 분석 및 위험 성향 평가
-    - **Reflection Agent**: 분석 결과 검증 및 품질 보장
-    - **AgentCore Runtime**: AWS 서버리스 실행 환경
-    """)
+    st.image(os.path.join("../static/financial_analyst.png"), width=500)
+
 
 # 입력 폼
 st.markdown("**투자자 정보 입력**")

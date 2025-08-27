@@ -30,12 +30,12 @@ app = BedrockAgentCoreApp()
 class Config:
     """Financial Analyst 설정 상수"""
     # 재무 분석사 모델 설정
-    ANALYST_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    ANALYST_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     ANALYST_TEMPERATURE = 0.1
     ANALYST_MAX_TOKENS = 2000
     
     # Reflection 검증 모델 설정 (다른 모델 사용 가능)
-    REFLECTION_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    REFLECTION_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     REFLECTION_TEMPERATURE = 0.1
     REFLECTION_MAX_TOKENS = 2000
 

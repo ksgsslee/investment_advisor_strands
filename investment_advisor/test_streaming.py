@@ -1,20 +1,22 @@
 """
 test_streaming.py
-Investment Advisor 대화형 스트리밍 테스트
+Investment Advisor Sequential Multi-Agent 스트리밍 테스트
 
-3단계 대화형 투자 상담 시스템 테스트
+4단계 순차 투자 상담 시스템 테스트
+1단계: 재무 분석 → 2단계: 포트폴리오 설계 → 3단계: 리스크 분석 → 4단계: 종합 보고서
 """
 
 import asyncio
+import json
 from investment_advisor import InvestmentAdvisor
 
 async def main():
-    """대화형 스트리밍 테스트"""
-    print("🚀 Investment Advisor 대화형 스트리밍 테스트")
-    print("=" * 60)
+    """Sequential Multi-Agent 스트리밍 테스트"""
+    print("🚀 Investment Advisor Sequential Multi-Agent 스트리밍 테스트")
+    print("=" * 70)
     
     # Investment Advisor 초기화
-    advisor = InvestmentAdvisor(user_id="conversational_test_user")
+    advisor = InvestmentAdvisor()
     
     # 테스트 데이터
     user_input = {
@@ -29,62 +31,88 @@ async def main():
     print(f"   👤 나이: {user_input['age']}세")
     print(f"   📈 경험: {user_input['stock_investment_experience_years']}년")
     print(f"   🎯 목표: {user_input['target_amount']:,}원")
-    print(f"   🆔 사용자: {advisor.user_id}")
-    print(f"   📱 세션: {advisor.session_id}")
     print()
     
     # 단계별 진행 상황 추적
-    current_step = 0
-    step_names = ["시작", "재무분석", "포트폴리오설계", "리스크분석", "완료"]
-    tool_results = {}
+    step_results = {}
+    step_names = {
+        1: "🔍 재무 분석",
+        2: "📊 포트폴리오 설계", 
+        3: "⚠️ 리스크 분석",
+        4: "📝 종합 보고서 작성"
+    }
     
     try:
-        print("🎬 대화형 상담 시작!")
-        print("-" * 40)
+        print("🎬 Sequential Multi-Agent 투자 상담 시작!")
+        print("-" * 50)
         
         async for event in advisor.run_consultation_async(user_input):
             
-            # AI 대화 텍스트 스트리밍
-            if event.get("type") == "text_chunk":
-                data = event.get("data", "")
-                if data.strip():
-                    print(f"{data}", end="", flush=True)
+            # 단계별 진행 메시지
+            if event.get("type") == "data" and "message" in event:
+                message = event.get("message", "")
+                step = event.get("step")
+                if step and step in step_names:
+                    print(f"\n{step_names[step]} 단계 시작...")
+                    print(f"   {message}")
             
-            # 도구 사용 시작
-            elif event.get("type") == "tool_use":
-                tool_name = event.get("tool_name", "unknown")
+            # 단계 완료
+            elif event.get("type") == "step_complete":
+                step = event.get("step")
+                step_name = event.get("step_name", "")
+                data = event.get("data", {})
                 
-                # 단계 진행 표시
-                if "financial_analyst" in tool_name:
-                    current_step = 1
-                    print(f"\n\n🔍 1단계: 재무 분석 실행 중...")
-                elif "portfolio_architect" in tool_name:
-                    current_step = 2
-                    print(f"\n\n📊 2단계: 포트폴리오 설계 실행 중...")
-                elif "risk_manager" in tool_name:
-                    current_step = 3
-                    print(f"\n\n⚠️ 3단계: 리스크 분석 실행 중...")
-            
-            # 도구 결과
-            elif event.get("type") == "tool_result":
-                tool_content = event.get("content", [])
-                if tool_content:
-                    result_text = tool_content[0].get("text", "")
-                    
-                    # 도구 결과 저장
-                    if current_step == 1:
-                        tool_results["financial_analysis"] = result_text
-                        print(f"   ✅ 재무 분석 완료!")
-                    elif current_step == 2:
-                        tool_results["portfolio_design"] = result_text
-                        print(f"   ✅ 포트폴리오 설계 완료!")
-                    elif current_step == 3:
-                        tool_results["risk_analysis"] = result_text
-                        print(f"   ✅ 리스크 분석 완료!")
+                step_results[step] = data
+                print(f"   ✅ {step_name} 완료!")
+                
+                # 각 단계별 간단한 결과 미리보기
+                if step == 1 and "analysis_data" in data:
+                    try:
+                        analysis = json.loads(data["analysis_data"])
+                        print(f"      위험성향: {analysis.get('risk_profile', 'N/A')}")
+                        print(f"      목표수익률: {analysis.get('required_annual_return_rate', 'N/A')}%")
+                    except:
+                        print("      분석 결과 파싱 실패")
+                
+                elif step == 2 and "portfolio_result" in data:
+                    try:
+                        portfolio = json.loads(data["portfolio_result"])
+                        if "portfolio_allocation" in portfolio:
+                            print("      추천 포트폴리오:")
+                            for etf, ratio in list(portfolio["portfolio_allocation"].items())[:3]:
+                                print(f"        {etf}: {ratio}%")
+                    except:
+                        print("      포트폴리오 결과 파싱 실패")
+                
+                elif step == 3 and "risk_result" in data:
+                    try:
+                        risk = json.loads(data["risk_result"])
+                        scenarios = [k for k in risk.keys() if k.startswith('scenario')]
+                        print(f"      분석된 시나리오: {len(scenarios)}개")
+                    except:
+                        print("      리스크 결과 파싱 실패")
+                
+                elif step == 4 and "final_report" in data:
+                    report = data["final_report"]
+                    lines = report.split('\n')[:5]  # 첫 5줄만 미리보기
+                    print("      보고서 미리보기:")
+                    for line in lines:
+                        if line.strip():
+                            print(f"        {line.strip()}")
+                    print("        ...")
             
             # 최종 결과
             elif event.get("type") == "streaming_complete":
-                print(f"\n\n🎉 투자 상담 완료!")
+                final_result = event.get("final_result", {})
+                print(f"\n🎉 4단계 투자 상담 완료!")
+                
+                # 최종 보고서 출력
+                if "final_report" in final_result:
+                    print("\n" + "=" * 70)
+                    print("📋 최종 투자 상담 보고서")
+                    print("=" * 70)
+                    print(final_result["final_report"])
+                
                 break
             
             # 오류 처리
@@ -92,64 +120,59 @@ async def main():
                 print(f"\n❌ 오류 발생: {event.get('error')}")
                 return
         
-        # 결과 요약 출력
-        print("\n" + "=" * 60)
-        print("📋 상담 결과 요약")
-        print("=" * 60)
+        # 단계별 결과 요약
+        print("\n" + "=" * 70)
+        print("📊 4단계 분석 결과 요약")
+        print("=" * 70)
         
-        # 각 단계별 결과 파싱 및 표시
-        if "financial_analysis" in tool_results:
-            print("\n🔍 1단계: 재무 분석 결과")
-            print("-" * 30)
-            try:
-                import json
-                fa_result = json.loads(tool_results["financial_analysis"])
-                if "analysis_data" in fa_result:
-                    analysis = json.loads(fa_result["analysis_data"])
-                    print(f"   위험 성향: {analysis.get('risk_profile', 'N/A')}")
-                    print(f"   목표 수익률: {analysis.get('required_annual_return_rate', 'N/A')}%")
-                else:
-                    print("   분석 데이터를 파싱할 수 없습니다")
-            except:
-                print("   결과 파싱 실패")
+        for step in range(1, 5):
+            if step in step_results:
+                print(f"\n{step_names[step]} 결과:")
+                print("-" * 40)
+                
+                data = step_results[step]
+                
+                if step == 1 and "analysis_data" in data:
+                    try:
+                        analysis = json.loads(data["analysis_data"])
+                        print(f"   위험 성향: {analysis.get('risk_profile', 'N/A')}")
+                        print(f"   위험 성향 근거: {analysis.get('risk_profile_reason', 'N/A')[:100]}...")
+                        print(f"   목표 수익률: {analysis.get('required_annual_return_rate', 'N/A')}%")
+                    except:
+                        print("   결과 파싱 실패")
+                
+                elif step == 2 and "portfolio_result" in data:
+                    try:
+                        portfolio = json.loads(data["portfolio_result"])
+                        if "portfolio_allocation" in portfolio:
+                            print("   추천 포트폴리오:")
+                            for etf, ratio in portfolio["portfolio_allocation"].items():
+                                print(f"     {etf}: {ratio}%")
+                        if "expected_annual_return" in portfolio:
+                            print(f"   예상 연간 수익률: {portfolio['expected_annual_return']}%")
+                    except:
+                        print("   결과 파싱 실패")
+                
+                elif step == 3 and "risk_result" in data:
+                    try:
+                        risk = json.loads(data["risk_result"])
+                        scenarios = [k for k in risk.keys() if k.startswith('scenario')]
+                        print(f"   분석된 시나리오: {len(scenarios)}개")
+                        for scenario_key in scenarios[:2]:  # 처음 2개만 표시
+                            scenario = risk[scenario_key]
+                            print(f"     {scenario.get('name', 'N/A')}: {scenario.get('expected_loss', 'N/A')}% 손실")
+                    except:
+                        print("   결과 파싱 실패")
+                
+                elif step == 4 and "final_report" in data:
+                    report = data["final_report"]
+                    word_count = len(report.split())
+                    line_count = len(report.split('\n'))
+                    print(f"   보고서 길이: {word_count}단어, {line_count}줄")
+                    print("   보고서 구조: 종합 분석 → 추천 포트폴리오 → 리스크 관리 → 실행 가이드")
         
-        if "portfolio_design" in tool_results:
-            print("\n📊 2단계: 포트폴리오 설계 결과")
-            print("-" * 30)
-            try:
-                import json
-                pd_result = json.loads(tool_results["portfolio_design"])
-                if "portfolio_result" in pd_result:
-                    portfolio = json.loads(pd_result["portfolio_result"])
-                    if "portfolio_allocation" in portfolio:
-                        print("   추천 포트폴리오:")
-                        for etf, ratio in portfolio["portfolio_allocation"].items():
-                            print(f"     {etf}: {ratio}%")
-                else:
-                    print("   포트폴리오 데이터를 파싱할 수 없습니다")
-            except:
-                print("   결과 파싱 실패")
-        
-        if "risk_analysis" in tool_results:
-            print("\n⚠️ 3단계: 리스크 분석 결과")
-            print("-" * 30)
-            try:
-                import json
-                ra_result = json.loads(tool_results["risk_analysis"])
-                if "risk_result" in ra_result:
-                    risk = json.loads(ra_result["risk_result"])
-                    if "scenario1" in risk:
-                        print(f"   시나리오 1: {risk['scenario1'].get('name', 'N/A')}")
-                    if "scenario2" in risk:
-                        print(f"   시나리오 2: {risk['scenario2'].get('name', 'N/A')}")
-                else:
-                    print("   리스크 데이터를 파싱할 수 없습니다")
-            except:
-                print("   결과 파싱 실패")
-        
-        print(f"\n💾 세션 정보:")
-        print(f"   세션 ID: {advisor.session_id}")
-        print(f"   메모리 ID: {advisor.memory_id}")
+        print(f"\n💾 테스트 완료!")
+        print(f"   총 {len(step_results)}단계 실행됨")
         
     except Exception as e:
         print(f"❌ 테스트 실패: {e}")

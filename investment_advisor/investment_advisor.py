@@ -71,36 +71,46 @@ def extract_json_from_streaming(response_stream):
         for line in response_stream.iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
-                    event_data_str = line.decode("utf-8")[6:]
-                    event_data = json.loads(extract_json_from_text(event_data_str))
+                    # JSON 문자열에서 직접 파싱 시도
+                    event_data = json.loads(line.decode("utf-8")[6:])
                     if event_data.get("type") == "streaming_complete":
                         return event_data
                 except json.JSONDecodeError:
-                    continue
+                    # JSON 파싱 실패 시 텍스트에서 JSON 추출 시도
+                        continue
         return None
     except Exception as e:
         print(f"스트리밍 처리 오류: {e}")
         return None
 
-def extract_json_from_text(text):
+
+def extract_json_from_text(text_content):
     """
-    텍스트에서 JSON 추출
+    텍스트에서 JSON 데이터를 추출하는 함수
     
     Args:
-        text (str): JSON이 포함된 텍스트
+        text_content (str): JSON이 포함된 텍스트
         
     Returns:
         dict: 파싱된 JSON 데이터 또는 None
     """
-    if not text:
+    if isinstance(text_content, dict):
+        return text_content
+    
+    if not isinstance(text_content, str):
         return None
-    try:
-        start = text.find('{')
-        end = text.rfind('}') + 1
-        if start != -1 and end != -1:
-            return json.loads(text[start:end])
-    except:
-        pass
+    
+    # JSON 블록 찾기
+    start_idx = text_content.find('{')
+    end_idx = text_content.rfind('}') + 1
+    
+    if start_idx != -1 and end_idx != -1:
+        try:
+            json_str = text_content[start_idx:end_idx]
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            return None
+    
     return None
 
 # ================================
@@ -171,11 +181,13 @@ def call_portfolio_architect(financial_analysis):
     try:
         initialize_agent_clients()
         
-        # analysis_data만 추출해서 전달
-        if "analysis_data" in financial_analysis:
-            portfolio_input = financial_analysis["analysis_data"]
-        else:
+        # 재무 분석 결과를 문자열로 변환하여 전달
+        if isinstance(financial_analysis, str):
             portfolio_input = financial_analysis
+        elif isinstance(financial_analysis, dict):
+            portfolio_input = json.dumps(financial_analysis, ensure_ascii=False)
+        else:
+            portfolio_input = str(financial_analysis)
         
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=agent_arns["portfolio_architect"],
@@ -183,7 +195,12 @@ def call_portfolio_architect(financial_analysis):
             payload=json.dumps({"financial_analysis": portfolio_input})
         )
         
-        return extract_json_from_streaming(response["response"])
+        result = extract_json_from_streaming(response["response"])
+        
+        if result is None:
+            return {"error": "포트폴리오 설계 결과를 가져올 수 없습니다"}
+        
+        return result
         
     except Exception as e:
         print(f"포트폴리오 설계사 호출 실패: {e}")
@@ -194,13 +211,26 @@ def call_risk_manager(portfolio_data):
     try:
         initialize_agent_clients()
         
+        # 포트폴리오 데이터를 문자열로 변환하여 전달
+        if isinstance(portfolio_data, str):
+            risk_input = portfolio_data
+        elif isinstance(portfolio_data, dict):
+            risk_input = json.dumps(portfolio_data, ensure_ascii=False)
+        else:
+            risk_input = str(portfolio_data)
+        
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=agent_arns["risk_manager"],
             qualifier="DEFAULT",
-            payload=json.dumps({"portfolio_data": portfolio_data})
+            payload=json.dumps({"portfolio_data": risk_input})
         )
         
-        return extract_json_from_streaming(response["response"])
+        result = extract_json_from_streaming(response["response"])
+        
+        if result is None:
+            return {"error": "리스크 분석 결과를 가져올 수 없습니다"}
+        
+        return result
         
     except Exception as e:
         print(f"리스크 관리자 호출 실패: {e}")
@@ -323,29 +353,35 @@ class InvestmentAdvisor:
                 "message": "🔍 재무 분석사가 위험 성향과 목표 수익률을 계산 중입니다..."
             }
             
-            financial_result = call_financial_analyst(user_input)
-            reflection_result = 
-            if financial_result['reflection_result'].lower() != "yes":
+            financial_analyst_response = call_financial_analyst(user_input)
+            reflection_result = financial_analyst_response['reflection_result'].lower()
+            financial_result = financial_analyst_response['analysis_data']
+            
+            # Reflection 검증 확인
+            if reflection_result != "yes":
                 yield {
                     "type": "error",
-                    "message": financial_result['analysis_data']
+                    "error": f"재무 분석 검증 실패: {financial_result}"
                 }
+                return
 
             yield {
                 "type": "step_complete",
                 "step_name": "financial_analyst",
-                "data": financial_result['analysis_data']
+                "data": financial_result
             }
 
             # 2단계: 포트폴리오 설계 수행
             yield {
                 "type": "data", 
-                "step_name": "portfolio_architect",
+                "step": 2,
                 "message": "📊 포트폴리오 설계사가 최적 자산 배분을 계산 중입니다..."
             }
+                            
+            portfolio_architect_response = call_portfolio_architect(financial_result)
+            portfolio_result = extract_json_from_text(portfolio_architect_response['portfolio_result'])
             
-            portfolio_result = call_portfolio_architect(financial_result['analysis_data'])
-            
+            # 포트폴리오 결과 검증
             yield {
                 "type": "step_complete",
                 "step_name": "portfolio_architect",
@@ -359,12 +395,14 @@ class InvestmentAdvisor:
                 "message": "⚠️ 리스크 관리자가 시나리오별 위험도를 분석 중입니다..."
             }
             
-            risk_result = call_risk_manager(portfolio_result)
+            # 포트폴리오 결과에서 portfolio_result 추출            
+            risk_manager_response = call_risk_manager(portfolio_result)
+            risk_result = extract_json_from_text(risk_manager_response['risk_result'])
             
+            # 리스크 분석 결과 검증
             yield {
                 "type": "step_complete",
-                "step": 3,
-                "step_name": "리스크 분석",
+                "step_name": "risk_manager",
                 "data": risk_result
             }
 
@@ -383,16 +421,24 @@ class InvestmentAdvisor:
                 "risk_analysis": risk_result
             }
             
-            comprehensive_data_str = json.dumps(comprehensive_data, ensure_ascii=False)
-            report_response = self.report_agent(comprehensive_data_str)
-            final_report = report_response.message['content'][0]['text']
-            
-            yield {
-                "type": "step_complete",
-                "step": 4,
-                "step_name": "종합 보고서 작성",
-                "data": {"final_report": final_report}
-            }
+            try:
+                comprehensive_data_str = json.dumps(comprehensive_data, ensure_ascii=False)
+                report_response = self.report_agent(comprehensive_data_str)
+                final_report = report_response.message['content'][0]['text']
+                
+                yield {
+                    "type": "step_complete",
+                    "step": 4,
+                    "step_name": "종합 보고서 작성",
+                    "data": {"final_report": final_report}
+                }
+                
+            except Exception as e:
+                yield {
+                    "type": "error",
+                    "error": f"보고서 작성 실패: {str(e)}"
+                }
+                return
             
             # 분석 완료 신호 (최종 결과 포함)
             yield {

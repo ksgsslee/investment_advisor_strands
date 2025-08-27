@@ -241,6 +241,8 @@ def invoke_investment_advisor(input_data):
                         # 실제 함수명 추출 (target-portfolio-architect___get_available_products -> get_available_products)
                         actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
                         tool_id_to_name[tool_use_id] = actual_tool_name
+
+                        current_text_placeholder = placeholder.empty()
                     
                     elif event_type == "tool_result":
                         # 도구 실행 결과 처리

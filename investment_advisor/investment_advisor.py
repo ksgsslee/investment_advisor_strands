@@ -31,7 +31,7 @@ app = BedrockAgentCoreApp()
 class Config:
     """Investment Advisor 설정 상수"""
     # 보고서 작성자 모델 설정
-    REPORT_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    REPORT_MODEL_ID = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
     REPORT_TEMPERATURE = 0.1
     REPORT_MAX_TOKENS = 4000
     

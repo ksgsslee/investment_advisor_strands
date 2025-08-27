@@ -11,6 +11,7 @@ import json
 import boto3
 import plotly.graph_objects as go
 from pathlib import Path
+import os
 
 # ================================
 # 페이지 설정 및 초기화
@@ -48,6 +49,35 @@ def create_pie_chart(allocation_data, chart_title=""):
     fig.update_layout(title=chart_title, showlegend=True, width=400, height=400)
     return fig
 
+def extract_json_from_text(text_content):
+    """
+    텍스트에서 JSON 데이터를 추출하는 함수
+    
+    Args:
+        text_content (str): JSON이 포함된 텍스트
+        
+    Returns:
+        dict: 파싱된 JSON 데이터 또는 None
+    """
+    if isinstance(text_content, dict):
+        return text_content
+    
+    if not isinstance(text_content, str):
+        return None
+    
+    # JSON 블록 찾기
+    start_idx = text_content.find('{')
+    end_idx = text_content.rfind('}') + 1
+    
+    if start_idx != -1 and end_idx != -1:
+        try:
+            json_str = text_content[start_idx:end_idx]
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            return None
+    
+    return None
+
 def display_financial_analysis(analysis_content):
     """
     재무 분석 결과 표시 (financial_analyst 스타일 적용)
@@ -77,35 +107,6 @@ def display_financial_analysis(analysis_content):
     except Exception as e:
         st.error(f"재무 분석 표시 오류: {str(e)}")
         st.text(str(analysis_content))
-
-def extract_json_from_text(text_content):
-    """
-    텍스트에서 JSON 데이터를 추출하는 함수
-    
-    Args:
-        text_content (str): JSON이 포함된 텍스트
-        
-    Returns:
-        dict: 파싱된 JSON 데이터 또는 None
-    """
-    if isinstance(text_content, dict):
-        return text_content
-    
-    if not isinstance(text_content, str):
-        return None
-    
-    # JSON 블록 찾기
-    start_idx = text_content.find('{')
-    end_idx = text_content.rfind('}') + 1
-    
-    if start_idx != -1 and end_idx != -1:
-        try:
-            json_str = text_content[start_idx:end_idx]
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            return None
-    
-    return None
 
 def display_portfolio_design(portfolio_content):
     """
@@ -211,7 +212,9 @@ def invoke_investment_advisor(input_data):
                         step = event_data.get("step")
                         message = event_data.get("message", "")
                         if step and message:
-                            st.info(f"**단계 {step}**: {message}")
+                            with st.chat_message("assistant"):
+                                st.markdown(f"{message}")
+                            # st.info(f"**단계 {step}**: {message}")
                     
                     elif event_type == "step_complete":
                         step_name = event_data.get("step_name")
@@ -269,138 +272,76 @@ def invoke_investment_advisor(input_data):
 
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
-    st.markdown("""
-    ### 🔄 Multi-Agent Architecture (AgentCore Runtime)
-    ```
-    사용자 입력 → Investment Advisor → 3개 전문 에이전트 순차 호출 → 통합 리포트 + Memory 저장
-    ```
-    
-    **구성 요소:**
-    - **Investment Advisor Agent**: Multi-Agent 패턴으로 3개 에이전트 협업 관리
-    - **Financial Analyst**: Reflection 패턴으로 재무 분석 + 자체 검증
-    - **Portfolio Architect**: Tool Use 패턴으로 실시간 ETF 데이터 기반 포트폴리오 설계
-    - **Risk Manager**: Planning 패턴으로 뉴스 분석 + 시나리오 플래닝
-    - **AgentCore Memory**: 상담 히스토리 자동 저장 및 개인화
-    
-    **Agents as Tools 패턴:**
-    - 각 전문 에이전트를 도구로 활용하여 깔끔한 아키텍처 구현
-    - 실시간 스트리밍으로 분석 과정 시각화
-    """)
+    st.image("../static/investment_advisor.png", width=500)
 
-# 세션 상태 초기화
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "user_info" not in st.session_state:
-    st.session_state.user_info = None
 
-# 사용자 정보 입력 (처음에만)
-if st.session_state.user_info is None:
-    st.markdown("**투자자 정보 입력**")
-    col1, col2, col3 = st.columns(3)
+# 입력 폼
+st.markdown("**투자자 정보 입력**")
+col1, col2, col3 = st.columns(3)
 
-    with col1:
-        total_investable_amount = st.number_input(
-            "💰 투자 가능 금액 (억원 단위)",
-            min_value=0.0,
-            max_value=1000.0,
-            value=0.5,
-            step=0.1,
-            format="%.1f"
-        )
-        st.caption("예: 0.5 = 5천만원")
-
-    with col2:
-        age_options = [f"{i}-{i+4}세" for i in range(20, 101, 5)]
-        age = st.selectbox(
-            "나이",
-            options=age_options,
-            index=3
-        )
-
-    with col3:
-        experience_categories = ["0-1년", "1-3년", "3-5년", "5-10년", "10-20년", "20년 이상"]
-        stock_investment_experience_years = st.selectbox(
-            "주식 투자 경험",
-            options=experience_categories,
-            index=3
-        )
-
-    target_amount = st.number_input(
-        "💰 1년 후 목표 금액 (억원 단위)",
+with col1:
+    total_investable_amount = st.number_input(
+        "💰 투자 가능 금액 (억원 단위)",
         min_value=0.0,
         max_value=1000.0,
-        value=0.7,
+        value=0.5,
         step=0.1,
         format="%.1f"
     )
-    st.caption("예: 0.7 = 7천만원")
+    st.caption("예: 0.5 = 5천만원")
 
-    if st.button("💬 투자 상담 시작", use_container_width=True):
-        # 나이 범위를 숫자로 변환
-        age_number = int(age.split('-')[0]) + 2
-        
-        # 경험 년수를 숫자로 변환
-        experience_mapping = {
-            "0-1년": 1, "1-3년": 2, "3-5년": 4, 
-            "5-10년": 7, "10-20년": 15, "20년 이상": 25
-        }
-        experience_years = experience_mapping[stock_investment_experience_years]
-        
-        st.session_state.user_info = {
-            "total_investable_amount": int(total_investable_amount * 100000000),
-            "age": age_number,
-            "stock_investment_experience_years": experience_years,
-            "target_amount": int(target_amount * 100000000),
-        }
-        st.rerun()
+with col2:
+    age_options = [f"{i}-{i+4}세" for i in range(20, 101, 5)]
+    age = st.selectbox(
+        "나이",
+        options=age_options,
+        index=3
+    )
 
-else:
-    # 투자 상담 실행
-    st.markdown("### 🤖 AI 투자 상담 결과")
+with col3:
+    experience_categories = ["0-1년", "1-3년", "3-5년", "5-10년", "10-20년", "20년 이상"]
+    stock_investment_experience_years = st.selectbox(
+        "주식 투자 경험",
+        options=experience_categories,
+        index=3
+    )
+
+target_amount = st.number_input(
+    "💰 1년 후 목표 금액 (억원 단위)",
+    min_value=0.0,
+    max_value=1000.0,
+    value=0.7,
+    step=0.1,
+    format="%.1f"
+)
+st.caption("예: 0.7 = 7천만원")
+
+submitted = st.button("분석 시작", use_container_width=True)
+
+if submitted:
+    # 나이 범위를 숫자로 변환
+    age_number = int(age.split('-')[0]) + 2
     
-    # 사용자 정보 표시 (사이드바)
-    with st.sidebar:
-        st.header("📊 투자자 정보")
-        st.write(f"💰 투자금액: {st.session_state.user_info['total_investable_amount'] / 100000000:.1f}억원")
-        st.write(f"👤 나이: {st.session_state.user_info['age']}세")
-        st.write(f"📈 경험: {st.session_state.user_info['stock_investment_experience_years']}년")
-        st.write(f"🎯 목표금액: {st.session_state.user_info['target_amount'] / 100000000:.1f}억원")
-        
-        if st.button("🔄 정보 다시 입력"):
-            st.session_state.user_info = None
-            st.rerun()
+    # 경험 년수를 숫자로 변환
+    experience_mapping = {
+        "0-1년": 1, "1-3년": 2, "3-5년": 4, 
+        "5-10년": 7, "10-20년": 15, "20년 이상": 25
+    }
+    experience_years = experience_mapping[stock_investment_experience_years]
     
-    # 투자 상담 실행
-    if st.button("🚀 투자 분석 시작", use_container_width=True):
-        with st.spinner("AI 에이전트들이 분석 중입니다..."):
-            result = invoke_investment_advisor(st.session_state.user_info)
-            
-            if result['status'] == 'error':
-                st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
-            else:
-                st.success("✅ 투자 분석이 완료되었습니다!")
-                st.session_state.results = result.get('results', {})
-                    
-    # 결과가 있으면 표시
-    if "results" in st.session_state:
-        results = st.session_state.results
+    # 입력 데이터 구성
+    input_data = {
+        "total_investable_amount": int(total_investable_amount * 100000000),
+        "age": age_number,
+        "stock_investment_experience_years": experience_years,
+        "target_amount": int(target_amount * 100000000),
+    }
+    
+    # 투자 분석 실행
+    with st.spinner("AI 에이전트들이 분석 중입니다..."):
+        result = invoke_investment_advisor(input_data)
         
-        # 탭으로 결과 구성
-        tab1, tab2, tab3, tab4 = st.tabs(["재무 분석", "포트폴리오", "리스크 분석", "종합 보고서"])
-        
-        with tab1:
-            if "financial_analysis" in results:
-                display_financial_analysis(results["financial_analysis"])
-        
-        with tab2:
-            if "portfolio_design" in results:
-                display_portfolio_design(results["portfolio_design"])
-        
-        with tab3:
-            if "risk_analysis" in results:
-                display_risk_analysis(results["risk_analysis"])
-        
-        with tab4:
-            if "final_report" in results:
-                st.markdown(results["final_report"])
-
+        if result['status'] == 'error':
+            st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
+        else:
+            st.success("✅ 투자 분석이 완료되었습니다!")

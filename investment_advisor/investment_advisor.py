@@ -297,7 +297,7 @@ class InvestmentAdvisor:
             # 1단계: 재무 분석 수행
             yield {
                 "type": "data", 
-                "message": "🔍 재무 분석사가 위험 성향과 목표 수익률을 계산 중입니다..."
+                "message": "🔍 재무 분석사가 위험 성향과 목표 수익률을 계산 중입니다."
             }
             
             financial_analyst_response = agent_client.call_financial_analyst(user_input)
@@ -322,7 +322,7 @@ class InvestmentAdvisor:
             # 2단계: 포트폴리오 설계 수행
             yield {
                 "type": "data", 
-                "message": "📊 포트폴리오 설계사가 최적 자산 배분을 계산 중입니다..."
+                "message": "📊 포트폴리오 설계사가 최적 자산 배분을 계산 중입니다."
             }
                             
             portfolio_architect_response = agent_client.call_portfolio_architect(financial_result)
@@ -341,7 +341,7 @@ class InvestmentAdvisor:
             # 3단계: 리스크 분석 수행
             yield {
                 "type": "data", 
-                "message": "⚠️ 리스크 관리자가 시나리오별 위험도를 분석 중입니다..."
+                "message": "⚠️ 리스크 관리자가 시나리오별 위험도를 분석 중입니다."
             }
             
             risk_manager_response = agent_client.call_risk_manager(portfolio_result)
@@ -360,7 +360,7 @@ class InvestmentAdvisor:
             # 4단계: 종합 보고서 작성
             yield {
                 "type": "data", 
-                "message": "📝 투자 보고서 작성자가 종합 분석 보고서를 작성 중입니다..."
+                "message": "📝 투자 보고서 작성자가 종합 분석 보고서를 작성 중입니다."
             }
             
             # 모든 분석 결과를 종합하여 보고서 작성

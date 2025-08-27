@@ -33,7 +33,7 @@ app = BedrockAgentCoreApp()
 
 class Config:
     """Investment Advisor 설정 상수"""
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     TEMPERATURE = 0.2
     MAX_TOKENS = 4000
     REGION = "us-west-2"

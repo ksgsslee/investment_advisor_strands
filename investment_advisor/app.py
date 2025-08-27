@@ -83,14 +83,11 @@ def create_pie_chart(allocation_data, chart_title=""):
 def display_step1_financial_analysis(container, result_data):
     """1단계: 재무 분석 결과 표시"""
     try:
-        # result_data = json.loads(result_text)
         if "analysis_data" in result_data:
             analysis_data = json.loads(result_data["analysis_data"])
             reflection_result = result_data.get("reflection_result", "")
             
             with container:
-                st.success("✅ **1단계: 재무 분석 완료!**")
-                
                 sub_col1, sub_col2 = st.columns(2)
                 
                 with sub_col1:
@@ -102,15 +99,7 @@ def display_step1_financial_analysis(container, result_data):
                     st.metric("**필요 수익률**", f"{analysis_data.get('required_annual_return_rate', 'N/A')}%")
                     st.markdown("**수익률 분석**")
                     st.info(analysis_data.get("return_rate_reason", ""))
-                
-                st.markdown("**🔍 분석 검증 결과**")
-                if reflection_result.strip().lower().startswith("yes"):
-                    st.success("재무분석 검토 성공 - 분석 결과가 검증되었습니다")
-                else:
-                    st.error("재무분석 검토 실패")
-                    if "\n" in reflection_result:
-                        st.markdown(reflection_result.split("\n")[1])
-                
+
     except Exception as e:
         with container:
             st.warning(f"재무 분석 결과 파싱 실패: {str(e)}")
@@ -123,8 +112,6 @@ def display_step2_portfolio_design(container, result_data):
             portfolio = json.loads(result_data["portfolio_result"])
             
             with container:
-                st.success("✅ **2단계: 포트폴리오 설계 완료!**")
-                
                 if "portfolio_allocation" in portfolio:
                     col1, col2 = st.columns([1, 1])
                     
@@ -158,8 +145,6 @@ def display_step3_risk_analysis(container, result_data):
             risk = json.loads(result_data["risk_result"])
             
             with container:
-                st.success("✅ **3단계: 리스크 분석 완료!**")
-                
                 st.markdown("**⚠️ 시나리오별 리스크 분석**")
                 
                 col1, col2 = st.columns(2)
@@ -200,7 +185,7 @@ def display_step3_risk_analysis(container, result_data):
 # 메인 처리 함수
 # ================================
 
-def invoke_investment_advisor(input_data):
+def invoke_investment_advisor(input_data, placeholder):
     """AgentCore Runtime을 호출하여 투자 상담 수행"""
     try:
         response = agentcore_client.invoke_agent_runtime(
@@ -209,14 +194,10 @@ def invoke_investment_advisor(input_data):
             payload=json.dumps({"input_data": input_data})
         )
         
-        # UI 컨테이너 설정
-        placeholder = st.container()
-        placeholder.subheader("Bedrock Reasoning")
-
         # SSE 형식 응답 처리 (채팅 스타일)
         current_thinking = ""
-        current_text_placeholder = placeholder.empty()
         tool_id_to_name = {}  # tool_use_id와 tool_name 매핑
+        current_placeholder = placeholder.empty()
         
         for line in response["response"].iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
@@ -225,12 +206,13 @@ def invoke_investment_advisor(input_data):
                     event_type = event_data.get("type")
                     
                     if event_type == "text_chunk":
-                        # AI 생각 과정을 실시간으로 표시
+                        # AI 응답 텍스트 누적 및 실시간 표시
                         chunk_data = event_data.get("data", "")
                         current_thinking += chunk_data
                         
+                        # 실시간으로 텍스트 업데이트
                         if current_thinking.strip():
-                            with current_text_placeholder.chat_message("assistant"):
+                            with current_placeholder.chat_message("assistant"):
                                 st.markdown(current_thinking)
                     
                     elif event_type == "tool_use":
@@ -241,8 +223,6 @@ def invoke_investment_advisor(input_data):
                         # 실제 함수명 추출 (target-portfolio-architect___get_available_products -> get_available_products)
                         actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
                         tool_id_to_name[tool_use_id] = actual_tool_name
-
-                        current_text_placeholder = placeholder.empty()
                     
                     elif event_type == "tool_result":
                         # 도구 실행 결과 처리
@@ -254,13 +234,20 @@ def invoke_investment_advisor(input_data):
                             result_text = tool_content[0].get("text", "{}")
                             body = json.loads(result_text)
                             
-                            # 도구 타입에 따라 적절한 표시 함수 호출
+                            # 기존 display 함수들로 시각적 결과 표시 (별도 컨테이너에)
+                            result_container = st.container()
                             if actual_tool_name == "financial_analyst_tool":
                                 display_step1_financial_analysis(placeholder, body)
                             elif actual_tool_name == "portfolio_architect_tool":
                                 display_step2_portfolio_design(placeholder, body)
                             elif actual_tool_name == "risk_analysis_tool":
                                 display_step3_risk_analysis(placeholder, body)
+
+                        # 도구 결과 처리 후 생각 텍스트 리셋 및 새로운 placeholder 생성
+                        current_thinking = ""
+                        if tool_use_id in tool_id_to_name:
+                            del tool_id_to_name[tool_use_id]
+                        current_placeholder = placeholder.empty()
 
                     elif event_type == "streaming_complete":
                         # 최종 완료 메시지
@@ -275,7 +262,7 @@ def invoke_investment_advisor(input_data):
                     continue
         
         return {
-            "status": "success"
+            "status": "success",
         }
         
     except Exception as e:
@@ -399,43 +386,43 @@ else:
             st.rerun()
     
     # 대화 히스토리 표시
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-    
+    # for message in st.session_state.messages:
+    #     with st.chat_message(message["role"]):
+     #        st.markdown(message["content"])
+    placeholder = st.container()
+
     # 사용자 입력
     if prompt := st.chat_input("투자 관련 질문을 입력하세요..."):
         # 사용자 메시지 추가
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
+        with placeholder.chat_message("user"):
             st.markdown(prompt)
         
         # AI 응답 생성
-        with st.chat_message("assistant"):
-            try:
-                # 전체 대화 컨텍스트 준비
-                conversation_context = {
-                    "user_info": st.session_state.user_info,
-                    "messages": st.session_state.messages,
-                    "current_question": prompt
-                }
-                
-                with st.spinner("AI가 분석 중입니다..."):
-                    result = invoke_investment_advisor(conversation_context)
-                    
-                    if result['status'] == 'error':
-                        error_msg = f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
-                        st.error(error_msg)
-                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                    else:
-                        success_msg = "✅ 분석이 완료되었습니다! 위의 결과를 확인해보세요."
-                        st.success(success_msg)
-                        st.session_state.messages.append({"role": "assistant", "content": success_msg})
-                        
-            except Exception as e:
-                error_msg = f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}"
+        try:
+            # 전체 대화 컨텍스트 준비
+            conversation_context = {
+                "user_info": st.session_state.user_info,
+                "messages": st.session_state.messages,
+                "current_question": prompt
+            }
+        
+            result = invoke_investment_advisor(conversation_context, placeholder)
+            
+            if result['status'] == 'error':
+                error_msg = f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            else:
+                # AI 응답을 채팅 형태로 표시
+                response_content = result.get('response', '분석이 완료되었습니다.')
+                st.markdown(response_content)
+                st.session_state.messages.append({"role": "assistant", "content": response_content})
+                    
+        except Exception as e:
+            error_msg = f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}"
+            st.error(error_msg)
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
 # 사이드바 - 상담 히스토리
 if st.session_state.user_info is not None:

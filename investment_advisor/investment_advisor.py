@@ -3,7 +3,7 @@ investment_advisor.py
 Multi-Agent Investment Advisor - Sequential Agent Pattern
 
 3개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
-financial_analyst와 동일한 순서대로 agent 호출 패턴을 사용합니다.
+Sequential Multi-Agent 패턴을 활용하여 체계적인 투자 상담을 수행합니다.
 
 주요 기능:
 - Multi-Agent 패턴: 3개 전문 에이전트 순차 호출
@@ -15,7 +15,6 @@ financial_analyst와 동일한 순서대로 agent 호출 패턴을 사용합니�
 import json
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
 from strands import Agent
@@ -31,21 +30,6 @@ app = BedrockAgentCoreApp()
 
 class Config:
     """Investment Advisor 설정 상수"""
-    # 재무 분석사 모델 설정
-    FINANCIAL_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-    FINANCIAL_TEMPERATURE = 0.1
-    FINANCIAL_MAX_TOKENS = 2000
-    
-    # 포트폴리오 설계사 모델 설정
-    PORTFOLIO_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-    PORTFOLIO_TEMPERATURE = 0.1
-    PORTFOLIO_MAX_TOKENS = 3000
-    
-    # 리스크 관리자 모델 설정
-    RISK_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-    RISK_TEMPERATURE = 0.1
-    RISK_MAX_TOKENS = 3000
-    
     # 보고서 작성자 모델 설정
     REPORT_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
     REPORT_TEMPERATURE = 0.1
@@ -71,18 +55,15 @@ def extract_json_from_streaming(response_stream):
         for line in response_stream.iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
-                    # JSON 문자열에서 직접 파싱 시도
                     event_data = json.loads(line.decode("utf-8")[6:])
                     if event_data.get("type") == "streaming_complete":
                         return event_data
                 except json.JSONDecodeError:
-                    # JSON 파싱 실패 시 텍스트에서 JSON 추출 시도
-                        continue
+                    continue
         return None
     except Exception as e:
         print(f"스트리밍 처리 오류: {e}")
         return None
-
 
 def extract_json_from_text(text_content):
     """
@@ -182,9 +163,7 @@ def call_portfolio_architect(financial_analysis):
         initialize_agent_clients()
         
         # 재무 분석 결과를 문자열로 변환하여 전달
-        if isinstance(financial_analysis, str):
-            portfolio_input = financial_analysis
-        elif isinstance(financial_analysis, dict):
+        if isinstance(financial_analysis, dict):
             portfolio_input = json.dumps(financial_analysis, ensure_ascii=False)
         else:
             portfolio_input = str(financial_analysis)
@@ -212,9 +191,7 @@ def call_risk_manager(portfolio_data):
         initialize_agent_clients()
         
         # 포트폴리오 데이터를 문자열로 변환하여 전달
-        if isinstance(portfolio_data, str):
-            risk_input = portfolio_data
-        elif isinstance(portfolio_data, dict):
+        if isinstance(portfolio_data, dict):
             risk_input = json.dumps(portfolio_data, ensure_ascii=False)
         else:
             risk_input = str(portfolio_data)
@@ -245,7 +222,7 @@ class InvestmentAdvisor:
     Multi-Agent 투자 자문 시스템 - Sequential Pattern
     
     3개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
-    financial_analyst와 동일한 순서대로 agent 호출 패턴을 사용합니다.
+    Sequential Multi-Agent 패턴을 활용하여 체계적인 투자 상담을 수행합니다.
     """
     
     def __init__(self):
@@ -328,7 +305,7 @@ class InvestmentAdvisor:
         """
         실시간 스트리밍 투자 상담 수행 (Sequential Multi-Agent 패턴)
         
-        4개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
+        3개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
         분석 과정과 결과를 스트리밍 이벤트로 실시간 전송합니다.
         
         Args:
@@ -354,15 +331,16 @@ class InvestmentAdvisor:
             }
             
             financial_analyst_response = call_financial_analyst(user_input)
+            if "error" in financial_analyst_response:
+                yield {"type": "error", "error": f"재무 분석 실패: {financial_analyst_response['error']}"}
+                return
+                
             reflection_result = financial_analyst_response['reflection_result'].lower()
             financial_result = financial_analyst_response['analysis_data']
             
             # Reflection 검증 확인
             if reflection_result != "yes":
-                yield {
-                    "type": "error",
-                    "error": f"재무 분석 검증 실패: {financial_result}"
-                }
+                yield {"type": "error", "error": f"재무 분석 검증 실패: {financial_result}"}
                 return
 
             yield {
@@ -379,9 +357,12 @@ class InvestmentAdvisor:
             }
                             
             portfolio_architect_response = call_portfolio_architect(financial_result)
+            if "error" in portfolio_architect_response:
+                yield {"type": "error", "error": f"포트폴리오 설계 실패: {portfolio_architect_response['error']}"}
+                return
+                
             portfolio_result = extract_json_from_text(portfolio_architect_response['portfolio_result'])
             
-            # 포트폴리오 결과 검증
             yield {
                 "type": "step_complete",
                 "step_name": "portfolio_architect",
@@ -395,11 +376,13 @@ class InvestmentAdvisor:
                 "message": "⚠️ 리스크 관리자가 시나리오별 위험도를 분석 중입니다..."
             }
             
-            # 포트폴리오 결과에서 portfolio_result 추출            
             risk_manager_response = call_risk_manager(portfolio_result)
+            if "error" in risk_manager_response:
+                yield {"type": "error", "error": f"리스크 분석 실패: {risk_manager_response['error']}"}
+                return
+                
             risk_result = extract_json_from_text(risk_manager_response['risk_result'])
             
-            # 리스크 분석 결과 검증
             yield {
                 "type": "step_complete",
                 "step_name": "risk_manager",
@@ -434,10 +417,7 @@ class InvestmentAdvisor:
                 }
                 
             except Exception as e:
-                yield {
-                    "type": "error",
-                    "error": f"보고서 작성 실패: {str(e)}"
-                }
+                yield {"type": "error", "error": f"보고서 작성 실패: {str(e)}"}
                 return
             
             # 분석 완료 신호 (최종 결과 포함)
@@ -452,11 +432,7 @@ class InvestmentAdvisor:
             }
 
         except Exception as e:
-            yield {
-                "type": "error",
-                "error": str(e),
-                "status": "error"
-            }
+            yield {"type": "error", "error": str(e), "status": "error"}
 
 # ================================
 # AgentCore Runtime 엔트리포인트
@@ -471,7 +447,7 @@ async def investment_advisor_entrypoint(payload):
     AgentCore Runtime 엔트리포인트
     
     AWS AgentCore Runtime 환경에서 호출되는 메인 함수입니다.
-    4개의 전문 에이전트를 순차적으로 호출하여 종합적인 투자 분석을 제공합니다.
+    3개의 전문 에이전트를 순차적으로 호출하여 종합적인 투자 분석을 제공합니다.
     
     Args:
         payload (dict): 요청 페이로드
@@ -489,7 +465,7 @@ async def investment_advisor_entrypoint(payload):
     Note:
         - 지연 초기화로 첫 호출 시에만 InvestmentAdvisor 인스턴스 생성
         - 실시간 스트리밍으로 분석 과정 전송
-        - Sequential Multi-Agent 패턴으로 4개 에이전트 순차 협업
+        - Sequential Multi-Agent 패턴으로 3개 에이전트 순차 협업
         - 구조화된 JSON 형태의 분석 결과 제공
     """
     global advisor
@@ -504,7 +480,7 @@ async def investment_advisor_entrypoint(payload):
         yield chunk
 
 # ================================
-# 직접 실행
+# 직접 실행 시 Runtime 서버 시작
 # ================================
 
 if __name__ == "__main__":

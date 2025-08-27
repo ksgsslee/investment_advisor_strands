@@ -16,7 +16,7 @@ from pathlib import Path
 # 페이지 설정 및 초기화
 # ================================
 
-st.set_page_config(page_title="Investment Advisor", layout="wide")
+st.set_page_config(page_title="Investment Advisor")
 st.title("🤖 Investment Advisor")
 
 # 배포 정보 로드
@@ -48,101 +48,141 @@ def create_pie_chart(allocation_data, chart_title=""):
     fig.update_layout(title=chart_title, showlegend=True, width=400, height=400)
     return fig
 
-def display_financial_analysis(data):
-    """재무 분석 결과 표시"""
+def display_financial_analysis(analysis_content):
+    """
+    재무 분석 결과 표시
+    
+    Args:
+        analysis_content: 재무 분석 데이터 (dict 또는 JSON 문자열)
+    """
     try:
-        if isinstance(data, str):
-            analysis_data = json.loads(data)
-        else:
-            analysis_data = data
+        # JSON 데이터 추출
+        data = extract_json_from_text(analysis_content)
+        if not data:
+            st.error("재무 분석 데이터를 찾을 수 없습니다.")
+            return
             
         col1, col2 = st.columns(2)
         
         with col1:
-            st.metric("위험 성향", analysis_data.get("risk_profile", "N/A"))
-            st.info(analysis_data.get("risk_profile_reason", ""))
+            st.metric("위험 성향", data.get("risk_profile", "N/A"))
+            st.info(data.get("risk_profile_reason", ""))
         
         with col2:
-            st.metric("필요 수익률", f"{analysis_data.get('required_annual_return_rate', 'N/A')}%")
-            st.info(analysis_data.get("return_rate_reason", ""))
+            st.metric("필요 수익률", f"{data.get('required_annual_return_rate', 'N/A')}%")
+            st.info(data.get("return_rate_reason", ""))
 
     except Exception as e:
-        st.warning(f"재무 분석 결과 파싱 실패: {str(e)}")
+        st.error(f"재무 분석 표시 오류: {str(e)}")
+        st.text(str(analysis_content))
 
-def display_portfolio_design(data):
-    """포트폴리오 설계 결과 표시"""
+def extract_json_from_text(text_content):
+    """
+    텍스트에서 JSON 데이터를 추출하는 함수
+    
+    Args:
+        text_content (str): JSON이 포함된 텍스트
+        
+    Returns:
+        dict: 파싱된 JSON 데이터 또는 None
+    """
+    if isinstance(text_content, dict):
+        return text_content
+    
+    if not isinstance(text_content, str):
+        return None
+    
+    # JSON 블록 찾기
+    start_idx = text_content.find('{')
+    end_idx = text_content.rfind('}') + 1
+    
+    if start_idx != -1 and end_idx != -1:
+        try:
+            json_str = text_content[start_idx:end_idx]
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            return None
+    
+    return None
+
+def display_portfolio_design(portfolio_content):
+    """
+    포트폴리오 설계 결과 표시
+    
+    Args:
+        portfolio_content: 포트폴리오 데이터 (dict 또는 JSON 문자열)
+    """
     try:
-        if isinstance(data, str):
-            portfolio = json.loads(data)
-        else:
-            portfolio = data
-            
-        if "portfolio_allocation" in portfolio:
-            col1, col2 = st.columns([1, 1])
-            
-            with col1:
-                st.markdown("**📊 추천 포트폴리오 구성**")
-                for etf, ratio in portfolio["portfolio_allocation"].items():
-                    st.metric(f"{etf}", f"{ratio}%")
-            
-            with col2:
-                fig = create_pie_chart(
-                    portfolio["portfolio_allocation"], 
-                    "포트폴리오 배분"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
+        # JSON 데이터 추출
+        data = extract_json_from_text(portfolio_content)
+        if not data:
+            st.error("포트폴리오 데이터를 찾을 수 없습니다.")
+            return
+        
+        # 2열 레이아웃으로 표시
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.markdown("**📊 포트폴리오**")
+            fig = create_pie_chart(
+                data["portfolio_allocation"],
+                "포트폴리오 자산 배분"
+            )
+            st.plotly_chart(fig)
+        
+        with col2:
             st.markdown("**💡 투자 전략**")
-            st.info(portfolio.get("strategy", ""))
-            
-            st.markdown("**📝 구성 근거**")
-            st.info(portfolio.get("reason", ""))
-                
+            st.info(data["strategy"])
+        
+        # 상세 근거 표시
+        st.markdown("**📝 상세 근거**")
+        st.write(data["reason"])
+        
     except Exception as e:
-        st.warning(f"포트폴리오 결과 파싱 실패: {str(e)}")
+        st.error(f"포트폴리오 표시 오류: {str(e)}")
+        st.text(str(portfolio_content))
 
-def display_risk_analysis(data):
-    """리스크 분석 결과 표시"""
+def display_risk_analysis(risk_content):
+    """
+    리스크 분석 결과 표시 (risk_manager 스타일 적용)
+    
+    Args:
+        risk_content: 리스크 분석 데이터 (dict 또는 JSON 문자열)
+    """
     try:
-        if isinstance(data, str):
-            risk = json.loads(data)
-        else:
-            risk = data
-            
-        st.markdown("**⚠️ 시나리오별 리스크 분석**")
+        # JSON 데이터 추출
+        data = extract_json_from_text(risk_content)
+        if not data:
+            st.error("리스크 분석 데이터를 찾을 수 없습니다.")
+            return
         
-        col1, col2 = st.columns(2)
+        # 각 시나리오별로 표시 (risk_manager 스타일)
+        for i, scenario_key in enumerate(["scenario1", "scenario2"], 1):
+            if scenario_key in data:
+                scenario = data[scenario_key]
+                
+                st.subheader(f"시나리오 {i}: {scenario.get('name', f'Scenario {i}')}")
+                st.markdown(scenario.get('description', '설명 없음'))
+                
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    # 파이 차트 생성 및 표시
+                    allocation = scenario.get('allocation_management', {})
+                    if allocation:
+                        fig = create_pie_chart(
+                            allocation,
+                            "조정된 포트폴리오 자산 배분"
+                        )
+                        st.plotly_chart(fig)
+                
+                with col2:
+                    st.markdown("**조정 이유 및 전략**")
+                    st.info(scenario.get('reason', '근거 없음'))
         
-        if "scenario1" in risk:
-            with col1:
-                st.markdown("### 📈 시나리오 1")
-                st.markdown(f"**{risk['scenario1'].get('name', 'N/A')}**")
-                st.info(risk['scenario1'].get('description', ''))
-                
-                if "allocation_management" in risk['scenario1']:
-                    st.markdown("**조정된 포트폴리오:**")
-                    for etf, ratio in risk['scenario1']['allocation_management'].items():
-                        st.write(f"• **{etf}**: {ratio}%")
-                    
-                    st.markdown("**조정 이유:**")
-                    st.write(risk['scenario1'].get('reason', ''))
-        
-        if "scenario2" in risk:
-            with col2:
-                st.markdown("### 📉 시나리오 2")
-                st.markdown(f"**{risk['scenario2'].get('name', 'N/A')}**")
-                st.info(risk['scenario2'].get('description', ''))
-                
-                if "allocation_management" in risk['scenario2']:
-                    st.markdown("**조정된 포트폴리오:**")
-                    for etf, ratio in risk['scenario2']['allocation_management'].items():
-                        st.write(f"• **{etf}**: {ratio}%")
-                    
-                    st.markdown("**조정 이유:**")
-                    st.write(risk['scenario2'].get('reason', ''))
-                
     except Exception as e:
-        st.warning(f"리스크 분석 결과 파싱 실패: {str(e)}")
+        st.error(f"리스크 분석 표시 오류: {str(e)}")
+        st.text(str(risk_content))
 
 # ================================
 # 메인 처리 함수

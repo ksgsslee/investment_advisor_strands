@@ -50,7 +50,7 @@ def create_pie_chart(allocation_data, chart_title=""):
 
 def display_financial_analysis(analysis_content):
     """
-    재무 분석 결과 표시
+    재무 분석 결과 표시 (financial_analyst 스타일 적용)
     
     Args:
         analysis_content: 재무 분석 데이터 (dict 또는 JSON 문자열)
@@ -65,11 +65,13 @@ def display_financial_analysis(analysis_content):
         col1, col2 = st.columns(2)
         
         with col1:
-            st.metric("위험 성향", data.get("risk_profile", "N/A"))
+            st.metric("**위험 성향**", data.get("risk_profile", "N/A"))
+            st.markdown("**위험 성향 분석**")
             st.info(data.get("risk_profile_reason", ""))
         
         with col2:
-            st.metric("필요 수익률", f"{data.get('required_annual_return_rate', 'N/A')}%")
+            st.metric("**필요 수익률**", f"{data.get('required_annual_return_rate', 'N/A')}%")
+            st.markdown("**수익률 분석**")
             st.info(data.get("return_rate_reason", ""))
 
     except Exception as e:

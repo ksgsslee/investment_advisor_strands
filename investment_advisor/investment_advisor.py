@@ -98,120 +98,91 @@ def extract_json_from_text(text_content):
 # 외부 에이전트 호출 클라이언트
 # ================================
 
-# 전역 변수 (지연 초기화)
-agentcore_client = None
-agent_arns = {}
-
-def initialize_agent_clients():
-    """에이전트 클라이언트 초기화 (환경변수 우선, 파일 백업)"""
-    global agentcore_client, agent_arns
+class AgentClient:
+    """외부 에이전트 호출을 위한 클라이언트 클래스"""
     
-    if agentcore_client is None:
-        agentcore_client = boto3.client('bedrock-agentcore', region_name=Config.REGION)
-        
-        # 환경변수에서 Agent ARN 로드 (Runtime 환경)
-        financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
-        portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
-        risk_arn = os.getenv("RISK_MANAGER_ARN")
-        
-        if financial_arn and portfolio_arn and risk_arn:
-            # Runtime 환경: 환경변수 사용
-            agent_arns = {
-                "financial_analyst": financial_arn,
-                "portfolio_architect": portfolio_arn,
-                "risk_manager": risk_arn
-            }
-            print("✅ 환경변수에서 Agent ARN 로드 완료")
-        else:
-            # 로컬 환경: 파일에서 로드
-            try:
-                base_path = Path(__file__).parent.parent
-                
-                with open(base_path / "financial_analyst" / "deployment_info.json") as f:
-                    agent_arns["financial_analyst"] = json.load(f)["agent_arn"]
-                
-                with open(base_path / "portfolio_architect" / "deployment_info.json") as f:
-                    agent_arns["portfolio_architect"] = json.load(f)["agent_arn"]
-                
-                with open(base_path / "risk_manager" / "deployment_info.json") as f:
-                    agent_arns["risk_manager"] = json.load(f)["agent_arn"]
-                
-                print("✅ 파일에서 Agent ARN 로드 완료")
-            except Exception as e:
-                raise RuntimeError(f"Agent ARN 로드 실패: {e}")
+    def __init__(self):
+        self.agentcore_client = None
+        self.agent_arns = {}
+    
+    def _initialize_clients(self):
+        """에이전트 클라이언트 초기화 (환경변수 우선, 파일 백업)"""
+        if self.agentcore_client is None:
+            self.agentcore_client = boto3.client('bedrock-agentcore', region_name=Config.REGION)
+            
+            # 환경변수에서 Agent ARN 로드 (Runtime 환경)
+            financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
+            portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
+            risk_arn = os.getenv("RISK_MANAGER_ARN")
+            
+            if financial_arn and portfolio_arn and risk_arn:
+                # Runtime 환경: 환경변수 사용
+                self.agent_arns = {
+                    "financial_analyst": financial_arn,
+                    "portfolio_architect": portfolio_arn,
+                    "risk_manager": risk_arn
+                }
+                print("✅ 환경변수에서 Agent ARN 로드 완료")
+            else:
+                # 로컬 환경: 파일에서 로드
+                try:
+                    base_path = Path(__file__).parent.parent
+                    
+                    with open(base_path / "financial_analyst" / "deployment_info.json") as f:
+                        self.agent_arns["financial_analyst"] = json.load(f)["agent_arn"]
+                    
+                    with open(base_path / "portfolio_architect" / "deployment_info.json") as f:
+                        self.agent_arns["portfolio_architect"] = json.load(f)["agent_arn"]
+                    
+                    with open(base_path / "risk_manager" / "deployment_info.json") as f:
+                        self.agent_arns["risk_manager"] = json.load(f)["agent_arn"]
+                    
+                    print("✅ 파일에서 Agent ARN 로드 완료")
+                except Exception as e:
+                    raise RuntimeError(f"Agent ARN 로드 실패: {e}")
+    
+    def _call_agent(self, agent_name, payload_key, data):
+        """공통 에이전트 호출 로직"""
+        try:
+            self._initialize_clients()
+            
+            # 데이터를 문자열로 변환
+            if isinstance(data, dict):
+                input_data = json.dumps(data, ensure_ascii=False)
+            else:
+                input_data = str(data)
+            
+            response = self.agentcore_client.invoke_agent_runtime(
+                agentRuntimeArn=self.agent_arns[agent_name],
+                qualifier="DEFAULT",
+                payload=json.dumps({payload_key: input_data if payload_key != "input_data" else data})
+            )
+            
+            result = extract_json_from_streaming(response["response"])
+            
+            if result is None:
+                return {"error": f"{agent_name} 결과를 가져올 수 없습니다"}
+            
+            return result
+            
+        except Exception as e:
+            print(f"{agent_name} 호출 실패: {e}")
+            return {"error": str(e)}
+    
+    def call_financial_analyst(self, user_input):
+        """재무 분석사 에이전트 호출"""
+        return self._call_agent("financial_analyst", "input_data", user_input)
+    
+    def call_portfolio_architect(self, financial_analysis):
+        """포트폴리오 설계사 에이전트 호출"""
+        return self._call_agent("portfolio_architect", "financial_analysis", financial_analysis)
+    
+    def call_risk_manager(self, portfolio_data):
+        """리스크 관리자 에이전트 호출"""
+        return self._call_agent("risk_manager", "portfolio_data", portfolio_data)
 
-def call_financial_analyst(user_input):
-    """재무 분석사 에이전트 호출"""
-    try:
-        initialize_agent_clients()
-        
-        response = agentcore_client.invoke_agent_runtime(
-            agentRuntimeArn=agent_arns["financial_analyst"],
-            qualifier="DEFAULT",
-            payload=json.dumps({"input_data": user_input})
-        )
-        
-        return extract_json_from_streaming(response["response"])
-        
-    except Exception as e:
-        print(f"재무 분석사 호출 실패: {e}")
-        return {"error": str(e)}
-
-def call_portfolio_architect(financial_analysis):
-    """포트폴리오 설계사 에이전트 호출"""
-    try:
-        initialize_agent_clients()
-        
-        # 재무 분석 결과를 문자열로 변환하여 전달
-        if isinstance(financial_analysis, dict):
-            portfolio_input = json.dumps(financial_analysis, ensure_ascii=False)
-        else:
-            portfolio_input = str(financial_analysis)
-        
-        response = agentcore_client.invoke_agent_runtime(
-            agentRuntimeArn=agent_arns["portfolio_architect"],
-            qualifier="DEFAULT",
-            payload=json.dumps({"financial_analysis": portfolio_input})
-        )
-        
-        result = extract_json_from_streaming(response["response"])
-        
-        if result is None:
-            return {"error": "포트폴리오 설계 결과를 가져올 수 없습니다"}
-        
-        return result
-        
-    except Exception as e:
-        print(f"포트폴리오 설계사 호출 실패: {e}")
-        return {"error": str(e)}
-
-def call_risk_manager(portfolio_data):
-    """리스크 관리자 에이전트 호출"""
-    try:
-        initialize_agent_clients()
-        
-        # 포트폴리오 데이터를 문자열로 변환하여 전달
-        if isinstance(portfolio_data, dict):
-            risk_input = json.dumps(portfolio_data, ensure_ascii=False)
-        else:
-            risk_input = str(portfolio_data)
-        
-        response = agentcore_client.invoke_agent_runtime(
-            agentRuntimeArn=agent_arns["risk_manager"],
-            qualifier="DEFAULT",
-            payload=json.dumps({"portfolio_data": risk_input})
-        )
-        
-        result = extract_json_from_streaming(response["response"])
-        
-        if result is None:
-            return {"error": "리스크 분석 결과를 가져올 수 없습니다"}
-        
-        return result
-        
-    except Exception as e:
-        print(f"리스크 관리자 호출 실패: {e}")
-        return {"error": str(e)}
+# 전역 클라이언트 인스턴스
+agent_client = AgentClient()
 
 # ================================
 # 메인 투자 자문 클래스
@@ -330,7 +301,7 @@ class InvestmentAdvisor:
                 "message": "🔍 재무 분석사가 위험 성향과 목표 수익률을 계산 중입니다..."
             }
             
-            financial_analyst_response = call_financial_analyst(user_input)
+            financial_analyst_response = agent_client.call_financial_analyst(user_input)
             if "error" in financial_analyst_response:
                 yield {"type": "error", "error": f"재무 분석 실패: {financial_analyst_response['error']}"}
                 return
@@ -356,7 +327,7 @@ class InvestmentAdvisor:
                 "message": "📊 포트폴리오 설계사가 최적 자산 배분을 계산 중입니다..."
             }
                             
-            portfolio_architect_response = call_portfolio_architect(financial_result)
+            portfolio_architect_response = agent_client.call_portfolio_architect(financial_result)
             if "error" in portfolio_architect_response:
                 yield {"type": "error", "error": f"포트폴리오 설계 실패: {portfolio_architect_response['error']}"}
                 return
@@ -376,7 +347,7 @@ class InvestmentAdvisor:
                 "message": "⚠️ 리스크 관리자가 시나리오별 위험도를 분석 중입니다..."
             }
             
-            risk_manager_response = call_risk_manager(portfolio_result)
+            risk_manager_response = agent_client.call_risk_manager(portfolio_result)
             if "error" in risk_manager_response:
                 yield {"type": "error", "error": f"리스크 분석 실패: {risk_manager_response['error']}"}
                 return

@@ -1,6 +1,6 @@
 """
 app.py
-Investment Advisor Streamlit 애플리케이션 (AgentCore Runtime 버전)
+Investment Advisor Streamlit 애플리케이션
 
 Multi-Agent 패턴 기반 투자 자문 시스템의 웹 인터페이스
 3개의 전문 에이전트가 협업하여 종합적인 투자 분석을 제공합니다.
@@ -8,41 +8,9 @@ Multi-Agent 패턴 기반 투자 자문 시스템의 웹 인터페이스
 
 import streamlit as st
 import json
-import time
 import boto3
 import plotly.graph_objects as go
 from pathlib import Path
-
-
-def parse_tool_result(result_text):
-    """
-    도구 실행 결과에서 실제 데이터를 추출하는 함수
-    
-    Args:
-        result_text (str): MCP Server 응답 JSON 문자열
-        
-    Returns:
-        dict: 파싱된 데이터
-    """
-    try:
-        parsed_result = json.loads(result_text)
-
-        start_idx = parsed_result.find('{')
-        end_idx = parsed_result.rfind('}') + 1
-        
-        if start_idx != -1 and end_idx != -1:
-            try:
-                json_str = parsed_result[start_idx:end_idx]
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                return None
-        
-        return None
-            
-    except json.JSONDecodeError as e:
-        print(f"JSON 파싱 에러: {e}")
-        print(f"원본 텍스트: {result_text}")
-        return result_text
 
 # ================================
 # 페이지 설정 및 초기화
@@ -80,112 +48,107 @@ def create_pie_chart(allocation_data, chart_title=""):
     fig.update_layout(title=chart_title, showlegend=True, width=400, height=400)
     return fig
 
-def display_step1_financial_analysis(container, result_data):
-    """1단계: 재무 분석 결과 표시"""
+def display_financial_analysis(data):
+    """재무 분석 결과 표시"""
     try:
-        if "analysis_data" in result_data:
-            analysis_data = json.loads(result_data["analysis_data"])
-            reflection_result = result_data.get("reflection_result", "")
+        if isinstance(data, str):
+            analysis_data = json.loads(data)
+        else:
+            analysis_data = data
             
-            with container:
-                sub_col1, sub_col2 = st.columns(2)
-                
-                with sub_col1:
-                    st.metric("**위험 성향**", analysis_data.get("risk_profile", "N/A"))
-                    st.markdown("**위험 성향 분석**")
-                    st.info(analysis_data.get("risk_profile_reason", ""))
-                
-                with sub_col2:
-                    st.metric("**필요 수익률**", f"{analysis_data.get('required_annual_return_rate', 'N/A')}%")
-                    st.markdown("**수익률 분석**")
-                    st.info(analysis_data.get("return_rate_reason", ""))
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("위험 성향", analysis_data.get("risk_profile", "N/A"))
+            st.info(analysis_data.get("risk_profile_reason", ""))
+        
+        with col2:
+            st.metric("필요 수익률", f"{analysis_data.get('required_annual_return_rate', 'N/A')}%")
+            st.info(analysis_data.get("return_rate_reason", ""))
 
     except Exception as e:
-        with container:
-            st.warning(f"재무 분석 결과 파싱 실패: {str(e)}")
+        st.warning(f"재무 분석 결과 파싱 실패: {str(e)}")
 
-def display_step2_portfolio_design(container, result_data):
-    """2단계: 포트폴리오 설계 결과 표시"""
+def display_portfolio_design(data):
+    """포트폴리오 설계 결과 표시"""
     try:
-        # result_data = json.loads(result_text)
-        if "portfolio_result" in result_data:
-            portfolio = json.loads(result_data["portfolio_result"])
+        if isinstance(data, str):
+            portfolio = json.loads(data)
+        else:
+            portfolio = data
             
-            with container:
-                if "portfolio_allocation" in portfolio:
-                    col1, col2 = st.columns([1, 1])
-                    
-                    with col1:
-                        st.markdown("**📊 추천 포트폴리오 구성**")
-                        for etf, ratio in portfolio["portfolio_allocation"].items():
-                            st.metric(f"**{etf}**", f"{ratio}%")
-                    
-                    with col2:
-                        fig = create_pie_chart(
-                            portfolio["portfolio_allocation"], 
-                            "포트폴리오 배분"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    st.markdown("**💡 투자 전략**")
-                    st.info(portfolio.get("strategy", ""))
-                    
-                    st.markdown("**📝 구성 근거**")
-                    st.info(portfolio.get("reason", ""))
+        if "portfolio_allocation" in portfolio:
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                st.markdown("**📊 추천 포트폴리오 구성**")
+                for etf, ratio in portfolio["portfolio_allocation"].items():
+                    st.metric(f"{etf}", f"{ratio}%")
+            
+            with col2:
+                fig = create_pie_chart(
+                    portfolio["portfolio_allocation"], 
+                    "포트폴리오 배분"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("**💡 투자 전략**")
+            st.info(portfolio.get("strategy", ""))
+            
+            st.markdown("**📝 구성 근거**")
+            st.info(portfolio.get("reason", ""))
                 
     except Exception as e:
-        with container:
-            st.warning(f"포트폴리오 결과 파싱 실패: {str(e)}")
+        st.warning(f"포트폴리오 결과 파싱 실패: {str(e)}")
 
-def display_step3_risk_analysis(container, result_data):
-    """3단계: 리스크 분석 결과 표시"""
+def display_risk_analysis(data):
+    """리스크 분석 결과 표시"""
     try:
-        # result_data = json.loads(result_text)
-        if "risk_result" in result_data:
-            risk = json.loads(result_data["risk_result"])
+        if isinstance(data, str):
+            risk = json.loads(data)
+        else:
+            risk = data
             
-            with container:
-                st.markdown("**⚠️ 시나리오별 리스크 분석**")
+        st.markdown("**⚠️ 시나리오별 리스크 분석**")
+        
+        col1, col2 = st.columns(2)
+        
+        if "scenario1" in risk:
+            with col1:
+                st.markdown("### 📈 시나리오 1")
+                st.markdown(f"**{risk['scenario1'].get('name', 'N/A')}**")
+                st.info(risk['scenario1'].get('description', ''))
                 
-                col1, col2 = st.columns(2)
+                if "allocation_management" in risk['scenario1']:
+                    st.markdown("**조정된 포트폴리오:**")
+                    for etf, ratio in risk['scenario1']['allocation_management'].items():
+                        st.write(f"• **{etf}**: {ratio}%")
+                    
+                    st.markdown("**조정 이유:**")
+                    st.write(risk['scenario1'].get('reason', ''))
+        
+        if "scenario2" in risk:
+            with col2:
+                st.markdown("### 📉 시나리오 2")
+                st.markdown(f"**{risk['scenario2'].get('name', 'N/A')}**")
+                st.info(risk['scenario2'].get('description', ''))
                 
-                if "scenario1" in risk:
-                    with col1:
-                        st.markdown("### 📈 시나리오 1")
-                        st.markdown(f"**{risk['scenario1'].get('name', 'N/A')}**")
-                        st.info(risk['scenario1'].get('description', ''))
-                        
-                        if "allocation_management" in risk['scenario1']:
-                            st.markdown("**조정된 포트폴리오:**")
-                            for etf, ratio in risk['scenario1']['allocation_management'].items():
-                                st.write(f"• **{etf}**: {ratio}%")
-                            
-                            st.markdown("**조정 이유:**")
-                            st.write(risk['scenario1'].get('reason', ''))
-                
-                if "scenario2" in risk:
-                    with col2:
-                        st.markdown("### 📉 시나리오 2")
-                        st.markdown(f"**{risk['scenario2'].get('name', 'N/A')}**")
-                        st.info(risk['scenario2'].get('description', ''))
-                        
-                        if "allocation_management" in risk['scenario2']:
-                            st.markdown("**조정된 포트폴리오:**")
-                            for etf, ratio in risk['scenario2']['allocation_management'].items():
-                                st.write(f"• **{etf}**: {ratio}%")
-                            
-                            st.markdown("**조정 이유:**")
-                            st.write(risk['scenario2'].get('reason', ''))
+                if "allocation_management" in risk['scenario2']:
+                    st.markdown("**조정된 포트폴리오:**")
+                    for etf, ratio in risk['scenario2']['allocation_management'].items():
+                        st.write(f"• **{etf}**: {ratio}%")
+                    
+                    st.markdown("**조정 이유:**")
+                    st.write(risk['scenario2'].get('reason', ''))
                 
     except Exception as e:
-        with container:
-            st.warning(f"리스크 분석 결과 파싱 실패: {str(e)}")
+        st.warning(f"리스크 분석 결과 파싱 실패: {str(e)}")
 
 # ================================
 # 메인 처리 함수
 # ================================
 
-def invoke_investment_advisor(input_data, placeholder):
+def invoke_investment_advisor(input_data):
     """AgentCore Runtime을 호출하여 투자 상담 수행"""
     try:
         response = agentcore_client.invoke_agent_runtime(
@@ -194,63 +157,48 @@ def invoke_investment_advisor(input_data, placeholder):
             payload=json.dumps({"input_data": input_data})
         )
         
-        # SSE 형식 응답 처리 (채팅 스타일)
-        current_thinking = ""
-        tool_id_to_name = {}  # tool_use_id와 tool_name 매핑
-        current_placeholder = placeholder.empty()
+        results = {}
         
         for line in response["response"].iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
-                    event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
+                    event_data = json.loads(line.decode("utf-8")[6:])
                     event_type = event_data.get("type")
                     
-                    if event_type == "text_chunk":
-                        # AI 응답 텍스트 누적 및 실시간 표시
-                        chunk_data = event_data.get("data", "")
-                        current_thinking += chunk_data
-                        
-                        # 실시간으로 텍스트 업데이트
-                        if current_thinking.strip():
-                            with current_placeholder.chat_message("assistant"):
-                                st.markdown(current_thinking)
+                    if event_type == "data":
+                        step = event_data.get("step")
+                        message = event_data.get("message", "")
+                        if step and message:
+                            st.info(f"**단계 {step}**: {message}")
                     
-                    elif event_type == "tool_use":
-                        # 도구 사용 시작 - 매핑 정보 저장
-                        tool_name = event_data.get("tool_name", "")
-                        tool_use_id = event_data.get("tool_use_id", "")
+                    elif event_type == "step_complete":
+                        step_name = event_data.get("step_name")
+                        data = event_data.get("data")
                         
-                        # 실제 함수명 추출 (target-portfolio-architect___get_available_products -> get_available_products)
-                        actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
-                        tool_id_to_name[tool_use_id] = actual_tool_name
-                    
-                    elif event_type == "tool_result":
-                        # 도구 실행 결과 처리
-                        tool_use_id = event_data.get("tool_use_id", "")
-                        actual_tool_name = tool_id_to_name.get(tool_use_id, "unknown")
-                        
-                        tool_content = event_data.get("content", [{}])
-                        if tool_content and len(tool_content) > 0:
-                            result_text = tool_content[0].get("text", "{}")
-                            body = json.loads(result_text)
+                        if step_name == "financial_analyst":
+                            st.subheader("🔍 재무 분석 결과")
+                            display_financial_analysis(data)
+                            results["financial_analysis"] = data
                             
-                            # 기존 display 함수들로 시각적 결과 표시 (별도 컨테이너에)
-                            result_container = st.container()
-                            if actual_tool_name == "financial_analyst_tool":
-                                display_step1_financial_analysis(placeholder, body)
-                            elif actual_tool_name == "portfolio_architect_tool":
-                                display_step2_portfolio_design(placeholder, body)
-                            elif actual_tool_name == "risk_analysis_tool":
-                                display_step3_risk_analysis(placeholder, body)
-
-                        # 도구 결과 처리 후 생각 텍스트 리셋 및 새로운 placeholder 생성
-                        current_thinking = ""
-                        if tool_use_id in tool_id_to_name:
-                            del tool_id_to_name[tool_use_id]
-                        current_placeholder = placeholder.empty()
+                        elif step_name == "portfolio_architect":
+                            st.subheader("📊 포트폴리오 설계")
+                            display_portfolio_design(data)
+                            results["portfolio_design"] = data
+                            
+                        elif step_name == "risk_manager":
+                            st.subheader("⚠️ 리스크 분석")
+                            display_risk_analysis(data)
+                            results["risk_analysis"] = data
+                            
+                        elif "보고서" in step_name:
+                            st.subheader("📝 종합 투자 보고서")
+                            final_report = data.get("final_report", "")
+                            st.markdown(final_report)
+                            results["final_report"] = final_report
 
                     elif event_type == "streaming_complete":
-                        # 최종 완료 메시지
+                        final_result = event_data.get("final_result", {})
+                        results.update(final_result)
                         break
                             
                     elif event_type == "error":
@@ -258,11 +206,13 @@ def invoke_investment_advisor(input_data, placeholder):
                             "status": "error",
                             "error": event_data.get("error", "Unknown error")
                         }
+                        
                 except json.JSONDecodeError:
                     continue
         
         return {
             "status": "success",
+            "results": results
         }
         
     except Exception as e:
@@ -360,17 +310,11 @@ if st.session_state.user_info is None:
             "stock_investment_experience_years": experience_years,
             "target_amount": int(target_amount * 100000000),
         }
-        
-        # 첫 인사 메시지 추가
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": f"안녕하세요! 투자 상담을 시작하겠습니다.\n\n**입력하신 정보:**\n- 투자 가능 금액: {total_investable_amount}억원\n- 나이: {age}\n- 투자 경험: {stock_investment_experience_years}\n- 목표 금액: {target_amount}억원\n\n어떤 도움이 필요하신가요? 전체 분석을 원하시면 '전체 분석해줘'라고 말씀해주세요."
-        })
         st.rerun()
 
 else:
-    # 대화 인터페이스
-    st.markdown("### 💬 AI 투자 상담사와 대화하기")
+    # 투자 상담 실행
+    st.markdown("### 🤖 AI 투자 상담 결과")
     
     # 사용자 정보 표시 (사이드바)
     with st.sidebar:
@@ -382,63 +326,39 @@ else:
         
         if st.button("🔄 정보 다시 입력"):
             st.session_state.user_info = None
-            st.session_state.messages = []
             st.rerun()
     
-    # 대화 히스토리 표시
-    # for message in st.session_state.messages:
-    #     with st.chat_message(message["role"]):
-     #        st.markdown(message["content"])
-    placeholder = st.container()
-
-    # 사용자 입력
-    if prompt := st.chat_input("투자 관련 질문을 입력하세요..."):
-        # 사용자 메시지 추가
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with placeholder.chat_message("user"):
-            st.markdown(prompt)
-        
-        # AI 응답 생성
-        try:
-            # 전체 대화 컨텍스트 준비
-            conversation_context = {
-                "user_info": st.session_state.user_info,
-                "messages": st.session_state.messages,
-                "current_question": prompt
-            }
-        
-            result = invoke_investment_advisor(conversation_context, placeholder)
+    # 투자 상담 실행
+    if st.button("🚀 투자 분석 시작", use_container_width=True):
+        with st.spinner("AI 에이전트들이 분석 중입니다..."):
+            result = invoke_investment_advisor(st.session_state.user_info)
             
             if result['status'] == 'error':
-                error_msg = f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}"
-                st.error(error_msg)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
             else:
-                # AI 응답을 채팅 형태로 표시
-                response_content = result.get('response', '분석이 완료되었습니다.')
-                st.markdown(response_content)
-                st.session_state.messages.append({"role": "assistant", "content": response_content})
+                st.success("✅ 투자 분석이 완료되었습니다!")
+                st.session_state.results = result.get('results', {})
                     
-        except Exception as e:
-            error_msg = f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}"
-            st.error(error_msg)
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+    # 결과가 있으면 표시
+    if "results" in st.session_state:
+        results = st.session_state.results
+        
+        # 탭으로 결과 구성
+        tab1, tab2, tab3, tab4 = st.tabs(["재무 분석", "포트폴리오", "리스크 분석", "종합 보고서"])
+        
+        with tab1:
+            if "financial_analysis" in results:
+                display_financial_analysis(results["financial_analysis"])
+        
+        with tab2:
+            if "portfolio_design" in results:
+                display_portfolio_design(results["portfolio_design"])
+        
+        with tab3:
+            if "risk_analysis" in results:
+                display_risk_analysis(results["risk_analysis"])
+        
+        with tab4:
+            if "final_report" in results:
+                st.markdown(results["final_report"])
 
-# 사이드바 - 상담 히스토리
-if st.session_state.user_info is not None:
-    with st.sidebar:
-        st.header("📋 상담 히스토리")
-        if st.button("Memory 조회"):
-            try:
-                from bedrock_agentcore.memory import MemoryClient
-                memory_client = MemoryClient(region_name=REGION)
-                
-                memories = memory_client.list_memories()
-                if memories:
-                    st.success(f"총 {len(memories)}개 메모리")
-                    for memory in memories[:3]:
-                        st.text(memory.get('name', 'Unknown'))
-                else:
-                    st.info("저장된 히스토리 없음")
-            except Exception as e:
-                st.error(f"조회 실패: {str(e)}")

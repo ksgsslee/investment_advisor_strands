@@ -220,7 +220,6 @@ models/
 output/
 results/
 reports/
-*.png
 *.jpg
 *.jpeg
 *.pdf

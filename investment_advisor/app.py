@@ -17,8 +17,8 @@ import os
 # 페이지 설정 및 초기화
 # ================================
 
-st.set_page_config(page_title="Investment Advisor")
-st.title("🤖 Investment Advisor")
+st.set_page_config(page_title="Agentic AI Private Banker")
+st.title("🤖 Agentic AI Private Banker")
 
 # 배포 정보 로드
 CURRENT_DIR = Path(__file__).parent.resolve()

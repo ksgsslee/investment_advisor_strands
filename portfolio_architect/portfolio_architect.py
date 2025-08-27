@@ -27,7 +27,7 @@ app = BedrockAgentCoreApp()
 
 class Config:
     """Portfolio Architect 설정 상수"""
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     TEMPERATURE = 0.3
     MAX_TOKENS = 3000
 

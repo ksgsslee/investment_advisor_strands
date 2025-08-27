@@ -10,6 +10,7 @@ import streamlit as st
 import json
 import os
 import sys
+import time
 import boto3
 import plotly.express as px
 import plotly.graph_objects as go
@@ -368,18 +369,25 @@ with st.expander("아키텍처", expanded=True):
     """)
 
 # 입력 폼
-st.markdown("**재무 분석 결과 입력(🤖 Financial Analyst)**")
+st.markdown("**재무 분석 결과 입력**")
 
-financial_analysis = st.text_area(
-    "JSON 형식",
-    value='{"risk_profile": "공격적", "risk_profile_reason": "나이가 35세로 젊고, 주식 투자 경험이 10년으로 상당히 많으며, 총 투자 가능 금액이 5000만원으로 상당히 높은 편입니다.", "required_annual_return_rate": 40.0, "return_rate_reason": "필요 연간 수익률은 (70000000 - 50000000) / 50000000 * 100 = 40.00%입니다."}',
-    height=200
-)
+risk_profile = st.text_input("위험 성향", value="공격적")
+risk_profile_reason = st.text_input("위험 성향 근거", value="35세, 공격적 투자 성향")
+required_return = st.number_input("필요 연간 수익률 (%)", value=40.0)
+return_rate_reason = st.text_input("수익률 근거", value="1년간 연평균 40.0% 수익률 필요")
 
 submitted = st.button("분석 시작", use_container_width=True)
 
+if submitted:
+    financial_analysis = {
+        "risk_profile": risk_profile,
+        "risk_profile_reason": risk_profile_reason,
+        "required_annual_return_rate": required_return,
+        "return_rate_reason": return_rate_reason
+    }
+
 # 메인 실행 로직
-if submitted and financial_analysis:
+if submitted:
     st.divider()
     
     with st.spinner("AI is processing..."):

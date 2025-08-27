@@ -289,7 +289,7 @@ class InvestmentAdvisor:
         Yields:
             dict: 스트리밍 이벤트
                 - type: 이벤트 타입 (data, step_complete, streaming_complete, error)
-                - step: 현재 단계 (1: 재무분석, 2: 포트폴리오설계, 3: 리스크분석, 4: 보고서작성)
+                - message: 진행 상황 메시지
                 - data: 각 단계별 분석 결과
                 - final_result: 최종 종합 결과 (실행 가능한 투자 가이드 포함)
         """
@@ -297,7 +297,6 @@ class InvestmentAdvisor:
             # 1단계: 재무 분석 수행
             yield {
                 "type": "data", 
-                "step": 1,
                 "message": "🔍 재무 분석사가 위험 성향과 목표 수익률을 계산 중입니다..."
             }
             
@@ -323,7 +322,6 @@ class InvestmentAdvisor:
             # 2단계: 포트폴리오 설계 수행
             yield {
                 "type": "data", 
-                "step": 2,
                 "message": "📊 포트폴리오 설계사가 최적 자산 배분을 계산 중입니다..."
             }
                             
@@ -343,7 +341,6 @@ class InvestmentAdvisor:
             # 3단계: 리스크 분석 수행
             yield {
                 "type": "data", 
-                "step": 3,
                 "message": "⚠️ 리스크 관리자가 시나리오별 위험도를 분석 중입니다..."
             }
             
@@ -363,7 +360,6 @@ class InvestmentAdvisor:
             # 4단계: 종합 보고서 작성
             yield {
                 "type": "data", 
-                "step": 4,
                 "message": "📝 투자 보고서 작성자가 종합 분석 보고서를 작성 중입니다..."
             }
             
@@ -382,7 +378,6 @@ class InvestmentAdvisor:
                 
                 yield {
                     "type": "step_complete",
-                    "step": 4,
                     "step_name": "종합 보고서 작성",
                     "data": {"final_report": final_report}
                 }

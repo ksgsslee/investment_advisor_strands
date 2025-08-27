@@ -209,13 +209,11 @@ def invoke_investment_advisor(input_data):
                     event_type = event_data.get("type")
                     
                     if event_type == "data":
-                        step = event_data.get("step")
                         message = event_data.get("message", "")
-                        if step and message:
+                        if message:
                             with st.chat_message("assistant"):
                                 st.markdown(f"{message}")
-                            # st.info(f"**단계 {step}**: {message}")
-                    
+
                     elif event_type == "step_complete":
                         step_name = event_data.get("step_name")
                         data = event_data.get("data")

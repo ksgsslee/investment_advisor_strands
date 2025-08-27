@@ -331,7 +331,8 @@ class InvestmentAdvisor:
             ),
             tools=[financial_analyst_tool, portfolio_architect_tool, risk_manager_tool],
             hooks=[self.memory_hook],
-            system_prompt=self._get_system_prompt()
+            system_prompt=self._get_system_prompt(),
+            callback_handler=None
         )
     
     def _get_system_prompt(self) -> str:
@@ -418,11 +419,49 @@ class InvestmentAdvisor:
             
             # 에이전트 스트리밍 실행
             async for event in self.advisor_agent.stream_async(input_str):
-                yield {
-                    "session_id": self.session_id,
-                    "memory_id": self.memory_id,
-                    **event
-                }
+                # AI 생각 과정 텍스트 스트리밍
+                if "data" in event:
+                    yield {
+                        "type": "text_chunk",
+                        "data": event["data"],
+                    }
+                
+                # 메시지 이벤트 처리 (도구 사용 및 결과)
+                if "message" in event:
+                    message = event["message"]
+                    
+                    # Assistant 메시지: 도구 사용 정보 추출
+                    if message.get("role") == "assistant":
+                        for content in message.get("content", []):
+                            if "toolUse" in content:
+                                tool_use = content["toolUse"]
+                                yield {
+                                    "type": "tool_use",
+                                    "tool_name": tool_use.get("name"),
+                                    "tool_use_id": tool_use.get("toolUseId"),
+                                    "tool_input": tool_use.get("input", {})
+                                }
+                    
+                    # User 메시지: 도구 실행 결과 추출
+                    if message.get("role") == "user":
+                        for content in message.get("content", []):
+                            if "toolResult" in content:
+                                tool_result = content["toolResult"]
+                                yield {
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_result["toolUseId"],
+                                    "status": tool_result["status"],
+                                    "content": tool_result["content"]
+                                }
+
+                # 최종 결과 처리
+                if "result" in event:
+                    yield {
+                        "type": "streaming_complete",
+                        "consultation_result": str(event["result"]),
+                        "session_id": self.session_id,
+                        "memory_id": self.memory_id
+                    }
             
             print("🎉 투자 상담 완료!")
             

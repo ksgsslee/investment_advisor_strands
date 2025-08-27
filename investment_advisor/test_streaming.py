@@ -45,51 +45,45 @@ async def main():
         async for event in advisor.run_consultation_async(user_input):
             
             # AI 대화 텍스트 스트리밍
-            if event.get("type") == "data":
+            if event.get("type") == "text_chunk":
                 data = event.get("data", "")
                 if data.strip():
                     print(f"{data}", end="", flush=True)
             
-            # 도구 사용 이벤트
-            elif event.get("type") == "message":
-                message = event.get("message", {})
+            # 도구 사용 시작
+            elif event.get("type") == "tool_use":
+                tool_name = event.get("tool_name", "unknown")
                 
-                if message.get("role") == "assistant":
-                    for content in message.get("content", []):
-                        if "toolUse" in content:
-                            tool_use = content["toolUse"]
-                            tool_name = tool_use.get("name", "unknown")
-                            
-                            # 단계 진행 표시
-                            if "financial_analyst" in tool_name:
-                                current_step = 1
-                                print(f"\n\n🔍 1단계: 재무 분석 실행 중...")
-                            elif "portfolio_architect" in tool_name:
-                                current_step = 2
-                                print(f"\n\n📊 2단계: 포트폴리오 설계 실행 중...")
-                            elif "risk_manager" in tool_name:
-                                current_step = 3
-                                print(f"\n\n⚠️ 3단계: 리스크 분석 실행 중...")
-                
-                elif message.get("role") == "user":
-                    for content in message.get("content", []):
-                        if "toolResult" in content:
-                            tool_result = content["toolResult"]
-                            status = tool_result.get("status", "unknown")
-                            
-                            # 도구 결과 저장
-                            if current_step == 1:
-                                tool_results["financial_analysis"] = tool_result.get("content", [{}])[0].get("text", "")
-                                print(f"   ✅ 재무 분석 완료!")
-                            elif current_step == 2:
-                                tool_results["portfolio_design"] = tool_result.get("content", [{}])[0].get("text", "")
-                                print(f"   ✅ 포트폴리오 설계 완료!")
-                            elif current_step == 3:
-                                tool_results["risk_analysis"] = tool_result.get("content", [{}])[0].get("text", "")
-                                print(f"   ✅ 리스크 분석 완료!")
+                # 단계 진행 표시
+                if "financial_analyst" in tool_name:
+                    current_step = 1
+                    print(f"\n\n🔍 1단계: 재무 분석 실행 중...")
+                elif "portfolio_architect" in tool_name:
+                    current_step = 2
+                    print(f"\n\n📊 2단계: 포트폴리오 설계 실행 중...")
+                elif "risk_manager" in tool_name:
+                    current_step = 3
+                    print(f"\n\n⚠️ 3단계: 리스크 분석 실행 중...")
+            
+            # 도구 결과
+            elif event.get("type") == "tool_result":
+                tool_content = event.get("content", [])
+                if tool_content:
+                    result_text = tool_content[0].get("text", "")
+                    
+                    # 도구 결과 저장
+                    if current_step == 1:
+                        tool_results["financial_analysis"] = result_text
+                        print(f"   ✅ 재무 분석 완료!")
+                    elif current_step == 2:
+                        tool_results["portfolio_design"] = result_text
+                        print(f"   ✅ 포트폴리오 설계 완료!")
+                    elif current_step == 3:
+                        tool_results["risk_analysis"] = result_text
+                        print(f"   ✅ 리스크 분석 완료!")
             
             # 최종 결과
-            elif event.get("type") == "result":
+            elif event.get("type") == "streaming_complete":
                 print(f"\n\n🎉 투자 상담 완료!")
                 break
             

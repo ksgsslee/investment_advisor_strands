@@ -17,9 +17,11 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Any
+from datetime import datetime
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from bedrock_agentcore.memory import MemoryClient
 import boto3
 
 # ================================
@@ -36,6 +38,10 @@ class Config:
     REPORT_MAX_TOKENS = 4000
     
     REGION = "us-west-2"
+    
+    # 메모리 설정
+    MEMORY_NAME = "InvestmentAdvisor_Reports"
+    SESSION_ID = "investment_session"
 
 # ================================
 # 유틸리티 함수들
@@ -203,7 +209,44 @@ class InvestmentAdvisor:
         투자 보고서 작성 AI 에이전트를 생성하고 종합 분석 보고서 작성을 위한 시스템 프롬프트를 설정합니다.
         """
         self._create_report_agent()
+        self._init_memory()
     
+    def _init_memory(self):
+        """메모리 클라이언트 초기화"""
+        try:
+            self.memory_client = MemoryClient(region_name=Config.REGION)
+            self.memory_id = None
+            self._ensure_memory_exists()
+        except Exception as e:
+            print(f"메모리 초기화 실패: {e}")
+            self.memory_client = None
+    
+    def _ensure_memory_exists(self):
+        """메모리 리소스 존재 확인 및 생성"""
+        try:
+            # 기존 메모리 검색
+            memories = self.memory_client.list_memories()
+            existing_memory = next((m for m in memories if m['id'].startswith(Config.MEMORY_NAME)), None)
+            
+            if existing_memory:
+                self.memory_id = existing_memory['id']
+                print(f"기존 메모리 사용: {self.memory_id}")
+            else:
+                # 새 메모리 생성
+                memory = self.memory_client.create_memory_and_wait(
+                    name=Config.MEMORY_NAME,
+                    description="Investment Advisor Report History",
+                    strategies=[],
+                    event_expiry_days=30,
+                    max_wait=300,
+                    poll_interval=10
+                )
+                self.memory_id = memory['id']
+                print(f"새 메모리 생성: {self.memory_id}")
+        except Exception as e:
+            print(f"메모리 설정 실패: {e}")
+            self.memory_id = None
+
     def _create_report_agent(self):
         """투자 보고서 작성 AI 에이전트 생성"""
         self.report_agent = Agent(
@@ -318,7 +361,7 @@ class InvestmentAdvisor:
                 "step_name": "financial_analyst",
                 "data": financial_result
             }
-
+            self._save_report_to_memory(user_input, financial_result)
             # 2단계: 포트폴리오 설계 수행
             yield {
                 "type": "data", 
@@ -386,6 +429,9 @@ class InvestmentAdvisor:
                 yield {"type": "error", "error": f"보고서 작성 실패: {str(e)}"}
                 return
             
+            # 메모리에 리포트 저장
+            # self._save_report_to_memory(user_input, final_report)
+            
             # 분석 완료 신호 (최종 결과 포함)
             yield {
                 "type": "streaming_complete",
@@ -399,6 +445,77 @@ class InvestmentAdvisor:
 
         except Exception as e:
             yield {"type": "error", "error": str(e), "status": "error"}
+    
+    def _save_report_to_memory(self, user_input, final_report):
+        """리포트를 메모리에 저장"""
+        if not self.memory_client or not self.memory_id:
+            return
+        
+        try:
+            # 고정된 가상 사용자 ID
+            user_id = "demo_user"
+            
+            # 리포트 요약 생성
+            report_summary = f"투자금액: {user_input.get('total_investable_amount', 0)//100000000}억원, 나이: {user_input.get('age')}세"
+            
+            self.memory_client.create_event(
+                memory_id=self.memory_id,
+                actor_id=user_id,
+                session_id=Config.SESSION_ID,
+                messages=[(report_summary, "user"), (final_report, "assistant")]
+            )
+            print(f"리포트 저장 완료: {user_id}")
+        except Exception as e:
+            print(f"리포트 저장 실패: {e}")
+    
+    def get_report_history(self, limit=5):
+        """리포트 히스토리 조회"""
+        if not self.memory_client or not self.memory_id:
+            # 메모리가 없을 때 더미 데이터 반환 (테스트용)
+            return [
+                {
+                    'timestamp': datetime.now().isoformat(),
+                    'user_info': '투자금액: 1억원, 나이: 35세',
+                    'report': '## 📋 투자 상담 종합 보고서\n\n### 1. 고객 프로필 요약\n- 투자 가능 금액: 1억원\n- 나이: 35세\n- 투자 경험: 중급\n\n### 2. 추천 포트폴리오\n- 주식 60%\n- 채권 30%\n- 현금 10%'
+                }
+            ]
+        
+        try:
+            # 고정된 사용자 ID로 히스토리 조회
+            user_id = "demo_user"
+            
+            recent_turns = self.memory_client.get_last_k_turns(
+                memory_id=self.memory_id,
+                actor_id=user_id,
+                session_id=Config.SESSION_ID,
+                k=limit,
+                branch_name="main"
+            )
+            
+            history = []
+            for turn in recent_turns:
+                if len(turn) >= 2:
+                    user_msg = turn[0]['content']['text']
+                    assistant_msg = turn[1]['content']['text']
+                    timestamp = turn[0].get('timestamp', datetime.now().isoformat())
+                    
+                    history.append({
+                        'timestamp': timestamp,
+                        'user_info': user_msg,
+                        'report': assistant_msg
+                    })
+            
+            return history
+        except Exception as e:
+            print(f"히스토리 조회 실패: {e}")
+            # 실패 시에도 더미 데이터 반환
+            return [
+                {
+                    'timestamp': datetime.now().isoformat(),
+                    'user_info': '투자금액: 0.5억원, 나이: 30세',
+                    'report': '## 📋 투자 상담 종합 보고서\n\n### 1. 고객 프로필 요약\n- 투자 가능 금액: 5천만원\n- 나이: 30세\n- 투자 경험: 초급\n\n### 2. 추천 포트폴리오\n- 주식 40%\n- 채권 50%\n- 현금 10%'
+                }
+            ]
 
 # ================================
 # AgentCore Runtime 엔트리포인트

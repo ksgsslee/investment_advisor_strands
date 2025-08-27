@@ -13,13 +13,21 @@ import plotly.graph_objects as go
 from pathlib import Path
 import plotly.express as px
 import os
+from datetime import datetime
 
 # ================================
 # 페이지 설정 및 초기화
 # ================================
 
 st.set_page_config(page_title="Agentic AI Private Banker")
-st.title("🤖 Agentic AI Private Banker")
+
+# 사이드바에 탭 선택
+tab_selection = st.sidebar.radio("메뉴", ["새 분석", "리포트 히스토리"])
+
+if tab_selection == "새 분석":
+    st.title("🤖 Agentic AI Private Banker")
+else:
+    st.title("📋 투자 리포트 히스토리")
 
 # 배포 정보 로드
 CURRENT_DIR = Path(__file__).parent.resolve()
@@ -268,81 +276,123 @@ def invoke_investment_advisor(input_data):
         }
 
 # ================================
+# 리포트 히스토리 조회 함수
+# ================================
+
+def get_report_history():
+    """리포트 히스토리 조회"""
+    try:
+        # InvestmentAdvisor 인스턴스 생성하여 히스토리 조회
+        from investment_advisor import InvestmentAdvisor
+        advisor = InvestmentAdvisor()
+        return advisor.get_report_history()
+    except Exception as e:
+        st.error(f"히스토리 조회 실패: {e}")
+        return []
+
+# ================================
 # UI 구성
 # ================================
 
-# 아키텍처 설명
-with st.expander("아키텍처", expanded=True):
-    st.image("../static/investment_advisor.png", width=500)
+if tab_selection == "리포트 히스토리":
+    # 리포트 히스토리 표시
+    st.markdown("최근 투자 분석 리포트들을 확인할 수 있습니다.")
+    
+    with st.spinner("리포트 히스토리를 불러오는 중..."):
+        history = get_report_history()
+    
+    if not history:
+        st.info("저장된 리포트가 없습니다.")
+    else:
+        for i, report in enumerate(history):
+            with st.expander(f"📊 리포트 {i+1}: {report['user_info']}", expanded=False):
+                st.markdown("**생성 시간:**")
+                try:
+                    timestamp = datetime.fromisoformat(report['timestamp'].replace('Z', '+00:00'))
+                    st.text(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+                except:
+                    st.text(report['timestamp'])
+                
+                st.markdown("**투자자 정보:**")
+                st.text(report['user_info'])
+                
+                st.markdown("**투자 분석 리포트:**")
+                st.markdown(report['report'])
+                st.divider()
 
+else:
+    # 기존 새 분석 UI
+    # 아키텍처 설명
+    with st.expander("아키텍처", expanded=True):
+        st.image("../static/investment_advisor.png", width=500)
 
-# 입력 폼
-st.markdown("**투자자 정보 입력**")
-col1, col2, col3 = st.columns(3)
+    # 입력 폼
+    st.markdown("**투자자 정보 입력**")
+    col1, col2, col3 = st.columns(3)
 
-with col1:
-    total_investable_amount = st.number_input(
-        "💰 투자 가능 금액 (억원 단위)",
+    with col1:
+        total_investable_amount = st.number_input(
+            "💰 투자 가능 금액 (억원 단위)",
+            min_value=0.0,
+            max_value=1000.0,
+            value=0.5,
+            step=0.1,
+            format="%.1f"
+        )
+        st.caption("예: 0.5 = 5천만원")
+
+    with col2:
+        age_options = [f"{i}-{i+4}세" for i in range(20, 101, 5)]
+        age = st.selectbox(
+            "나이",
+            options=age_options,
+            index=3
+        )
+
+    with col3:
+        experience_categories = ["0-1년", "1-3년", "3-5년", "5-10년", "10-20년", "20년 이상"]
+        stock_investment_experience_years = st.selectbox(
+            "주식 투자 경험",
+            options=experience_categories,
+            index=3
+        )
+
+    target_amount = st.number_input(
+        "💰 1년 후 목표 금액 (억원 단위)",
         min_value=0.0,
         max_value=1000.0,
-        value=0.5,
+        value=0.7,
         step=0.1,
         format="%.1f"
     )
-    st.caption("예: 0.5 = 5천만원")
+    st.caption("예: 0.7 = 7천만원")
 
-with col2:
-    age_options = [f"{i}-{i+4}세" for i in range(20, 101, 5)]
-    age = st.selectbox(
-        "나이",
-        options=age_options,
-        index=3
-    )
+    submitted = st.button("분석 시작", use_container_width=True)
 
-with col3:
-    experience_categories = ["0-1년", "1-3년", "3-5년", "5-10년", "10-20년", "20년 이상"]
-    stock_investment_experience_years = st.selectbox(
-        "주식 투자 경험",
-        options=experience_categories,
-        index=3
-    )
-
-target_amount = st.number_input(
-    "💰 1년 후 목표 금액 (억원 단위)",
-    min_value=0.0,
-    max_value=1000.0,
-    value=0.7,
-    step=0.1,
-    format="%.1f"
-)
-st.caption("예: 0.7 = 7천만원")
-
-submitted = st.button("분석 시작", use_container_width=True)
-
-if submitted:
-    # 나이 범위를 숫자로 변환
-    age_number = int(age.split('-')[0]) + 2
-    
-    # 경험 년수를 숫자로 변환
-    experience_mapping = {
-        "0-1년": 1, "1-3년": 2, "3-5년": 4, 
-        "5-10년": 7, "10-20년": 15, "20년 이상": 25
-    }
-    experience_years = experience_mapping[stock_investment_experience_years]
-    
-    # 입력 데이터 구성
-    input_data = {
-        "total_investable_amount": int(total_investable_amount * 100000000),
-        "age": age_number,
-        "stock_investment_experience_years": experience_years,
-        "target_amount": int(target_amount * 100000000),
-    }
-    
-    # 투자 분석 실행
-    with st.spinner("AI 에이전트들이 분석 중입니다..."):
-        result = invoke_investment_advisor(input_data)
+    if submitted:
+        # 나이 범위를 숫자로 변환
+        age_number = int(age.split('-')[0]) + 2
         
-        if result['status'] == 'error':
-            st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
-        else:
-            st.success("✅ 투자 분석이 완료되었습니다!")
+        # 경험 년수를 숫자로 변환
+        experience_mapping = {
+            "0-1년": 1, "1-3년": 2, "3-5년": 4, 
+            "5-10년": 7, "10-20년": 15, "20년 이상": 25
+        }
+        experience_years = experience_mapping[stock_investment_experience_years]
+        
+        # 입력 데이터 구성
+        input_data = {
+            "total_investable_amount": int(total_investable_amount * 100000000),
+            "age": age_number,
+            "stock_investment_experience_years": experience_years,
+            "target_amount": int(target_amount * 100000000),
+        }
+        
+        # 투자 분석 실행
+        with st.spinner("AI 에이전트들이 분석 중입니다..."):
+            result = invoke_investment_advisor(input_data)
+            
+            if result['status'] == 'error':
+                st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")
+            else:
+                st.success("✅ 투자 분석이 완료되었습니다!")

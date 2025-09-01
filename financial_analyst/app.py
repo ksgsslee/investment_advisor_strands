@@ -94,6 +94,12 @@ def display_reflection_result(trace_container, reflection_content):
         if "\n" in reflection_content:
             trace_container.markdown(reflection_content.split("\n")[1])
 
+def display_calculator_result(container, result_text):
+    """Calculator 도구 결과를 깔끔하게 표시"""
+    with container.expander("🧮 계산 결과", expanded=False):
+        st.code(result_text, language="text")
+        st.caption("Calculator 도구로 계산된 수익률")
+
 # ================================
 # 메인 처리 함수
 # ================================
@@ -109,7 +115,7 @@ def invoke_financial_advisor(input_data):
 
         # 응답을 표시할 컨테이너 생성
         placeholder = st.container()
-        placeholder.markdown("🤖 **Financial Analyst (AgentCore)**")
+        placeholder.markdown("🤖 **Financial Analyst**")
 
         # 스트리밍 응답 처리
         analysis_data = None
@@ -121,8 +127,8 @@ def invoke_financial_advisor(input_data):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
                     event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
-                    event_type = event_data.get("type")
                     
+                    event_type = event_data.get("type")
                     if event_type == "text_chunk":
                         # AI 생각 과정을 실시간으로 표시
                         chunk_data = event_data.get("data", "")
@@ -132,20 +138,13 @@ def invoke_financial_advisor(input_data):
                                 st.markdown(current_thinking)
                     
                     elif event_type == "tool_use":
-                        # 도구 사용 시작 - 매핑 정보 저장
+                        # 도구 사용 시작 - 매핑 정보만 저장 (화면에 표시하지 않음)
                         tool_name = event_data.get("tool_name", "")
                         tool_use_id = event_data.get("tool_use_id", "")
-                        tool_input = event_data.get("tool_input", {})
                         
                         # 실제 함수명 추출
                         actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
                         tool_id_to_name[tool_use_id] = actual_tool_name
-                        
-                        # 도구 사용 시작 표시
-                        with placeholder.chat_message("assistant"):
-                            st.info(f"🔧 {actual_tool_name} 도구 사용 중...")
-                            if tool_input:
-                                st.code(json.dumps(tool_input, indent=2, ensure_ascii=False))
                     
                     elif event_type == "tool_result":
                         # 도구 실행 결과 처리
@@ -156,11 +155,9 @@ def invoke_financial_advisor(input_data):
                         if tool_content and len(tool_content) > 0:
                             result_text = tool_content[0].get("text", "{}")
                             
-                            # 도구 결과 표시
-                            with placeholder.chat_message("assistant"):
-                                st.success(f"✅ {actual_tool_name} 완료")
-                                if actual_tool_name == "calculator":
-                                    st.code(result_text)
+                            # 도구 타입에 따라 적절한 표시 함수 호출
+                            if actual_tool_name == "calculator":
+                                display_calculator_result(placeholder, result_text)
                         
                         # 도구 결과 처리 후 생각 텍스트 리셋 및 새로운 placeholder 생성
                         current_thinking = ""
@@ -170,7 +167,7 @@ def invoke_financial_advisor(input_data):
                     
                     elif event_type == "streaming_complete":
                         # 최종 결과 처리
-                        analysis_data_str = event_data.get("analysis_data", "")
+                        analysis_data_str = event_data.get("result", "")
                         if analysis_data_str:
                             analysis_data = extract_json_from_text(analysis_data_str)
                             if analysis_data:

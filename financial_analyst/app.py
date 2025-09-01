@@ -39,69 +39,40 @@ agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 # 데이터 표시 함수들
 # ================================
 
-def display_financial_analysis(trace_container, analysis_data):
-    """개선된 재무 분석 결과 표시 - 아이콘, 난이도, 합리성 검증 포함"""
+
+def display_financial_analysis(trace_container, result):
+    """
+    재무 분석 결과 표시 (financial_analyst 스타일 적용)
     
-    # 위험성향별 아이콘과 색상 매핑
-    risk_icons = {
-        "매우 보수적": ("🛡️", "blue"),
-        "보수적": ("🔒", "green"), 
-        "중립적": ("⚖️", "orange"),
-        "공격적": ("🚀", "red"),
-        "매우 공격적": ("⚡", "violet")
-    }
+    Args:
+        analysis_content: 재무 분석 데이터 (dict 또는 JSON 문자열)
+    """
+    # 상세 근거 표시
+    trace_container.markdown("**종합 총평**")
+    trace_container.info(result.get("summary", ""))
+
+    col1, col2 = trace_container.columns(2)
     
-    risk_profile = analysis_data["risk_profile"]
-    required_return = analysis_data["required_annual_return_rate"]
-    is_reasonable = analysis_data.get("is_reasonable", "yes")
+    with col1:
+        st.metric("**위험 성향**", result.get("risk_profile", "N/A"))
+        st.markdown("**위험 성향 분석**")
+        st.write(result.get("risk_profile_reason", ""))
     
-    # 수익률 난이도 계산
-    if required_return <= 10:
-        difficulty = "쉬움 ⭐"
-        difficulty_color = "green"
-    elif required_return <= 20:
-        difficulty = "보통 ⭐⭐"
-        difficulty_color = "orange"
-    elif required_return <= 30:
-        difficulty = "어려움 ⭐⭐⭐"
-        difficulty_color = "red"
-    else:
-        difficulty = "매우 어려움 ⭐⭐⭐⭐"
-        difficulty_color = "violet"
-    
-    # 메인 메트릭 표시
-    sub_col1, sub_col2, sub_col3 = trace_container.columns(3)
-    
-    with sub_col1:
-        icon, color = risk_icons.get(risk_profile, ("❓", "gray"))
-        trace_container.markdown(f"**{icon} 위험 성향**")
-        trace_container.markdown(f":{color}[**{risk_profile}**]")
-    
-    with sub_col2:
-        trace_container.markdown("**📊 필요 수익률**")
-        trace_container.markdown(f"**{required_return}%**")
-    
-    with sub_col3:
-        trace_container.markdown("**🎯 달성 난이도**")
-        trace_container.markdown(f":{difficulty_color}[**{difficulty}**]")
-    
-    # 합리성 검증 결과
-    if is_reasonable == "no":
-        trace_container.error(
-            "⚠️ **비현실적인 목표**: 목표 수익률이 50%를 초과합니다. "
-            "더 현실적인 목표 설정을 권장합니다."
-        )
-    else:
-        trace_container.success("✅ **합리적인 목표**: 달성 가능한 수익률 범위입니다.")
-    
-    # 위험성향 분석
-    trace_container.markdown("**📋 위험성향 분석**")
-    trace_container.info(analysis_data["risk_profile_reason"])
-    
-    # 종합 총평 (새로 추가된 필드)
-    if "summary" in analysis_data:
-        trace_container.markdown("**💡 종합 총평**")
-        trace_container.success(analysis_data["summary"])
+    with col2:
+        st.metric("**필요 수익률**", f"{result.get('required_annual_return_rate', 'N/A')}%")
+        st.markdown("**수익률 분석**")
+        
+        # is_reasonable 기반 합리성 검증 표시
+        is_reasonable = result.get("is_reasonable", "yes")
+        if is_reasonable == "no":
+            st.error("⚠️ 비현실적인 목표 (50% 초과)")
+        else:
+            st.success("✅ 합리적인 목표 범위")
+        
+        # 추가 설명이 있다면 표시
+        if result.get("return_rate_reason"):
+            st.info(result.get("return_rate_reason", ""))
+
 
 def display_calculator_result(trace_container, result_text):
     """Calculator 도구 결과를 깔끔하게 표시"""

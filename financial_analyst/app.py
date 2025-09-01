@@ -34,38 +34,6 @@ except Exception as e:
 # AgentCore 클라이언트 설정
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 
-# ================================
-# 유틸리티 함수들
-# ================================
-
-def extract_json_from_text(text_content):
-    """
-    텍스트에서 JSON 데이터를 추출하는 함수
-    
-    Args:
-        text_content (str): JSON이 포함된 텍스트
-        
-    Returns:
-        dict: 파싱된 JSON 데이터 또는 None
-    """
-    if isinstance(text_content, dict):
-        return text_content
-    
-    if not isinstance(text_content, str):
-        return None
-    
-    # JSON 블록 찾기
-    start_idx = text_content.find('{')
-    end_idx = text_content.rfind('}') + 1
-    
-    if start_idx != -1 and end_idx != -1:
-        try:
-            json_str = text_content[start_idx:end_idx]
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            return None
-    
-    return None
 
 # ================================
 # 데이터 표시 함수들
@@ -167,15 +135,11 @@ def invoke_financial_advisor(input_data):
                     
                     elif event_type == "streaming_complete":
                         # 최종 결과 처리
-                        analysis_data_str = event_data.get("result", "")
-                        if analysis_data_str:
-                            analysis_data = extract_json_from_text(analysis_data_str)
-                            if analysis_data:
-                                # 최종 분석 결과 표시
-                                placeholder.subheader("📌 재무 분석 결과")
-                                display_financial_analysis(placeholder, analysis_data)
-                        break
-                        
+                        result = event_data.get("result", "")
+                        # 최종 분석 결과 표시
+                        placeholder.subheader("📌 재무 분석 결과")
+                        display_financial_analysis(placeholder, result)
+
                     elif event_type == "error":
                         return {
                             "status": "error",

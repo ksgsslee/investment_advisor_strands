@@ -42,31 +42,19 @@ agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 def display_financial_analysis(trace_container, analysis_data):
     """재무 분석 결과 표시 (기존 동작 유지)"""
     sub_col1, sub_col2 = trace_container.columns(2)
-    
     with sub_col1:
         st.metric("**위험 성향**", analysis_data["risk_profile"])
-        st.markdown("**위험 성향 분석**")
-        st.info(analysis_data["risk_profile_reason"])
     
     with sub_col2:
         st.metric("**필요 수익률**", f"{analysis_data['required_annual_return_rate']}%")
-        st.markdown("**수익률 분석**")
-        st.info(analysis_data["return_rate_reason"])
 
-def display_reflection_result(trace_container, reflection_content):
-    """Reflection 분석 결과 표시 (기존 동작 유지)"""
-    if reflection_content.strip().lower().startswith("yes"):
-        trace_container.success("재무분석 검토 성공")
-    else:
-        trace_container.error("재무분석 검토 실패")
-        if "\n" in reflection_content:
-            trace_container.markdown(reflection_content.split("\n")[1])
+    trace_container.markdown("**위험 성향 분석**")
+    trace_container.info(analysis_data["risk_profile_reason"])
 
-def display_calculator_result(container, result_text):
+def display_calculator_result(trace_container, result_text):
     """Calculator 도구 결과를 깔끔하게 표시"""
-    with container.expander("🧮 계산 결과", expanded=False):
-        st.code(result_text, language="text")
-        st.caption("Calculator 도구로 계산된 수익률")
+    trace_container.markdown("**Calculator 도구로 계산된 수익률**")
+    trace_container.code(result_text, language="text")
 
 # ================================
 # 메인 처리 함수
@@ -135,8 +123,10 @@ def invoke_financial_advisor(input_data):
                     
                     elif event_type == "streaming_complete":
                         # 최종 결과 처리
-                        result = event_data.get("result", "")
+                        result_str = event_data.get("result", "")
+                        result = json.loads(result_str)
                         # 최종 분석 결과 표시
+                        placeholder.divider()
                         placeholder.subheader("📌 재무 분석 결과")
                         display_financial_analysis(placeholder, result)
 

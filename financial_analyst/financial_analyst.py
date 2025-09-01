@@ -59,8 +59,8 @@ def extract_json_from_text(text_content):
     if start_idx != -1 and end_idx > start_idx:
         return text_content[start_idx:end_idx]
     
-    return text_content  # JSON을 찾을 수 없으면 원본 반환
-
+    # JSON을 찾을 수 없으면 원본 반환
+    return text_content
 
 # ================================
 # 메인 클래스
@@ -80,10 +80,6 @@ class FinancialAnalyst:
         
         Calculator 도구가 포함된 AI 에이전트를 생성하고 재무 분석을 위한 시스템 프롬프트를 설정합니다.
         """
-        self._create_analyst_agent()
-    
-    def _create_analyst_agent(self):
-        """재무 분석사 AI 에이전트 생성 (Calculator 도구 포함)"""
         self.analyst_agent = Agent(
             name="financial_analyst",
             model=BedrockModel(
@@ -122,10 +118,8 @@ class FinancialAnalyst:
 "risk_profile": "매우 보수적|보수적|중립적|공격적|매우 공격적",
 "risk_profile_reason": "위험 성향 평가 근거",
 "required_annual_return_rate": 수익률(백분율, 소수점 2자리),
-"return_rate_reason": "수익률 계산 과정 설명",
-"is_reasonable": "yes|no (수익률이 0~50% 범위 내이고 현실적으로 달성 가능하면 yes, 아니면 no)"
+"is_reasonable": "yes|no (수익률이 0~50% 범위 안이라면 yes, 아니면 no)"
 }"""
-
 
     
     async def analyze_financial_situation_async(self, user_input):

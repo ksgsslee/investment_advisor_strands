@@ -36,6 +36,26 @@ class Config:
     ANALYST_MAX_TOKENS = 3000
 
 # ================================
+# 유틸리티 함수들
+# ================================
+
+def extract_json_from_text(text_content):
+    """
+    텍스트에서 JSON 데이터를 추출하는 함수
+    
+    Args:
+        text_content (str): JSON이 포함된 텍스트
+        
+    Returns:
+        dict: 파싱된 JSON 데이터
+    """
+    # JSON 블록 찾기
+    start_idx = text_content.find('{')
+    end_idx = text_content.rfind('}') + 1
+    return text_content[start_idx:end_idx]
+
+
+# ================================
 # 메인 클래스
 # ================================
 
@@ -88,15 +108,17 @@ class FinancialAnalyst:
 작업:
 1. calculator 도구로 필요 연간 수익률 계산: ((목표금액 / 투자금액) - 1) * 100
 2. 나이, 경험, 목표 등을 종합적으로 고려하여 위험 성향 평가
+3. 계산된 수익률이 0~50% 범위 내인지 확인하여 합리성 판단
 
 출력 형식 (순수 JSON만):
 {
 "risk_profile": "매우 보수적|보수적|중립적|공격적|매우 공격적",
 "risk_profile_reason": "위험 성향 평가 근거",
 "required_annual_return_rate": 수익률(백분율, 소수점 2자리),
-"return_rate_reason": "수익률 계산 과정 설명"
+"return_rate_reason": "수익률 계산 과정 설명",
+"is_reasonable": "yes|no (수익률이 0~50% 범위 내이고 현실적으로 달성 가능하면 yes, 아니면 no)"
 }"""
-    
+
 
     
     async def analyze_financial_situation_async(self, user_input):
@@ -167,9 +189,13 @@ class FinancialAnalyst:
                 
                 # 최종 결과 처리
                 if "result" in event:
+                    # 결과에서 순수 JSON만 추출
+                    raw_result = str(event["result"])
+                    clean_json = extract_json_from_text(raw_result)
+                    
                     yield {
                         "type": "streaming_complete",
-                        "result": str(event["result"])
+                        "analysis_data": json.dumps(clean_json, ensure_ascii=False) if clean_json else raw_result
                     }
 
         except Exception as e:

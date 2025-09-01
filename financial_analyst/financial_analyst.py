@@ -47,12 +47,19 @@ def extract_json_from_text(text_content):
         text_content (str): JSON이 포함된 텍스트
         
     Returns:
-        dict: 파싱된 JSON 데이터
+        str: JSON 문자열 또는 원본 텍스트
     """
+    if not isinstance(text_content, str):
+        return text_content
+    
     # JSON 블록 찾기
     start_idx = text_content.find('{')
     end_idx = text_content.rfind('}') + 1
-    return text_content[start_idx:end_idx]
+    
+    if start_idx != -1 and end_idx > start_idx:
+        return text_content[start_idx:end_idx]
+    
+    return text_content  # JSON을 찾을 수 없으면 원본 반환
 
 
 # ================================
@@ -191,11 +198,11 @@ class FinancialAnalyst:
                 if "result" in event:
                     # 결과에서 순수 JSON만 추출
                     raw_result = str(event["result"])
-                    clean_json = extract_json_from_text(raw_result)
+                    json_result = extract_json_from_text(raw_result)
                     
                     yield {
                         "type": "streaming_complete",
-                        "analysis_data": json.dumps(clean_json, ensure_ascii=False) if clean_json else raw_result
+                        "result": json_result
                     }
 
         except Exception as e:

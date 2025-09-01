@@ -160,7 +160,7 @@ def invoke_financial_advisor(input_data):
 
 # 입력 폼
 st.markdown("**투자자 정보 입력**")
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     total_investable_amount = st.number_input(
@@ -174,6 +174,19 @@ with col1:
     st.caption("예: 0.5 = 5천만원")
 
 with col2:
+    target_amount = st.number_input(
+        "💰1년 후 목표 금액 (억원 단위)",
+        min_value=0.0,
+        max_value=1000.0,
+        value=0.7,
+        step=0.1,
+        format="%.1f"
+    )
+    st.caption("예: 0.7 = 7천만원")
+
+col3, col4, col5 = st.columns(3)
+
+with col3:
     age_options = [f"{i}-{i+4}세" for i in range(20, 101, 5)]
     age = st.selectbox(
         "나이",
@@ -181,7 +194,7 @@ with col2:
         index=3
     )
 
-with col3:
+with col4:
     experience_categories = ["0-1년", "1-3년", "3-5년", "5-10년", "10-20년", "20년 이상"]
     stock_investment_experience_years = st.selectbox(
         "주식 투자 경험",
@@ -189,15 +202,27 @@ with col3:
         index=3
     )
 
-target_amount = st.number_input(
-    "💰1년 후 목표 금액 (억원 단위)",
-    min_value=0.0,
-    max_value=1000.0,
-    value=0.7,
-    step=0.1,
-    format="%.1f"
+with col5:
+    investment_purpose = st.selectbox(
+        "🎯 투자 목적",
+        options=["단기 수익 추구", "노후 준비", "주택 구입 자금", "자녀 교육비", "여유 자금 운용"],
+        index=0
+    )
+
+preferred_sectors = st.multiselect(
+    "📈 관심 투자 분야 (복수 선택)",
+    options=[
+        "배당주 (안정적 배당)",
+        "성장주 (기술/바이오)",
+        "가치주 (저평가 우량주)", 
+        "리츠 (부동산 투자)",
+        "ETF (분산 투자)",
+        "해외 주식",
+        "채권 (안전 자산)",
+        "원자재/금"
+    ],
+    default=["ETF (분산 투자)"]
 )
-st.caption("예: 0.7 = 7천만원")
 
 submitted = st.button("분석 시작", use_container_width=True)
 
@@ -221,6 +246,8 @@ if submitted:
         "age": age_number,
         "stock_investment_experience_years": experience_years,
         "target_amount": int(target_amount * 100000000),
+        "investment_purpose": investment_purpose,
+        "preferred_sectors": preferred_sectors
     }
     
     st.divider()

@@ -84,15 +84,15 @@ class FinancialAnalyst:
 분석 과정:
 1. calculator로 필요 수익률 계산: ((목표금액/투자금액)-1)*100
 2. 나이, 경험, 목적, 관심분야를 종합한 위험성향 평가
-3. 수익률 합리성 검증 (0~50% 범위 안이면 yes)
+3. 수익률, 위험성향을 고려한 종합 평가
 
 출력:
 {
 "risk_profile": "매우 보수적|보수적|중립적|공격적|매우 공격적",
 "risk_profile_reason": "위험성향 평가 근거 (2-3문장)",
 "required_annual_return_rate": 수익률(소수점2자리),
-"is_reasonable": "yes|no",
-"summary": "투자목적과 관심분야를 고려한 종합 총평 (3-4문장)"
+"return_rate_reason": "수익률 계산 과정",
+"summary": "종합 총평 (3-4문장)"
 }"""
 
     async def analyze_financial_situation_async(self, user_input):

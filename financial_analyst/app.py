@@ -61,17 +61,7 @@ def display_financial_analysis(trace_container, result):
     with col2:
         st.metric("**필요 수익률**", f"{result.get('required_annual_return_rate', 'N/A')}%")
         st.markdown("**수익률 분석**")
-        
-        # is_reasonable 기반 합리성 검증 표시
-        is_reasonable = result.get("is_reasonable", "yes")
-        if is_reasonable == "no":
-            st.error("⚠️ 비현실적인 목표 (50% 초과)")
-        else:
-            st.success("✅ 합리적인 목표 범위")
-        
-        # 추가 설명이 있다면 표시
-        if result.get("return_rate_reason"):
-            st.info(result.get("return_rate_reason", ""))
+        st.write(result.get("return_rate_reason", ""))
 
 
 def display_calculator_result(trace_container, result_text):

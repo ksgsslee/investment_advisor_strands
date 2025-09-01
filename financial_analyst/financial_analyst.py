@@ -148,7 +148,7 @@ class FinancialAnalyst:
                 if "result" in event:
                     raw_result = str(event["result"])
                     clean_json = extract_json_from_text(raw_result)
-                    yield {"type": "streaming_complete", "analysis_data": clean_json}
+                    yield {"type": "streaming_complete", "result": clean_json}
 
         except Exception as e:
             yield {

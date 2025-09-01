@@ -3,6 +3,7 @@
 
 # AI 에이전트 프레임워크
 strands-agents
+strands-agents-tools
 
 # AWS Bedrock AgentCore Runtime
 bedrock-agentcore

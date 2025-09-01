@@ -111,30 +111,75 @@ def invoke_financial_advisor(input_data):
         placeholder = st.container()
         placeholder.markdown("🤖 **Financial Analyst (AgentCore)**")
 
-        # SSE 형식 응답 처리
+        # 스트리밍 응답 처리
         analysis_data = None
-        reflection_result = None
+        current_thinking = ""
+        current_text_placeholder = placeholder.empty()
+        tool_id_to_name = {}
 
         for line in response["response"].iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
                     event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
+                    event_type = event_data.get("type")
                     
-                    if event_data["type"] == "data":
-                        if "analysis_data" in event_data:
-                            analysis_data = json.loads(event_data["analysis_data"])
-                            # 분석 결과 즉시 표시
-                            placeholder.subheader("📌 재무 분석")
-                            display_financial_analysis(placeholder, analysis_data)
+                    if event_type == "text_chunk":
+                        # AI 생각 과정을 실시간으로 표시
+                        chunk_data = event_data.get("data", "")
+                        current_thinking += chunk_data
+                        if current_thinking.strip():
+                            with current_text_placeholder.chat_message("assistant"):
+                                st.markdown(current_thinking)
+                    
+                    elif event_type == "tool_use":
+                        # 도구 사용 시작 - 매핑 정보 저장
+                        tool_name = event_data.get("tool_name", "")
+                        tool_use_id = event_data.get("tool_use_id", "")
+                        tool_input = event_data.get("tool_input", {})
+                        
+                        # 실제 함수명 추출
+                        actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
+                        tool_id_to_name[tool_use_id] = actual_tool_name
+                        
+                        # 도구 사용 시작 표시
+                        with placeholder.chat_message("assistant"):
+                            st.info(f"🔧 {actual_tool_name} 도구 사용 중...")
+                            if tool_input:
+                                st.code(json.dumps(tool_input, indent=2, ensure_ascii=False))
+                    
+                    elif event_type == "tool_result":
+                        # 도구 실행 결과 처리
+                        tool_use_id = event_data.get("tool_use_id", "")
+                        actual_tool_name = tool_id_to_name.get(tool_use_id, "unknown")
+                        tool_content = event_data.get("content", [{}])
+                        
+                        if tool_content and len(tool_content) > 0:
+                            result_text = tool_content[0].get("text", "{}")
                             
-                        elif "reflection_result" in event_data:
-                            reflection_result = event_data["reflection_result"]
-                            # Reflection 결과 즉시 표시
-                            placeholder.subheader("")
-                            placeholder.subheader("📌 재무 분석 검토 (Reflection)")
-                            display_reflection_result(placeholder, reflection_result)
-                            
-                    elif event_data["type"] == "error":
+                            # 도구 결과 표시
+                            with placeholder.chat_message("assistant"):
+                                st.success(f"✅ {actual_tool_name} 완료")
+                                if actual_tool_name == "calculator":
+                                    st.code(result_text)
+                        
+                        # 도구 결과 처리 후 생각 텍스트 리셋 및 새로운 placeholder 생성
+                        current_thinking = ""
+                        if tool_use_id in tool_id_to_name:
+                            del tool_id_to_name[tool_use_id]
+                        current_text_placeholder = placeholder.empty()
+                    
+                    elif event_type == "streaming_complete":
+                        # 최종 결과 처리
+                        analysis_data_str = event_data.get("analysis_data", "")
+                        if analysis_data_str:
+                            analysis_data = extract_json_from_text(analysis_data_str)
+                            if analysis_data:
+                                # 최종 분석 결과 표시
+                                placeholder.subheader("📌 재무 분석 결과")
+                                display_financial_analysis(placeholder, analysis_data)
+                        break
+                        
+                    elif event_type == "error":
                         return {
                             "status": "error",
                             "error": event_data.get("error", "Unknown error")
@@ -144,7 +189,6 @@ def invoke_financial_advisor(input_data):
 
         return {
             "analysis": analysis_data,
-            "reflection_result": reflection_result,
             "status": "success"
         }
 
@@ -159,8 +203,8 @@ def invoke_financial_advisor(input_data):
 # ================================
 
 # 아키텍처 설명
-with st.expander("아키텍처", expanded=True):
-    st.image(os.path.join("../static/financial_analyst.png"), width=500)
+# with st.expander("아키텍처", expanded=True):
+#     st.image(os.path.join("../static/financial_analyst.png"), width=500)
 
 
 # 입력 폼

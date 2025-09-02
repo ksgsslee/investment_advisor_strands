@@ -1,4 +1,6 @@
 """
+app.py
+
 Portfolio Architect Streamlit 앱
 AI 포트폴리오 설계사 웹 인터페이스
 """

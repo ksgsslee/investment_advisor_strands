@@ -1,4 +1,6 @@
 """
+deploy.py
+
 Portfolio Architect 배포 스크립트
 MCP Server와 Portfolio Architect Runtime 순차 배포
 """

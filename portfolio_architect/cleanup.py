@@ -1,4 +1,6 @@
 """
+cleanup.py
+
 Portfolio Architect 시스템 정리 스크립트
 모든 AWS 리소스 삭제 및 정리 정보 JSON 저장
 """

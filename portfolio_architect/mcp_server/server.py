@@ -22,47 +22,53 @@ mcp = FastMCP(host="0.0.0.0", stateless_http=True)
 # ================================
 
 SUPPORTED_PRODUCTS = {
-    # 📈 주요 지수 ETF (5개) - 미국 대표 지수 추종
-    "SPY": "SPDR S&P 500 ETF - 미국 대형주 500개 기업",
+    # 💵 배당주 (안정적 배당) - 4개
+    "SCHD": "Schwab US Dividend Equity ETF - 미국 고품질 배당주",
+    "VYM": "Vanguard High Dividend Yield ETF - 고배당 ETF",
+    "NOBL": "ProShares S&P 500 Dividend Aristocrats ETF - 배당 귀족주",
+    "DVY": "iShares Select Dividend ETF - 선별 배당주",
+    
+    # 🚀 성장주 (기술/바이오) - 6개
     "QQQ": "Invesco QQQ ETF - 나스닥 100 기술주",
+    "XLK": "Technology Select Sector SPDR Fund - 기술 섹터",
+    "ARKK": "ARK Innovation ETF - 혁신 기술주",
+    "XLV": "Health Care Select Sector SPDR Fund - 헬스케어/바이오",
+    "ARKG": "ARK Genomic Revolution ETF - 유전체학/바이오",
+    "SOXX": "iShares Semiconductor ETF - 반도체 ETF",
+    
+    # 💎 가치주 (저평가 우량주) - 4개
+    "VTV": "Vanguard Value ETF - 대형 가치주",
+    "VBR": "Vanguard Small-Cap Value ETF - 소형 가치주",
+    "IWD": "iShares Russell 1000 Value ETF - 러셀 1000 가치주",
+    "VTEB": "Vanguard Tax-Exempt Bond ETF - 세금 우대 채권",
+    
+    # 🏢 리츠 (부동산 투자) - 3개
+    "VNQ": "Vanguard Real Estate Investment Trust ETF - 미국 리츠",
+    "VNQI": "Vanguard Global ex-U.S. Real Estate ETF - 해외 리츠",
+    "SCHH": "Schwab US REIT ETF - 미국 부동산 투자신탁",
+    
+    # 📊 ETF (분산 투자) - 5개
+    "SPY": "SPDR S&P 500 ETF - 미국 대형주 500개",
     "VTI": "Vanguard Total Stock Market ETF - 미국 전체 주식시장",
     "VOO": "Vanguard S&P 500 ETF - S&P 500 지수 추종",
-    "IVV": "iShares Core S&P 500 ETF - S&P 500 저비용 ETF",
+    "IVV": "iShares Core S&P 500 ETF - S&P 500 저비용",
+    "ITOT": "iShares Core S&P Total US Stock Market ETF - 전체 시장",
     
-    # 🌍 국제/신흥국 ETF (5개) - 해외 분산투자
+    # 🌍 해외 주식 - 4개
     "VEA": "Vanguard FTSE Developed Markets ETF - 선진국 주식",
     "VWO": "Vanguard FTSE Emerging Markets ETF - 신흥국 주식",
     "VXUS": "Vanguard Total International Stock ETF - 국제 주식",
-    "EFA": "iShares MSCI EAFE ETF - 유럽/아시아/극동 선진국",
-    "EEM": "iShares MSCI Emerging Markets ETF - 신흥국 주식",
+    "EFA": "iShares MSCI EAFE ETF - 유럽/아시아/극동",
     
-    # 💰 채권/안전자산 ETF (5개) - 안정성과 인플레이션 헤지
+    # 🛡️ 채권 (안전 자산) - 3개
     "BND": "Vanguard Total Bond Market ETF - 미국 전체 채권",
-    "AGG": "iShares Core U.S. Aggregate Bond ETF - 미국 종합 채권",
+    "AGG": "iShares Core U.S. Aggregate Bond ETF - 종합 채권",
     "TLT": "iShares 20+ Year Treasury Bond ETF - 장기 국채",
+    
+    # 🥇 원자재/금 - 3개
     "GLD": "SPDR Gold Shares - 금 현물 ETF",
     "SLV": "iShares Silver Trust - 은 현물 ETF",
-    
-    # 🏢 섹터별 ETF (8개) - 특정 산업 집중투자
-    "XLF": "Financial Select Sector SPDR Fund - 금융 섹터",
-    "XLK": "Technology Select Sector SPDR Fund - 기술 섹터",
-    "XLE": "Energy Select Sector SPDR Fund - 에너지 섹터",
-    "XLV": "Health Care Select Sector SPDR Fund - 헬스케어 섹터",
-    "XLI": "Industrial Select Sector SPDR Fund - 산업 섹터",
-    "XLP": "Consumer Staples Select Sector SPDR Fund - 필수소비재",
-    "XLY": "Consumer Discretionary Select Sector SPDR Fund - 임의소비재",
-    "VNQ": "Vanguard Real Estate Investment Trust ETF - 리츠",
-    
-    # 🚀 혁신/성장 ETF (5개) - 고성장 테마 투자
-    "ARKK": "ARK Innovation ETF - 혁신 기술주",
-    "ARKQ": "ARK Autonomous Technology & Robotics ETF - 자율주행/로봇",
-    "ARKW": "ARK Next Generation Internet ETF - 차세대 인터넷",
-    "ARKG": "ARK Genomic Revolution ETF - 유전체학 혁명",
-    "ARKF": "ARK Fintech Innovation ETF - 핀테크 혁신",
-    
-    # 💵 배당 ETF (2개) - 안정적인 배당 수익
-    "SCHD": "Schwab US Dividend Equity ETF - 미국 배당주",
-    "VYM": "Vanguard High Dividend Yield ETF - 고배당 ETF"
+    "DBC": "Invesco DB Commodity Index Tracking Fund - 종합 원자재"
 }
 
 # ================================
@@ -139,10 +145,4 @@ def get_product_data(ticker: str) -> dict:
 
 if __name__ == "__main__":
     print("🚀 ETF Data MCP Server 시작")
-    print(f"📋 지원 ETF: {len(SUPPORTED_PRODUCTS)}개")
-    print("🔧 사용 가능한 도구:")
-    print("   - get_available_products: ETF 상품 목록 조회")
-    print("   - get_product_data: 특정 ETF 가격 데이터 조회")
-    print("🌐 서버 주소: http://0.0.0.0:8000/mcp")
-    
     mcp.run(transport="streamable-http")

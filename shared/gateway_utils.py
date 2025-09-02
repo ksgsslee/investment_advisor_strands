@@ -30,7 +30,7 @@ def create_agentcore_gateway_role(gateway_name, region):
     print("🔐 Gateway IAM 역할 생성 중...")
     
     iam_client = boto3.client('iam')
-    agentcore_gateway_role_name = f'agentcore-gateway-{gateway_name}-role'
+    agentcore_gateway_role_name = f'{gateway_name}-role'
     account_id = boto3.client("sts").get_caller_identity()["Account"]
     
     # Gateway가 사용할 수 있는 권한 정책

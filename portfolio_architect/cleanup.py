@@ -6,13 +6,10 @@ Portfolio Architect 시스템 정리 스크립트
 import json
 import boto3
 import time
+import sys
 from pathlib import Path
 
-class Config:
-    """Portfolio Architect 정리 설정"""
-    REGION = "us-west-2"
-    AGENT_NAME = "portfolio_architect"
-    MCP_SERVER_NAME = "mcp_server"
+# Config 클래스들은 더 이상 필요 없음 - 배포 정보에서 리전 정보 직접 사용
 
 def load_deployment_info():
     """배포 정보 로드"""
@@ -34,24 +31,24 @@ def load_deployment_info():
     
     return portfolio_info, mcp_info
 
-def delete_runtime(agent_arn):
+def delete_runtime(agent_arn, region):
     """Runtime 삭제"""
     try:
         runtime_id = agent_arn.split('/')[-1]
-        client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
+        client = boto3.client('bedrock-agentcore-control', region_name=region)
         client.delete_agent_runtime(agentRuntimeId=runtime_id)
-        print(f"✅ Runtime 삭제: {runtime_id}")
+        print(f"✅ Runtime 삭제: {runtime_id} (리전: {region})")
         return True
     except Exception as e:
         print(f"⚠️ Runtime 삭제 실패: {e}")
         return False
 
-def delete_ecr_repo(repo_name):
+def delete_ecr_repo(repo_name, region):
     """ECR 리포지토리 삭제"""
     try:
-        ecr = boto3.client('ecr', region_name=Config.REGION)
+        ecr = boto3.client('ecr', region_name=region)
         ecr.delete_repository(repositoryName=repo_name, force=True)
-        print(f"✅ ECR 삭제: {repo_name}")
+        print(f"✅ ECR 삭제: {repo_name} (리전: {region})")
         return True
     except Exception as e:
         print(f"⚠️ ECR 삭제 실패 {repo_name}: {e}")
@@ -75,10 +72,12 @@ def delete_iam_role(role_name):
         print(f"⚠️ IAM 역할 삭제 실패 {role_name}: {e}")
         return False
 
-def delete_cognito_resources(user_pool_id):
+
+
+def delete_cognito_resources(user_pool_id, region):
     """Cognito 리소스 삭제"""
     try:
-        cognito = boto3.client('cognito-idp', region_name=Config.REGION)
+        cognito = boto3.client('cognito-idp', region_name=region)
         
         # 클라이언트들 삭제
         clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id)
@@ -90,16 +89,16 @@ def delete_cognito_resources(user_pool_id):
         
         # User Pool 삭제
         cognito.delete_user_pool(UserPoolId=user_pool_id)
-        print(f"✅ Cognito User Pool 삭제: {user_pool_id}")
+        print(f"✅ Cognito User Pool 삭제: {user_pool_id} (리전: {region})")
         return True
     except Exception as e:
         print(f"⚠️ Cognito 삭제 실패: {e}")
         return False
 
-def get_generated_files():
-    """삭제 가능한 생성된 파일들 목록 반환"""
+def cleanup_local_files():
+    """로컬 생성 파일들 삭제"""
     current_dir = Path(__file__).parent
-    files_to_check = [
+    files_to_delete = [
         current_dir / "deployment_info.json",
         current_dir / "Dockerfile",
         current_dir / ".dockerignore", 
@@ -110,27 +109,17 @@ def get_generated_files():
         current_dir / "mcp_server" / ".bedrock_agentcore.yaml",
     ]
     
-    existing_files = []
-    for file_path in files_to_check:
-        if file_path.exists():
-            existing_files.append(file_path)
-    
-    return existing_files
-
-def cleanup_files(files_to_delete):
-    """생성된 파일들 정리"""
-    current_dir = Path(__file__).parent
-    deleted_files = []
-    
+    deleted_count = 0
     for file_path in files_to_delete:
-        try:
+        if file_path.exists():
             file_path.unlink()
-            deleted_files.append(str(file_path.relative_to(current_dir)))
             print(f"✅ 파일 삭제: {file_path.name}")
-        except Exception as e:
-            print(f"⚠️ 파일 삭제 실패 {file_path.name}: {e}")
+            deleted_count += 1
     
-    return deleted_files
+    if deleted_count > 0:
+        print(f"✅ 로컬 파일 정리 완료! ({deleted_count}개 파일 삭제)")
+    else:
+        print("📁 삭제할 로컬 파일이 없습니다.")
 
 
 
@@ -154,20 +143,24 @@ def main():
     
     # 1. Portfolio Architect Runtime 삭제
     if portfolio_info and 'agent_arn' in portfolio_info:
-        delete_runtime(portfolio_info['agent_arn'])
+        region = portfolio_info.get('region', 'us-west-2')  # 기본값 fallback
+        delete_runtime(portfolio_info['agent_arn'], region)
     
     # 2. MCP Server Runtime 삭제
     if mcp_info and 'agent_arn' in mcp_info:
-        delete_runtime(mcp_info['agent_arn'])
+        region = mcp_info.get('region', 'us-west-2')  # 기본값 fallback
+        delete_runtime(mcp_info['agent_arn'], region)
     
     # 3. ECR 리포지토리들 삭제
     if portfolio_info and 'ecr_repo_name' in portfolio_info and portfolio_info['ecr_repo_name']:
-        delete_ecr_repo(portfolio_info['ecr_repo_name'])
+        region = portfolio_info.get('region', 'us-west-2')
+        delete_ecr_repo(portfolio_info['ecr_repo_name'], region)
     
     if mcp_info and 'ecr_repo_name' in mcp_info and mcp_info['ecr_repo_name']:
-        delete_ecr_repo(mcp_info['ecr_repo_name'])
+        region = mcp_info.get('region', 'us-west-2')
+        delete_ecr_repo(mcp_info['ecr_repo_name'], region)
     
-    # 4. IAM 역할들 삭제
+    # 4. IAM 역할들 삭제 (IAM은 글로벌 서비스라 리전 불필요)
     if portfolio_info and 'iam_role_name' in portfolio_info:
         delete_iam_role(portfolio_info['iam_role_name'])
     
@@ -176,26 +169,16 @@ def main():
     
     # 5. Cognito 리소스 삭제
     if mcp_info and 'user_pool_id' in mcp_info:
-        delete_cognito_resources(mcp_info['user_pool_id'])
+        region = mcp_info.get('region', 'us-west-2')
+        delete_cognito_resources(mcp_info['user_pool_id'], region)
     
     print("\n🎉 AWS 리소스 정리 완료!")
     
-    # 6. 로컬 파일들 정리 (사용자 확인 후)
-    generated_files = get_generated_files()
-    if generated_files:
-        print(f"\n📁 삭제 가능한 로컬 파일들 ({len(generated_files)}개):")
-        current_dir = Path(__file__).parent
-        for file_path in generated_files:
-            print(f"   - {file_path.relative_to(current_dir)}")
-        
-        file_response = input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ")
-        if file_response.lower() == 'y':
-            deleted_files = cleanup_files(generated_files)
-            print(f"✅ 로컬 파일 정리 완료! ({len(deleted_files)}개 파일 삭제)")
-        else:
-            print("📁 로컬 파일들은 유지됩니다.")
+    # 6. 로컬 파일들 정리
+    if input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ").lower() == 'y':
+        cleanup_local_files()
     else:
-        print("\n📁 삭제할 로컬 파일이 없습니다.")
+        print("📁 로컬 파일들은 유지됩니다.")
 
 if __name__ == "__main__":
     main()

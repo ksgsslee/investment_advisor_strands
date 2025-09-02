@@ -114,6 +114,7 @@ def main():
         
         # IAM 역할 생성
         iam_role = create_agentcore_runtime_role(Config.MCP_SERVER_NAME, Config.REGION)
+        iam_role_name = iam_role['Role']['RoleName']
         time.sleep(10)  # IAM 전파 대기
         
         # Cognito 인증 설정
@@ -130,6 +131,7 @@ def main():
             'client_id': auth_components['client_id'],
             'client_secret': auth_components['client_secret'],
             'region': Config.REGION,
+            'iam_role_name': iam_role_name,
             'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")
         }
         

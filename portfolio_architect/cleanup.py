@@ -34,16 +34,16 @@ def load_deployment_info():
     
     return portfolio_info, mcp_info
 
-def delete_runtime(agent_arn, name):
+def delete_runtime(agent_arn):
     """Runtime 삭제"""
     try:
         runtime_id = agent_arn.split('/')[-1]
         client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
         client.delete_agent_runtime(agentRuntimeId=runtime_id)
-        print(f"✅ {name} Runtime 삭제: {runtime_id}")
+        print(f"✅ Runtime 삭제: {runtime_id}")
         return True
     except Exception as e:
-        print(f"⚠️ {name} Runtime 삭제 실패: {e}")
+        print(f"⚠️ Runtime 삭제 실패: {e}")
         return False
 
 def delete_ecr_repo(repo_name):
@@ -132,25 +132,7 @@ def cleanup_files(files_to_delete):
     
     return deleted_files
 
-def save_cleanup_info(cleanup_results):
-    """정리 결과를 JSON 파일로 저장"""
-    cleanup_info = {
-        "cleanup_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "region": Config.REGION,
-        "results": cleanup_results,
-        "summary": {
-            "total_operations": len(cleanup_results),
-            "successful_operations": sum(1 for r in cleanup_results if r["success"]),
-            "failed_operations": sum(1 for r in cleanup_results if not r["success"])
-        }
-    }
-    
-    cleanup_file = Path(__file__).parent / "cleanup_info.json"
-    with open(cleanup_file, 'w') as f:
-        json.dump(cleanup_info, f, indent=2)
-    
-    print(f"📄 정리 정보 저장: {cleanup_file}")
-    return str(cleanup_file)
+
 
 def main():
     print("🧹 Portfolio Architect 시스템 정리")
@@ -168,86 +150,37 @@ def main():
         print("❌ 취소됨")
         return
     
-    cleanup_results = []
+    print("\n🗑️ AWS 리소스 삭제 중...")
     
     # 1. Portfolio Architect Runtime 삭제
     if portfolio_info and 'agent_arn' in portfolio_info:
-        success = delete_runtime(portfolio_info['agent_arn'], "Portfolio Architect")
-        cleanup_results.append({
-            "operation": "delete_portfolio_runtime",
-            "resource": portfolio_info['agent_arn'],
-            "success": success
-        })
+        delete_runtime(portfolio_info['agent_arn'])
     
     # 2. MCP Server Runtime 삭제
     if mcp_info and 'agent_arn' in mcp_info:
-        success = delete_runtime(mcp_info['agent_arn'], "MCP Server")
-        cleanup_results.append({
-            "operation": "delete_mcp_runtime",
-            "resource": mcp_info['agent_arn'],
-            "success": success
-        })
+        delete_runtime(mcp_info['agent_arn'])
     
     # 3. ECR 리포지토리들 삭제
     portfolio_repo = f"bedrock-agentcore-{Config.AGENT_NAME}"
-    success = delete_ecr_repo(portfolio_repo)
-    cleanup_results.append({
-        "operation": "delete_portfolio_ecr",
-        "resource": portfolio_repo,
-        "success": success
-    })
+    delete_ecr_repo(portfolio_repo)
     
     mcp_repo = f"bedrock-agentcore-{Config.MCP_SERVER_NAME}"
-    success = delete_ecr_repo(mcp_repo)
-    cleanup_results.append({
-        "operation": "delete_mcp_ecr",
-        "resource": mcp_repo,
-        "success": success
-    })
+    delete_ecr_repo(mcp_repo)
     
     # 4. IAM 역할들 삭제
-    portfolio_role = f'agentcore-runtime-{Config.AGENT_NAME}-role'
-    success = delete_iam_role(portfolio_role)
-    cleanup_results.append({
-        "operation": "delete_portfolio_iam",
-        "resource": portfolio_role,
-        "success": success
-    })
+    if portfolio_info and 'iam_role_name' in portfolio_info:
+        delete_iam_role(portfolio_info['iam_role_name'])
     
-    mcp_role = f'agentcore-runtime-{Config.MCP_SERVER_NAME}-role'
-    success = delete_iam_role(mcp_role)
-    cleanup_results.append({
-        "operation": "delete_mcp_iam",
-        "resource": mcp_role,
-        "success": success
-    })
+    if mcp_info and 'iam_role_name' in mcp_info:
+        delete_iam_role(mcp_info['iam_role_name'])
     
     # 5. Cognito 리소스 삭제
-    user_pool_id = None
-    if portfolio_info and 'mcp_user_pool_id' in portfolio_info:
-        user_pool_id = portfolio_info['mcp_user_pool_id']
-    elif mcp_info and 'user_pool_id' in mcp_info:
-        user_pool_id = mcp_info['user_pool_id']
+    if mcp_info and 'user_pool_id' in mcp_info:
+        delete_cognito_resources(mcp_info['user_pool_id'])
     
-    if user_pool_id:
-        success = delete_cognito_resources(user_pool_id)
-        cleanup_results.append({
-            "operation": "delete_cognito",
-            "resource": user_pool_id,
-            "success": success
-        })
+    print("\n🎉 AWS 리소스 정리 완료!")
     
-    # 6. AWS 리소스 정리 완료 - 정리 정보 저장
-    cleanup_file = save_cleanup_info(cleanup_results)
-    
-    # AWS 리소스 정리 결과 요약
-    successful = sum(1 for r in cleanup_results if r["success"])
-    total = len(cleanup_results)
-    
-    print(f"\n🎉 AWS 리소스 정리 완료! ({successful}/{total} 성공)")
-    print(f"📄 상세 정보: {cleanup_file}")
-    
-    # 7. 로컬 파일들 정리 (사용자 확인 후)
+    # 6. 로컬 파일들 정리 (사용자 확인 후)
     generated_files = get_generated_files()
     if generated_files:
         print(f"\n📁 삭제 가능한 로컬 파일들 ({len(generated_files)}개):")
@@ -258,16 +191,7 @@ def main():
         file_response = input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ")
         if file_response.lower() == 'y':
             deleted_files = cleanup_files(generated_files)
-            cleanup_results.append({
-                "operation": "cleanup_files",
-                "resource": deleted_files,
-                "success": len(deleted_files) > 0
-            })
-            
-            # 최종 정리 정보 업데이트
-            final_cleanup_file = save_cleanup_info(cleanup_results)
             print(f"✅ 로컬 파일 정리 완료! ({len(deleted_files)}개 파일 삭제)")
-            print(f"📄 최종 정리 정보: {final_cleanup_file}")
         else:
             print("📁 로컬 파일들은 유지됩니다.")
     else:

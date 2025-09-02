@@ -41,6 +41,7 @@ def deploy_portfolio_architect(mcp_info):
     
     # IAM 역할 생성
     iam_role = create_agentcore_runtime_role(Config.AGENT_NAME, Config.REGION)
+    iam_role_name = iam_role['Role']['RoleName']
     
     # Runtime 구성
     current_dir = Path(__file__).parent
@@ -83,7 +84,8 @@ def deploy_portfolio_architect(mcp_info):
     return {
         "agent_arn": launch_result.agent_arn,
         "agent_id": launch_result.agent_id,
-        "region": Config.REGION
+        "region": Config.REGION,
+        "iam_role_name": iam_role_name
     }
 
 def save_deployment_info(mcp_info, architect_info):
@@ -93,10 +95,7 @@ def save_deployment_info(mcp_info, architect_info):
         "agent_arn": architect_info["agent_arn"],
         "agent_id": architect_info["agent_id"],
         "region": Config.REGION,
-        "mcp_server_arn": mcp_info["agent_arn"],
-        "mcp_server_id": mcp_info["agent_id"],
-        "mcp_client_id": mcp_info["client_id"],
-        "mcp_user_pool_id": mcp_info["user_pool_id"],
+        "iam_role_name": architect_info["iam_role_name"],
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     

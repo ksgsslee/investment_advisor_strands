@@ -47,12 +47,7 @@ class Config:
 # ================================
 
 def deploy_mcp_server():
-    """
-    MCP Server 배포 메인 프로세스
-    
-    Returns:
-        dict: 배포 결과 정보
-    """
+    """MCP Server 배포 메인 프로세스"""
     print("🚀 MCP Server 배포 시작...")
     
     # 1. IAM 역할 생성
@@ -80,13 +75,10 @@ def deploy_mcp_server():
     print("✅ MCP Server 배포 완료!")
     return result
 
+
 def _setup_cognito_authentication():
-    """
-    Cognito M2M 인증 구성 요소 설정 (risk_manager 패턴)
-    
-    Returns:
-        dict: 인증 구성 요소
-    """
+    """Cognito M2M 인증 구성 요소 설정"""
+   
     print("🔐 Cognito 인증 설정 중...")
     cognito = boto3.client('cognito-idp', region_name=Config.REGION)
     
@@ -124,9 +116,7 @@ def _setup_cognito_authentication():
     
     # Discovery URL 구성
     discovery_url = f'https://cognito-idp.{Config.REGION}.amazonaws.com/{user_pool_id}/.well-known/openid-configuration'
-    
-    print("✅ Cognito 인증 설정 완료 (토큰은 런타임에서 동적 획득)")
-    
+
     return {
         'user_pool_id': user_pool_id,
         'client_id': client_id,
@@ -135,16 +125,7 @@ def _setup_cognito_authentication():
     }
 
 def _create_mcp_runtime(role_arn, auth_components):
-    """
-    MCP Server Runtime 생성
-    
-    Args:
-        role_arn (str): Runtime 실행용 IAM 역할 ARN
-        auth_components (dict): Cognito 인증 구성 요소
-        
-    Returns:
-        dict: 생성된 Runtime 정보
-    """
+    """MCP Server Runtime 생성"""
     print("🔧 MCP Server Runtime 구성 중...")
     current_dir = Path(__file__).parent
     

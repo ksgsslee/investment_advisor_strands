@@ -37,17 +37,7 @@ class Config:
 
 
 def fetch_access_token(client_id, client_secret, token_url):
-    """
-    OAuth2 클라이언트 자격 증명으로 액세스 토큰 획득
-    
-    Args:
-        client_id (str): OAuth2 클라이언트 ID
-        client_secret (str): OAuth2 클라이언트 시크릿
-        token_url (str): 토큰 엔드포인트 URL
-        
-    Returns:
-        str: 액세스 토큰
-    """
+    """OAuth2 클라이언트 자격 증명으로 액세스 토큰 획득"""
     response = requests.post(
         token_url,
         data=f"grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}",
@@ -56,30 +46,13 @@ def fetch_access_token(client_id, client_secret, token_url):
     response.raise_for_status()
     return response.json()['access_token']
 
-def create_streamable_http_transport(mcp_url: str, access_token: str):
-    """
-    MCP HTTP 전송 클라이언트 생성
-    
-    Args:
-        mcp_url (str): MCP Server URL (Runtime 직접 연결)
-        access_token (str): Cognito에서 획득한 액세스 토큰
-        
-    Returns:
-        StreamableHTTPTransport: MCP 클라이언트 전송 객체
-    """
-    return streamablehttp_client(mcp_url, headers={"Authorization": f"Bearer {access_token}"})
 
 # ================================
 # 메인 클래스
 # ================================
 
 class PortfolioArchitect:
-    """
-    AI 포트폴리오 설계사 - MCP Server 연동 (Cognito OAuth2 인증)
-    
-    실시간 시장 데이터를 분석하여 고객의 재무 상황에 맞는
-    맞춤형 투자 포트폴리오를 설계하는 AI 에이전트입니다.
-    """
+    """AI 포트폴리오 설계사 - MCP Server 연동"""
     
     def __init__(self, mcp_server_info=None):
         """
@@ -123,10 +96,7 @@ class PortfolioArchitect:
         """MCP 클라이언트 초기화"""
         try:
             self.mcp_client = MCPClient(
-                lambda: create_streamable_http_transport(
-                    self.mcp_url, 
-                    self.access_token
-                )
+                lambda: streamablehttp_client(self.mcp_url, headers={"Authorization": f"Bearer {self.access_token}"})
             )
             print("🔗 MCP 클라이언트 초기화 성공")
         except Exception as e:

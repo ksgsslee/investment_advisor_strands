@@ -47,7 +47,17 @@ def extract_json_from_text(text):
 def parse_tool_result(result_text):
     """도구 실행 결과에서 실제 데이터 추출"""
     parsed_result = json.loads(result_text)
-    return parsed_result["response"]["payload"]["body"]
+    
+    # statusCode와 body 구조 처리
+    if "statusCode" in parsed_result and "body" in parsed_result:
+        body = parsed_result["body"]
+        # body가 문자열인 경우 다시 JSON 파싱
+        if isinstance(body, str):
+            return json.loads(body)
+        return body
+    
+    # 직접 반환
+    return parsed_result
 
 def display_news_data(container, news_data):
     """ETF 뉴스 데이터 표시"""

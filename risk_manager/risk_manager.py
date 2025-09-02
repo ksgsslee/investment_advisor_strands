@@ -182,14 +182,14 @@ class RiskManager:
             yield {"type": "error", "error": str(e), "status": "error"}
 
 # 전역 인스턴스
-risk_manager = None
+manager = None
 
 @app.entrypoint
 async def risk_manager(payload):
     """AgentCore Runtime 엔트리포인트"""
-    global risk_manager
+    global manager
     
-    if risk_manager is None:
+    if manager is None:
         # 환경변수에서 Gateway 정보 구성
         gateway_info = {
             "client_id": os.getenv("MCP_CLIENT_ID"),
@@ -200,10 +200,10 @@ async def risk_manager(payload):
             "target_id": os.getenv("MCP_TARGET_ID", "target-risk-manager")
         }
         
-        risk_manager = RiskManager(gateway_info)
+        manager = RiskManager(gateway_info)
 
     portfolio_data = payload.get("portfolio_data")
-    async for chunk in risk_manager.analyze_risk_async(portfolio_data):
+    async for chunk in manager.analyze_risk_async(portfolio_data):
         yield chunk
 
 if __name__ == "__main__":

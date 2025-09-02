@@ -1,124 +1,166 @@
 """
-cleanup.py
-Portfolio Architect 전체 시스템 정리 스크립트
-
-MCP Server와 Portfolio Architect Runtime을 포함한 모든 AWS 리소스를 정리합니다.
+Portfolio Architect 시스템 정리 스크립트
+모든 AWS 리소스 삭제 및 정리 정보 JSON 저장
 """
 
 import json
 import boto3
+import time
 from pathlib import Path
-import sys
 
-# deploy.py의 Config 가져오기
-sys.path.insert(0, str(Path(__file__).parent))
-from deploy import Config
+class Config:
+    """Portfolio Architect 정리 설정"""
+    REGION = "us-west-2"
+    AGENT_NAME = "portfolio_architect"
+    MCP_SERVER_NAME = "mcp_server"
 
-def cleanup_generated_files():
-    """배포 과정에서 생성된 파일들 정리"""
-    print("🗑️ 생성된 파일들 정리 중...")
-    
+def load_deployment_info():
+    """배포 정보 로드"""
     current_dir = Path(__file__).parent
-    mcp_dir = current_dir / "mcp_server"
     
-    files_to_delete = [
-        # Portfolio Architect 관련 파일들
-        current_dir / "deployment_info.json",
-        current_dir / "Dockerfile",
-        current_dir / ".dockerignore", 
-        current_dir / ".bedrock_agentcore.yaml",
-        
-        # MCP Server 관련 파일들
-        mcp_dir / "mcp_deployment_info.json",
-        mcp_dir / "Dockerfile",
-        mcp_dir / ".dockerignore",
-        mcp_dir / ".bedrock_agentcore.yaml",
-    ]
+    # Portfolio Architect 정보
+    portfolio_info = None
+    portfolio_file = current_dir / "deployment_info.json"
+    if portfolio_file.exists():
+        with open(portfolio_file) as f:
+            portfolio_info = json.load(f)
     
-    for file_path in files_to_delete:
-        try:
-            if file_path.exists():
-                file_path.unlink()
-                print(f"  ✅ 삭제: {file_path.relative_to(current_dir)}")
-        except Exception as e:
-            print(f"  ⚠️ 삭제 실패 {file_path.name}: {e}")
+    # MCP Server 정보
+    mcp_info = None
+    mcp_file = current_dir / "mcp_server" / "mcp_deployment_info.json"
+    if mcp_file.exists():
+        with open(mcp_file) as f:
+            mcp_info = json.load(f)
+    
+    return portfolio_info, mcp_info
 
-def delete_cognito_resources(deployment_info):
-    """Cognito User Pool 및 관련 리소스 삭제"""
-    if 'mcp_user_pool_id' not in deployment_info:
-        print("⚠️ Cognito User Pool 정보가 없어 삭제를 건너뜁니다.")
-        return
-    
+def delete_runtime(agent_arn, name):
+    """Runtime 삭제"""
     try:
-        print("🗑️ Cognito 리소스 삭제 중...")
-        region = deployment_info.get('region', Config.REGION)
-        cognito = boto3.client('cognito-idp', region_name=region)
+        runtime_id = agent_arn.split('/')[-1]
+        client = boto3.client('bedrock-agentcore-control', region_name=Config.REGION)
+        client.delete_agent_runtime(agentRuntimeId=runtime_id)
+        print(f"✅ {name} Runtime 삭제: {runtime_id}")
+        return True
+    except Exception as e:
+        print(f"⚠️ {name} Runtime 삭제 실패: {e}")
+        return False
+
+def delete_ecr_repo(repo_name):
+    """ECR 리포지토리 삭제"""
+    try:
+        ecr = boto3.client('ecr', region_name=Config.REGION)
+        ecr.delete_repository(repositoryName=repo_name, force=True)
+        print(f"✅ ECR 삭제: {repo_name}")
+        return True
+    except Exception as e:
+        print(f"⚠️ ECR 삭제 실패 {repo_name}: {e}")
+        return False
+
+def delete_iam_role(role_name):
+    """IAM 역할 삭제"""
+    try:
+        iam = boto3.client('iam')
         
-        user_pool_id = deployment_info['mcp_user_pool_id']
+        # 정책 삭제
+        policies = iam.list_role_policies(RoleName=role_name)
+        for policy in policies['PolicyNames']:
+            iam.delete_role_policy(RoleName=role_name, PolicyName=policy)
         
-        # User Pool 클라이언트들 삭제
-        try:
-            clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id)
-            for client in clients['UserPoolClients']:
-                cognito.delete_user_pool_client(
-                    UserPoolId=user_pool_id,
-                    ClientId=client['ClientId']
-                )
-                print(f"  ✅ User Pool 클라이언트 삭제: {client['ClientId']}")
-        except Exception as e:
-            print(f"  ⚠️ User Pool 클라이언트 삭제 실패: {e}")
+        # 역할 삭제
+        iam.delete_role(RoleName=role_name)
+        print(f"✅ IAM 역할 삭제: {role_name}")
+        return True
+    except Exception as e:
+        print(f"⚠️ IAM 역할 삭제 실패 {role_name}: {e}")
+        return False
+
+def delete_cognito_resources(user_pool_id):
+    """Cognito 리소스 삭제"""
+    try:
+        cognito = boto3.client('cognito-idp', region_name=Config.REGION)
         
-        # User Pool 도메인 삭제 (있는 경우)
-        try:
-            domain_name = user_pool_id.replace("_", "").lower()
-            cognito.delete_user_pool_domain(
-                Domain=domain_name,
-                UserPoolId=user_pool_id
+        # 클라이언트들 삭제
+        clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id)
+        for client in clients['UserPoolClients']:
+            cognito.delete_user_pool_client(
+                UserPoolId=user_pool_id,
+                ClientId=client['ClientId']
             )
-            print(f"  ✅ User Pool 도메인 삭제: {domain_name}")
-        except Exception as e:
-            # 도메인이 없을 수 있으므로 경고만 출력
-            print(f"  ⚠️ User Pool 도메인 삭제 실패 (없을 수 있음): {e}")
         
         # User Pool 삭제
         cognito.delete_user_pool(UserPoolId=user_pool_id)
         print(f"✅ Cognito User Pool 삭제: {user_pool_id}")
-        
+        return True
     except Exception as e:
         print(f"⚠️ Cognito 삭제 실패: {e}")
+        return False
+
+def get_generated_files():
+    """삭제 가능한 생성된 파일들 목록 반환"""
+    current_dir = Path(__file__).parent
+    files_to_check = [
+        current_dir / "deployment_info.json",
+        current_dir / "Dockerfile",
+        current_dir / ".dockerignore", 
+        current_dir / ".bedrock_agentcore.yaml",
+        current_dir / "mcp_server" / "mcp_deployment_info.json",
+        current_dir / "mcp_server" / "Dockerfile",
+        current_dir / "mcp_server" / ".dockerignore",
+        current_dir / "mcp_server" / ".bedrock_agentcore.yaml",
+    ]
+    
+    existing_files = []
+    for file_path in files_to_check:
+        if file_path.exists():
+            existing_files.append(file_path)
+    
+    return existing_files
+
+def cleanup_files(files_to_delete):
+    """생성된 파일들 정리"""
+    current_dir = Path(__file__).parent
+    deleted_files = []
+    
+    for file_path in files_to_delete:
+        try:
+            file_path.unlink()
+            deleted_files.append(str(file_path.relative_to(current_dir)))
+            print(f"✅ 파일 삭제: {file_path.name}")
+        except Exception as e:
+            print(f"⚠️ 파일 삭제 실패 {file_path.name}: {e}")
+    
+    return deleted_files
+
+def save_cleanup_info(cleanup_results):
+    """정리 결과를 JSON 파일로 저장"""
+    cleanup_info = {
+        "cleanup_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "region": Config.REGION,
+        "results": cleanup_results,
+        "summary": {
+            "total_operations": len(cleanup_results),
+            "successful_operations": sum(1 for r in cleanup_results if r["success"]),
+            "failed_operations": sum(1 for r in cleanup_results if not r["success"])
+        }
+    }
+    
+    cleanup_file = Path(__file__).parent / "cleanup_info.json"
+    with open(cleanup_file, 'w') as f:
+        json.dump(cleanup_info, f, indent=2)
+    
+    print(f"📄 정리 정보 저장: {cleanup_file}")
+    return str(cleanup_file)
 
 def main():
-    print(f"🧹 {Config.AGENT_NAME} 전체 시스템 정리 중...")
+    print("🧹 Portfolio Architect 시스템 정리")
     
     # 배포 정보 로드
-    info_file = Path(__file__).parent / "deployment_info.json"
-    mcp_info_file = Path(__file__).parent / "mcp_server" / "mcp_deployment_info.json"
+    portfolio_info, mcp_info = load_deployment_info()
     
-    deployment_info = None
-    mcp_deployment_info = None
-    
-    # Portfolio Architect 배포 정보 로드
-    if info_file.exists():
-        with open(info_file) as f:
-            deployment_info = json.load(f)
-        print(f"✅ Portfolio Architect 배포 정보 로드:")
-        print(f"   📍 Agent: {deployment_info.get('agent_arn', 'N/A')}")
-        print(f"   🔗 MCP Server: {deployment_info.get('mcp_server_arn', 'N/A')}")
-    else:
-        print("⚠️ Portfolio Architect 배포 정보 파일이 없습니다.")
-    
-    # MCP Server 배포 정보 로드
-    if mcp_info_file.exists():
-        with open(mcp_info_file) as f:
-            mcp_deployment_info = json.load(f)
-        print(f"✅ MCP Server 배포 정보 로드:")
-        print(f"   📍 MCP Agent: {mcp_deployment_info.get('agent_arn', 'N/A')}")
-        print(f"   🔐 User Pool: {mcp_deployment_info.get('user_pool_id', 'N/A')}")
-    else:
-        print("⚠️ MCP Server 배포 정보 파일이 없습니다.")
-    
-    if not deployment_info and not mcp_deployment_info:
-        print("⚠️ 배포 정보가 없습니다. 기본값으로 진행합니다.")
+    if not portfolio_info and not mcp_info:
+        print("⚠️ 배포 정보가 없습니다.")
+        return
     
     # 확인
     response = input("\n정말로 모든 리소스를 삭제하시겠습니까? (y/N): ")
@@ -126,109 +168,110 @@ def main():
         print("❌ 취소됨")
         return
     
+    cleanup_results = []
+    
     # 1. Portfolio Architect Runtime 삭제
-    if deployment_info and 'agent_arn' in deployment_info:
-        try:
-            runtime_id = deployment_info['agent_arn'].split('/')[-1]
-            region = deployment_info.get('region', Config.REGION)
-            client = boto3.client('bedrock-agentcore-control', region_name=region)
-            client.delete_agent_runtime(agentRuntimeId=runtime_id)
-            print(f"✅ Portfolio Architect Runtime 삭제: {runtime_id}")
-        except Exception as e:
-            print(f"⚠️ Portfolio Architect Runtime 삭제 실패: {e}")
-    else:
-        print("⚠️ Portfolio Architect ARN 정보가 없어 Runtime 삭제를 건너뜁니다.")
+    if portfolio_info and 'agent_arn' in portfolio_info:
+        success = delete_runtime(portfolio_info['agent_arn'], "Portfolio Architect")
+        cleanup_results.append({
+            "operation": "delete_portfolio_runtime",
+            "resource": portfolio_info['agent_arn'],
+            "success": success
+        })
     
     # 2. MCP Server Runtime 삭제
-    if mcp_deployment_info and 'agent_arn' in mcp_deployment_info:
-        try:
-            mcp_runtime_id = mcp_deployment_info['agent_arn'].split('/')[-1]
-            region = mcp_deployment_info.get('region', Config.REGION)
-            client = boto3.client('bedrock-agentcore-control', region_name=region)
-            client.delete_agent_runtime(agentRuntimeId=mcp_runtime_id)
-            print(f"✅ MCP Server Runtime 삭제: {mcp_runtime_id}")
-        except Exception as e:
-            print(f"⚠️ MCP Server Runtime 삭제 실패: {e}")
-    else:
-        print("⚠️ MCP Server ARN 정보가 없어 Runtime 삭제를 건너뜁니다.")
+    if mcp_info and 'agent_arn' in mcp_info:
+        success = delete_runtime(mcp_info['agent_arn'], "MCP Server")
+        cleanup_results.append({
+            "operation": "delete_mcp_runtime",
+            "resource": mcp_info['agent_arn'],
+            "success": success
+        })
     
     # 3. ECR 리포지토리들 삭제
-    try:
-        region = deployment_info.get('region', Config.REGION) if deployment_info else Config.REGION
-        ecr = boto3.client('ecr', region_name=region)
-        
-        # Portfolio Architect ECR 삭제
-        portfolio_repo_name = f"bedrock-agentcore-{Config.AGENT_NAME}"
-        try:
-            ecr.delete_repository(repositoryName=portfolio_repo_name, force=True)
-            print(f"✅ Portfolio Architect ECR 삭제: {portfolio_repo_name}")
-        except Exception as e:
-            print(f"⚠️ Portfolio Architect ECR 삭제 실패: {e}")
-        
-        # MCP Server ECR 삭제
-        mcp_repo_name = f"bedrock-agentcore-{Config.MCP_SERVER_NAME}"
-        try:
-            ecr.delete_repository(repositoryName=mcp_repo_name, force=True)
-            print(f"✅ MCP Server ECR 삭제: {mcp_repo_name}")
-        except Exception as e:
-            print(f"⚠️ MCP Server ECR 삭제 실패: {e}")
-            
-    except Exception as e:
-        print(f"⚠️ ECR 클라이언트 생성 실패: {e}")
+    portfolio_repo = f"bedrock-agentcore-{Config.AGENT_NAME}"
+    success = delete_ecr_repo(portfolio_repo)
+    cleanup_results.append({
+        "operation": "delete_portfolio_ecr",
+        "resource": portfolio_repo,
+        "success": success
+    })
+    
+    mcp_repo = f"bedrock-agentcore-{Config.MCP_SERVER_NAME}"
+    success = delete_ecr_repo(mcp_repo)
+    cleanup_results.append({
+        "operation": "delete_mcp_ecr",
+        "resource": mcp_repo,
+        "success": success
+    })
     
     # 4. IAM 역할들 삭제
-    try:
-        iam = boto3.client('iam')
+    portfolio_role = f'agentcore-runtime-{Config.AGENT_NAME}-role'
+    success = delete_iam_role(portfolio_role)
+    cleanup_results.append({
+        "operation": "delete_portfolio_iam",
+        "resource": portfolio_role,
+        "success": success
+    })
+    
+    mcp_role = f'agentcore-runtime-{Config.MCP_SERVER_NAME}-role'
+    success = delete_iam_role(mcp_role)
+    cleanup_results.append({
+        "operation": "delete_mcp_iam",
+        "resource": mcp_role,
+        "success": success
+    })
+    
+    # 5. Cognito 리소스 삭제
+    user_pool_id = None
+    if portfolio_info and 'mcp_user_pool_id' in portfolio_info:
+        user_pool_id = portfolio_info['mcp_user_pool_id']
+    elif mcp_info and 'user_pool_id' in mcp_info:
+        user_pool_id = mcp_info['user_pool_id']
+    
+    if user_pool_id:
+        success = delete_cognito_resources(user_pool_id)
+        cleanup_results.append({
+            "operation": "delete_cognito",
+            "resource": user_pool_id,
+            "success": success
+        })
+    
+    # 6. AWS 리소스 정리 완료 - 정리 정보 저장
+    cleanup_file = save_cleanup_info(cleanup_results)
+    
+    # AWS 리소스 정리 결과 요약
+    successful = sum(1 for r in cleanup_results if r["success"])
+    total = len(cleanup_results)
+    
+    print(f"\n🎉 AWS 리소스 정리 완료! ({successful}/{total} 성공)")
+    print(f"📄 상세 정보: {cleanup_file}")
+    
+    # 7. 로컬 파일들 정리 (사용자 확인 후)
+    generated_files = get_generated_files()
+    if generated_files:
+        print(f"\n📁 삭제 가능한 로컬 파일들 ({len(generated_files)}개):")
+        current_dir = Path(__file__).parent
+        for file_path in generated_files:
+            print(f"   - {file_path.relative_to(current_dir)}")
         
-        # Portfolio Architect IAM 역할 삭제
-        portfolio_role_name = f'agentcore-runtime-{Config.AGENT_NAME}-role'
-        try:
-            # 정책 삭제
-            policies = iam.list_role_policies(RoleName=portfolio_role_name)
-            for policy in policies['PolicyNames']:
-                iam.delete_role_policy(RoleName=portfolio_role_name, PolicyName=policy)
+        file_response = input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ")
+        if file_response.lower() == 'y':
+            deleted_files = cleanup_files(generated_files)
+            cleanup_results.append({
+                "operation": "cleanup_files",
+                "resource": deleted_files,
+                "success": len(deleted_files) > 0
+            })
             
-            # 역할 삭제
-            iam.delete_role(RoleName=portfolio_role_name)
-            print(f"✅ Portfolio Architect IAM 역할 삭제: {portfolio_role_name}")
-        except Exception as e:
-            print(f"⚠️ Portfolio Architect IAM 삭제 실패: {e}")
-        
-        # MCP Server IAM 역할 삭제
-        mcp_role_name = f'agentcore-runtime-{Config.MCP_SERVER_NAME}-role'
-        try:
-            # 정책 삭제
-            policies = iam.list_role_policies(RoleName=mcp_role_name)
-            for policy in policies['PolicyNames']:
-                iam.delete_role_policy(RoleName=mcp_role_name, PolicyName=policy)
-            
-            # 역할 삭제
-            iam.delete_role(RoleName=mcp_role_name)
-            print(f"✅ MCP Server IAM 역할 삭제: {mcp_role_name}")
-        except Exception as e:
-            print(f"⚠️ MCP Server IAM 삭제 실패: {e}")
-            
-    except Exception as e:
-        print(f"⚠️ IAM 클라이언트 생성 실패: {e}")
-    
-    # 5. Cognito 리소스 삭제 (MCP Server 인증용)
-    if deployment_info or mcp_deployment_info:
-        # 두 배포 정보 중 하나에서 Cognito 정보 가져오기
-        cognito_info = deployment_info if deployment_info and 'mcp_user_pool_id' in deployment_info else mcp_deployment_info
-        if cognito_info:
-            delete_cognito_resources(cognito_info)
-    
-    # 6. 생성된 파일들 정리
-    cleanup_generated_files()
-    
-    print("🎉 전체 시스템 정리 완료!")
-    print("\n📋 정리된 항목:")
-    print("• Portfolio Architect Runtime")
-    print("• MCP Server Runtime") 
-    print("• ECR 리포지토리들 (Docker 이미지 포함)")
-    print("• IAM 역할들 및 정책")
-    print("• Cognito User Pool 및 클라이언트")
-    print("• 로컬 배포 정보 파일들")
+            # 최종 정리 정보 업데이트
+            final_cleanup_file = save_cleanup_info(cleanup_results)
+            print(f"✅ 로컬 파일 정리 완료! ({len(deleted_files)}개 파일 삭제)")
+            print(f"📄 최종 정리 정보: {final_cleanup_file}")
+        else:
+            print("📁 로컬 파일들은 유지됩니다.")
+    else:
+        print("\n📁 삭제할 로컬 파일이 없습니다.")
 
 if __name__ == "__main__":
     main()

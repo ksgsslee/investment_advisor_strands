@@ -11,61 +11,52 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(host="0.0.0.0", stateless_http=True)
 
-# 30개 ETF 상품 목록
-PRODUCTS = {
-    # 배당주 (4개)
-    "SCHD": "Schwab US Dividend Equity ETF - 미국 고품질 배당주",
-    "VYM": "Vanguard High Dividend Yield ETF - 고배당 ETF",
-    "NOBL": "ProShares S&P 500 Dividend Aristocrats ETF - 배당 귀족주",
-    "DVY": "iShares Select Dividend ETF - 선별 배당주",
-    
-    # 성장주 (6개)
-    "QQQ": "Invesco QQQ ETF - 나스닥 100 기술주",
-    "XLK": "Technology Select Sector SPDR Fund - 기술 섹터",
-    "ARKK": "ARK Innovation ETF - 혁신 기술주",
-    "XLV": "Health Care Select Sector SPDR Fund - 헬스케어/바이오",
-    "ARKG": "ARK Genomic Revolution ETF - 유전체학/바이오",
-    "SOXX": "iShares Semiconductor ETF - 반도체 ETF",
-    
-    # 가치주 (4개)
-    "VTV": "Vanguard Value ETF - 대형 가치주",
-    "VBR": "Vanguard Small-Cap Value ETF - 소형 가치주",
-    "IWD": "iShares Russell 1000 Value ETF - 러셀 1000 가치주",
-    "VTEB": "Vanguard Tax-Exempt Bond ETF - 세금 우대 채권",
-    
-    # 리츠 (3개)
-    "VNQ": "Vanguard Real Estate Investment Trust ETF - 미국 리츠",
-    "VNQI": "Vanguard Global ex-U.S. Real Estate ETF - 해외 리츠",
-    "SCHH": "Schwab US REIT ETF - 미국 부동산 투자신탁",
-    
-    # ETF (5개)
-    "SPY": "SPDR S&P 500 ETF - 미국 대형주 500개",
-    "VTI": "Vanguard Total Stock Market ETF - 미국 전체 주식시장",
-    "VOO": "Vanguard S&P 500 ETF - S&P 500 지수 추종",
-    "IVV": "iShares Core S&P 500 ETF - S&P 500 저비용",
-    "ITOT": "iShares Core S&P Total US Stock Market ETF - 전체 시장",
-    
-    # 해외 주식 (4개)
-    "VEA": "Vanguard FTSE Developed Markets ETF - 선진국 주식",
-    "VWO": "Vanguard FTSE Emerging Markets ETF - 신흥국 주식",
-    "VXUS": "Vanguard Total International Stock ETF - 국제 주식",
-    "EFA": "iShares MSCI EAFE ETF - 유럽/아시아/극동",
-    
-    # 채권 (3개)
-    "BND": "Vanguard Total Bond Market ETF - 미국 전체 채권",
-    "AGG": "iShares Core U.S. Aggregate Bond ETF - 종합 채권",
-    "TLT": "iShares 20+ Year Treasury Bond ETF - 장기 국채",
-    
-    # 원자재 (3개)
-    "GLD": "SPDR Gold Shares - 금 현물 ETF",
-    "SLV": "iShares Silver Trust - 은 현물 ETF",
-    "DBC": "Invesco DB Commodity Index Tracking Fund - 종합 원자재"
-}
-
 @mcp.tool()
-def get_available_products() -> dict:
-    """투자 가능한 ETF 상품 목록 반환"""
-    return PRODUCTS
+def calculate_correlation(tickers: list) -> dict:
+    """선택된 ETF들 간 상관관계 매트릭스 계산"""
+    try:
+        import numpy as np
+        from datetime import datetime, timedelta
+        
+        # 2년치 데이터로 상관관계 계산
+        end_date = datetime.today().date()
+        start_date = end_date - timedelta(days=504)
+        
+        # 모든 ETF 데이터 수집
+        etf_data = {}
+        for ticker in tickers:
+            etf = yf.Ticker(ticker)
+            hist = etf.history(start=start_date, end=end_date)
+            if not hist.empty:
+                etf_data[ticker] = hist['Close'].pct_change().dropna()
+        
+        # 상관관계 매트릭스 생성
+        correlation_matrix = {}
+        for ticker1 in tickers:
+            correlation_matrix[ticker1] = {}
+            for ticker2 in tickers:
+                if ticker1 == ticker2:
+                    correlation_matrix[ticker1][ticker2] = 1.0
+                elif ticker1 in etf_data and ticker2 in etf_data:
+                    # 공통 날짜 찾기
+                    common_dates = etf_data[ticker1].index.intersection(etf_data[ticker2].index)
+                    if len(common_dates) > 100:  # 충분한 데이터가 있을 때만
+                        returns1 = etf_data[ticker1][common_dates]
+                        returns2 = etf_data[ticker2][common_dates]
+                        
+                        correlation = np.corrcoef(returns1, returns2)[0, 1]
+                        correlation_matrix[ticker1][ticker2] = round(correlation, 3)
+                    else:
+                        correlation_matrix[ticker1][ticker2] = 0.0
+                else:
+                    correlation_matrix[ticker1][ticker2] = 0.0
+        
+        return {
+            "correlation_matrix": correlation_matrix
+        }
+        
+    except Exception as e:
+        return {"error": f"Correlation calculation failed: {str(e)}"}
 
 @mcp.tool()
 def analyze_etf_performance(ticker: str) -> dict:
@@ -88,8 +79,8 @@ def analyze_etf_performance(ticker: str) -> dict:
         annual_return = np.mean(daily_returns) * 252
         annual_volatility = np.std(daily_returns) * np.sqrt(252)
         
-        # 몬테카를로 시뮬레이션 (500회로 간소화)
-        n_simulations = 500
+        # 몬테카를로 시뮬레이션 (1000회로 간소화)
+        n_simulations = 1000
         n_days = 252  # 1년
         
         # 1년 후 수익률 분포 계산 (100만원 기준)

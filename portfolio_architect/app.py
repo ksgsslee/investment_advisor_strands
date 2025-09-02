@@ -93,7 +93,7 @@ def display_portfolio_result(container, portfolio_content):
 def display_etf_analysis_result(container, etf_data):
     """개별 ETF 분석 결과 표시"""
     try:
-        container.markdown(f"**📊 {etf_data['ticker']} 분석 결과**")
+        container.markdown(f"**📊 {etf_data['ticker']} 분석 결과 (몬테카를로 시뮬레이션)**")
         
         # 기본 지표
         col1, col2, col3, col4 = container.columns(4)
@@ -124,8 +124,6 @@ def display_etf_analysis_result(container, etf_data):
         
         # 수익률 분포 차트
         if 'return_distribution' in etf_data:
-            container.markdown("**수익률 분포 (500회 시뮬레이션)**")
-            
             distribution = etf_data['return_distribution']
             ranges = list(distribution.keys())
             counts = list(distribution.values())
@@ -142,7 +140,7 @@ def display_etf_analysis_result(container, etf_data):
             ])
             
             fig.update_layout(
-                title=f"{etf_data['ticker']} 1년 후 예상 수익률 분포",
+                title=f"{etf_data['ticker']} 1년 후 예상 수익률 분포 (1000회 시뮬레이션)",
                 xaxis_title="수익률 구간",
                 yaxis_title="시나리오 개수",
                 height=400,
@@ -203,11 +201,7 @@ def invoke_portfolio_architect(financial_analysis):
                         if actual_tool_name == "get_available_products":
                             display_products_table(placeholder, body)
                         elif actual_tool_name == "analyze_etf_performance":
-                            if isinstance(body, str):
-                                etf_data = json.loads(body)
-                            else:
-                                etf_data = body
-                            display_etf_analysis_result(placeholder, etf_data)
+                            display_etf_analysis_result(placeholder, body)
                     
                     current_thinking = ""
                     if tool_use_id in tool_id_to_name:

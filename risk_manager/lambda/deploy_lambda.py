@@ -1,15 +1,8 @@
 """
 deploy_lambda.py
-Risk Manager Lambda 함수 배포 스크립트
 
-이 스크립트는 리스크 관리를 위한 Lambda 함수를 AWS에 배포합니다.
-yfinance Layer와 함께 배포되어 실시간 뉴스 및 거시경제 데이터 조회 기능을 제공합니다.
-
-주요 기능:
-- ETF 뉴스 조회 (get_product_news)
-- 거시경제 지표 조회 (get_market_data)
-- yfinance Layer 자동 연결
-- IAM 역할 자동 생성
+Lambda 함수 배포 스크립트
+Risk Manager Lambda 함수 배포
 """
 
 import boto3
@@ -19,35 +12,16 @@ import os
 import time
 from pathlib import Path
 
-# ================================
-# 설정 상수
-# ================================
-
 class Config:
-    """Lambda 배포 설정 상수"""
-    FUNCTION_NAME = 'agentcore-risk-manager'
-    ROLE_NAME = 'lambda-risk-manager-role'
+    """Lambda 배포 설정"""
     REGION = 'us-west-2'
-    RUNTIME = 'python3.12'
-    TIMEOUT = 30
-    MEMORY_SIZE = 256  # yfinance 사용을 위해 256MB 할당
-    ZIP_FILENAME = 'lambda_function.zip'
+    FUNCTION_NAME = 'lambda-agentcore-risk-manager'
 
-# ================================
-# 유틸리티 함수들
-# ================================
-
-def create_lambda_zip():
-    """
-    Lambda 함수 코드를 ZIP 파일로 패키징
-    
-    Returns:
-        str: 생성된 ZIP 파일의 경로
-    """
-    print("📦 ZIP 파일 생성 중...")
-    
+def create_lambda_package():
+    """Lambda 함수 패키징"""
     current_dir = Path(__file__).parent
-    zip_path = current_dir / Config.ZIP_FILENAME
+    zip_filename = 'lambda_function.zip'
+    zip_path = current_dir / zip_filename
     lambda_file = current_dir / 'lambda_function.py'
     
     if not lambda_file.exists():
@@ -56,18 +30,13 @@ def create_lambda_zip():
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         zip_file.write(lambda_file, 'lambda_function.py')
     
-    print("✅ ZIP 파일 생성 완료")
     return str(zip_path)
 
-def create_lambda_role():
-    """
-    Lambda 실행을 위한 IAM 역할 생성
-    
-    Returns:
-        str: 생성된 IAM 역할의 ARN
-    """
+def setup_iam_role():
+    """IAM 역할 설정"""
     print("🔐 IAM 역할 설정 중...")
     iam = boto3.client('iam')
+    role_name = f'{Config.FUNCTION_NAME}-role'
     
     trust_policy = {
         "Version": "2012-10-17",
@@ -82,34 +51,26 @@ def create_lambda_role():
     
     try:
         response = iam.create_role(
-            RoleName=Config.ROLE_NAME,
+            RoleName=role_name,
             AssumeRolePolicyDocument=json.dumps(trust_policy),
-            Description='Risk Manager Lambda execution role for news and market data processing'
+            Description='Risk Manager Lambda execution role'
         )
         role_arn = response['Role']['Arn']
         
         iam.attach_role_policy(
-            RoleName=Config.ROLE_NAME,
+            RoleName=role_name,
             PolicyArn='arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
         )
         
-        print("✅ 새 IAM 역할 생성 완료")
-        print("⏳ IAM 역할 전파 대기 중...")
-        time.sleep(10)
+        time.sleep(10)  # IAM 전파 대기
         return role_arn
         
     except iam.exceptions.EntityAlreadyExistsException:
-        response = iam.get_role(RoleName=Config.ROLE_NAME)
-        print("♻️ 기존 IAM 역할 사용")
+        response = iam.get_role(RoleName=role_name)
         return response['Role']['Arn']
 
 def load_layer_info():
-    """
-    Layer 배포 정보 로드 (필수)
-    
-    Returns:
-        str: Layer Version ARN
-    """
+    """Layer 배포 정보 로드"""
     layer_dir = Path(__file__).parent.parent / "lambda_layer"
     info_file = layer_dir / "layer_deployment_info.json"
     
@@ -119,81 +80,37 @@ def load_layer_info():
     with open(info_file, 'r') as f:
         layer_info = json.load(f)
     
-    layer_arn = layer_info.get('layer_version_arn')
-    if not layer_arn:
-        return None
-        
-    print(f"📋 Layer 정보 로드: {layer_arn}")
-    return layer_arn
+    return layer_info.get('layer_version_arn')
 
-def deploy_lambda_function():
-    """
-    Lambda 함수 배포 메인 로직
-    
-    Returns:
-        str: 배포된 Lambda 함수의 ARN
-    """
-    print("🔨 Lambda 함수 배포 중...")
+def create_lambda_function(role_arn, layer_arn, zip_content):
+    """Lambda 함수 생성"""
+    print("🔧 Lambda 함수 생성 중...")
     lambda_client = boto3.client('lambda', region_name=Config.REGION)
     
-    # 1. 배포용 ZIP 파일 생성
-    zip_filename = create_lambda_zip()
-    
-    # 2. Lambda 실행용 IAM 역할 준비
-    role_arn = create_lambda_role()
-    
-    # 3. Layer 정보 로드 (필수)
-    layer_arn = load_layer_info()
-    if not layer_arn:
-        print("⚠️ Layer가 없습니다. 먼저 Layer를 배포하세요:")
-        print("   cd ../lambda_layer && python deploy_layer.py")
-        raise RuntimeError("Layer 배포가 필요합니다.")
-    
-    # 4. ZIP 파일을 메모리로 로드
-    print("📤 Lambda 함수 업로드 중...")
-    with open(zip_filename, 'rb') as zip_file:
-        zip_content = zip_file.read()
-    
-    # 5. 기존 함수 존재 여부 확인
-    function_exists = _check_function_exists(lambda_client, Config.FUNCTION_NAME)
-    
-    if function_exists:
-        print("♻️ 기존 함수 삭제 중...")
+    # 기존 함수 삭제
+    if _check_function_exists(lambda_client, Config.FUNCTION_NAME):
         lambda_client.delete_function(FunctionName=Config.FUNCTION_NAME)
-        print("🗑️ 기존 함수 삭제 완료")
-        
-        print("⏳ 삭제 완료 대기 중...")
         time.sleep(5)
-    
-    # 6. 새 Lambda 함수 생성
-    print("🔨 새 Lambda 함수 생성 중...")
-    print(f"📦 Layer 연결: {layer_arn}")
     
     response = lambda_client.create_function(
         FunctionName=Config.FUNCTION_NAME,
-        Runtime=Config.RUNTIME,
+        Runtime="python3.12",
         Role=role_arn,
         Handler='lambda_function.lambda_handler',
         Code={'ZipFile': zip_content},
-        Description='Risk Manager - News and market data analysis for portfolio risk management',
-        Timeout=Config.TIMEOUT,
-        MemorySize=Config.MEMORY_SIZE,
+        Description='Risk Manager - News and market data analysis',
+        Timeout=30,
+        MemorySize=256,
         Layers=[layer_arn]
     )
-    function_arn = response['FunctionArn']
-    print("✅ 새 Lambda 함수 생성 완료")
     
-    # 7. 임시 ZIP 파일 정리
-    print("🧹 임시 파일 정리 중...")
-    if os.path.exists(zip_filename):
-        os.remove(zip_filename)
-    
-    # 8. Lambda 함수 활성화 대기
-    print("⏳ Lambda 함수 활성화 대기 중...")
+    # 함수 활성화 대기
     _wait_for_function_active(lambda_client, Config.FUNCTION_NAME)
-    print("✅ Lambda 함수 활성화 완료")
     
-    return function_arn
+    return {
+        'function_arn': response['FunctionArn'],
+        'function_name': response['FunctionName']
+    }
 
 def _check_function_exists(lambda_client, function_name):
     """Lambda 함수 존재 여부 확인"""
@@ -225,53 +142,61 @@ def _wait_for_function_active(lambda_client, function_name, max_attempts=15):
     
     raise Exception("Lambda 함수 활성화 타임아웃")
 
-def save_deployment_info(function_arn):
-    """
-    배포 정보를 JSON 파일로 저장
-    
-    Args:
-        function_arn (str): 배포된 Lambda 함수의 ARN
-        
-    Returns:
-        str: 저장된 JSON 파일의 경로
-    """
-    current_dir = Path(__file__).parent
-    
-    deployment_info = {
-        "function_name": Config.FUNCTION_NAME,
-        "function_arn": function_arn,
-        "region": Config.REGION,
-        "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-    
-    info_file = current_dir / "lambda_deployment_info.json"
+def save_deployment_info(result):
+    """배포 정보 저장"""
+    info_file = Path(__file__).parent / "lambda_deployment_info.json"
     with open(info_file, 'w') as f:
-        json.dump(deployment_info, f, indent=2)
-    
+        json.dump(result, f, indent=2)
     return str(info_file)
 
 def main():
-    """
-    메인 실행 함수
-    
-    Risk Manager Lambda 함수의 전체 배포 프로세스를 관리합니다.
-    """
     try:
-        print("=" * 50)
-        print(f"🚀 Risk Manager Lambda 배포 시작")
+        print("🚀 Risk Manager Lambda 배포")
         
-        function_arn = deploy_lambda_function()
-        info_file = save_deployment_info(function_arn)
+        # Layer 정보 확인
+        layer_arn = load_layer_info()
+        if not layer_arn:
+            raise RuntimeError(
+                "Layer가 없습니다. 먼저 Layer를 배포하세요:\n"
+                "cd ../lambda_layer && python deploy_lambda_layer.py"
+            )
         
-        print("=" * 50)
-        print("🎉 배포 성공!")
+        # Lambda 패키지 생성
+        zip_filename = create_lambda_package()
+        
+        # IAM 역할 설정
+        role_arn = setup_iam_role()
+        
+        # ZIP 파일 로드
+        with open(zip_filename, 'rb') as zip_file:
+            zip_content = zip_file.read()
+        
+        # Lambda 함수 생성
+        lambda_result = create_lambda_function(role_arn, layer_arn, zip_content)
+        
+        # 임시 파일 정리
+        if os.path.exists(zip_filename):
+            os.remove(zip_filename)
+        
+        # 배포 결과 구성
+        result = {
+            'function_name': lambda_result['function_name'],
+            'function_arn': lambda_result['function_arn'],
+            'region': Config.REGION,
+            'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # 배포 정보 저장
+        info_file = save_deployment_info(result)
+        
+        print(f"\n🎉 Lambda 함수 배포 완료!")
+        print(f"🔗 Function ARN: {result['function_arn']}")
         print(f"📄 배포 정보: {info_file}")
-       
-        return function_arn
+        
+        return result
         
     except Exception as e:
-        print("=" * 50)
-        print(f"❌ 배포 실패: {str(e)}")
+        print(f"❌ Lambda 배포 실패: {e}")
         raise
 
 if __name__ == "__main__":

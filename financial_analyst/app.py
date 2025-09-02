@@ -64,14 +64,14 @@ def display_financial_analysis(trace_container, result):
         st.write(result.get("return_rate_reason", ""))
 
 
-def display_calculator_result(trace_container, result_text):
+def display_calculator_result(trace_container, tool_input, result_text):
     """Calculator 도구 결과를 깔끔하게 표시"""
     trace_container.markdown("**Calculator 도구로 계산된 수익률**")
-    trace_container.code(result_text, language="text")
+    trace_container.code(f"Input: {tool_input}\n\n{result_text}", language="text")
 
 # ================================
 # 메인 처리 함수
-# ================================
+# ================================  
 
 def invoke_financial_advisor(input_data):
     """AgentCore Runtime 호출 (기존 함수명 및 동작 유지)"""
@@ -91,6 +91,7 @@ def invoke_financial_advisor(input_data):
         current_thinking = ""
         current_text_placeholder = placeholder.empty()
         tool_id_to_name = {}
+        tool_id_to_input = {}
 
         for line in response["response"].iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
@@ -110,15 +111,18 @@ def invoke_financial_advisor(input_data):
                         # 도구 사용 시작 - 매핑 정보만 저장 (화면에 표시하지 않음)
                         tool_name = event_data.get("tool_name", "")
                         tool_use_id = event_data.get("tool_use_id", "")
-                        
+                        tool_input = event_data.get("tool_input", "")
+
                         # 실제 함수명 추출
                         actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
                         tool_id_to_name[tool_use_id] = actual_tool_name
+                        tool_id_to_input[tool_use_id] = tool_input
                     
                     elif event_type == "tool_result":
                         # 도구 실행 결과 처리
                         tool_use_id = event_data.get("tool_use_id", "")
                         actual_tool_name = tool_id_to_name.get(tool_use_id, "unknown")
+                        tool_input = tool_id_to_input.get(tool_use_id, "unknown")
                         tool_content = event_data.get("content", [{}])
                         
                         if tool_content and len(tool_content) > 0:
@@ -126,7 +130,7 @@ def invoke_financial_advisor(input_data):
                             
                             # 도구 타입에 따라 적절한 표시 함수 호출
                             if actual_tool_name == "calculator":
-                                display_calculator_result(placeholder, result_text)
+                                display_calculator_result(placeholder, tool_input, result_text)
                         
                         # 도구 결과 처리 후 생각 텍스트 리셋 및 새로운 placeholder 생성
                         current_thinking = ""

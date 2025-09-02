@@ -71,7 +71,8 @@ class PortfolioArchitect:
   "risk_profile": <위험 성향>,
   "risk_profile_reason": <위험 성향 평가 근거>,
   "required_annual_return_rate": <필요 연간 수익률>,
-  "return_rate_reason": <필요 수익률 계산 근거 및 설명>
+  "return_rate_reason": <필요 수익률 계산 근거 및 설명>,
+  "summary": <종합 총평>
 }
 
 당신의 작업:

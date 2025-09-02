@@ -196,7 +196,7 @@ def display_etf_analysis_result(container, etf_data):
             ])
             
             fig.update_layout(
-                title=f"{etf_data['ticker']} 1년 후 예상 수익률 분포 (1000회 시뮬레이션)",
+                title=f"1년 후 예상 수익률 분포 (1000회 시뮬레이션)",
                 xaxis_title="수익률 구간",
                 yaxis_title="시나리오 개수",
                 height=400,

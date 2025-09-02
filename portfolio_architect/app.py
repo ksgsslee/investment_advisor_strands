@@ -237,13 +237,15 @@ risk_profile = st.text_input("위험 성향", value="공격적")
 risk_profile_reason = st.text_input("위험 성향 근거", value="35세, 공격적 투자 성향")
 required_return = st.number_input("필요 연간 수익률 (%)", value=40.0)
 return_rate_reason = st.text_input("수익률 근거", value="1년간 연평균 40.0% 수익률 필요")
+summary = st.text_area("종합 총평", value="높은 목표 수익률을 위해 공격적 투자 전략이 필요합니다.")
 
 if st.button("분석 시작", use_container_width=True):
     financial_analysis = {
         "risk_profile": risk_profile,
         "risk_profile_reason": risk_profile_reason,
         "required_annual_return_rate": required_return,
-        "return_rate_reason": return_rate_reason
+        "return_rate_reason": return_rate_reason,
+        "summary": summary
     }
     
     st.divider()

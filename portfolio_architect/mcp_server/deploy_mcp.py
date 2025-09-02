@@ -123,6 +123,11 @@ def main():
         # MCP Server Runtime 생성
         runtime_result = create_mcp_runtime(iam_role['Role']['Arn'], auth_components)
         
+        # ECR 리포지토리 이름 추출
+        ecr_repo_name = None
+        if hasattr(runtime_result, 'ecr_uri') and runtime_result['ecr_uri']:
+            ecr_repo_name = runtime_result['ecr_uri'].split('/')[-1].split(':')[0]
+
         # 배포 결과 구성
         result = {
             'agent_arn': runtime_result['agent_arn'],
@@ -132,6 +137,7 @@ def main():
             'client_secret': auth_components['client_secret'],
             'region': Config.REGION,
             'iam_role_name': iam_role_name,
+            'ecr_repo_name': ecr_repo_name,
             'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")
         }
         

@@ -81,11 +81,17 @@ def deploy_portfolio_architect(mcp_info):
     if status != 'READY':
         raise Exception(f"배포 실패: {status}")
     
+    # ECR 리포지토리 이름 추출
+    ecr_repo_name = None
+    if hasattr(launch_result, 'ecr_uri') and launch_result.ecr_uri:
+        ecr_repo_name = launch_result.ecr_uri.split('/')[-1].split(':')[0]
+    
     return {
         "agent_arn": launch_result.agent_arn,
         "agent_id": launch_result.agent_id,
         "region": Config.REGION,
-        "iam_role_name": iam_role_name
+        "iam_role_name": iam_role_name,
+        "ecr_repo_name": ecr_repo_name
     }
 
 def save_deployment_info(mcp_info, architect_info):
@@ -96,6 +102,7 @@ def save_deployment_info(mcp_info, architect_info):
         "agent_id": architect_info["agent_id"],
         "region": Config.REGION,
         "iam_role_name": architect_info["iam_role_name"],
+        "ecr_repo_name": architect_info.get("ecr_repo_name"),
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     

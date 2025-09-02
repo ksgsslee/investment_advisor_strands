@@ -161,11 +161,11 @@ def main():
         delete_runtime(mcp_info['agent_arn'])
     
     # 3. ECR 리포지토리들 삭제
-    portfolio_repo = f"bedrock-agentcore-{Config.AGENT_NAME}"
-    delete_ecr_repo(portfolio_repo)
+    if portfolio_info and 'ecr_repo_name' in portfolio_info and portfolio_info['ecr_repo_name']:
+        delete_ecr_repo(portfolio_info['ecr_repo_name'])
     
-    mcp_repo = f"bedrock-agentcore-{Config.MCP_SERVER_NAME}"
-    delete_ecr_repo(mcp_repo)
+    if mcp_info and 'ecr_repo_name' in mcp_info and mcp_info['ecr_repo_name']:
+        delete_ecr_repo(mcp_info['ecr_repo_name'])
     
     # 4. IAM 역할들 삭제
     if portfolio_info and 'iam_role_name' in portfolio_info:

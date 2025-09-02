@@ -171,8 +171,8 @@ def invoke_financial_advisor(input_data):
 # ================================
 
 # 아키텍처 설명
-# with st.expander("아키텍처", expanded=True):
-#     st.image(os.path.join("../static/financial_analyst.png"), width=500)
+with st.expander("아키텍처", expanded=True):
+    st.image(os.path.join("../static/financial_analyst.png"), width=500)
 
 
 # 입력 폼

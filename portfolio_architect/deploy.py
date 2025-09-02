@@ -33,8 +33,6 @@ def load_mcp_info():
     with open(info_file) as f:
         return json.load(f)
 
-
-
 def deploy_portfolio_architect(mcp_info):
     """Portfolio Architect Runtime 배포"""
     print("🎯 Portfolio Architect 배포 중...")

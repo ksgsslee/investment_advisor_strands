@@ -14,7 +14,7 @@ app = BedrockAgentCoreApp()
 
 class Config:
     """Financial Analyst 설정"""
-    MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    MODEL_ID = "openai.gpt-oss-120b-1:0"
     TEMPERATURE = 0.1
     MAX_TOKENS = 3000
 
@@ -58,9 +58,9 @@ class FinancialAnalyst:
 - preferred_sectors: 관심 투자 분야
 
 분석 과정:
-1. calculator로 필요 수익률 계산: ((목표금액/투자금액)-1)*100
-2. 나이, 경험, 목적, 관심분야를 종합한 위험성향 평가
-3. 수익률, 위험성향을 고려한 종합 평가
+1. "calculator" 도구를 사용하여 수익률을 계산하세요: ((목표금액/투자금액)-1)*100
+2. 나이, 경험, 목적, 관심분야를 종합한 위험성향 평가하세요.
+3. 수익률, 위험성향을 고려한 종합 평가하세요.
 
 출력:
 {

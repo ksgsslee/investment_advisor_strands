@@ -1,14 +1,9 @@
 """
 target_config.py
+
 Gateway Target 설정
-
 Risk Manager Gateway에서 사용할 MCP 도구 스키마를 정의합니다.
-Lambda 함수의 기능을 AI 에이전트가 사용할 수 있는 도구로 노출합니다.
 """
-
-# ================================
-# MCP 도구 스키마 설정
-# ================================
 
 TARGET_CONFIGURATION = {
     "mcp": {

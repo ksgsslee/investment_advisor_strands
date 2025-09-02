@@ -16,6 +16,12 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 app = BedrockAgentCoreApp()
 
+class Config:
+    """Portfolio Architect 설정"""
+    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    TEMPERATURE = 0.3
+    MAX_TOKENS = 3000
+
 class PortfolioArchitect:
     def __init__(self, mcp_server_info):
         self.mcp_server_info = mcp_server_info
@@ -55,9 +61,9 @@ class PortfolioArchitect:
             self.agent = Agent(
                 name="portfolio_architect",
                 model=BedrockModel(
-                    model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-                    temperature=0.3,
-                    max_tokens=3000
+                    model_id=Config.MODEL_ID,
+                    temperature=Config.TEMPERATURE,
+                    max_tokens=Config.MAX_TOKENS
                 ),
                 system_prompt=self._get_prompt(),
                 tools=tools

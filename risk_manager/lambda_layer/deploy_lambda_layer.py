@@ -107,6 +107,8 @@ def main():
             'layer_arn': layer_result['layer_arn'],
             'layer_version_arn': layer_result['layer_version_arn'],
             'version': layer_result['version'],
+            's3_bucket': bucket_name,
+            's3_key': s3_key,
             'region': Config.REGION,
             'runtime': "python3.12",
             'deployed_at': time.strftime("%Y-%m-%d %H:%M:%S")

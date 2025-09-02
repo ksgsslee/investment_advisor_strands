@@ -36,7 +36,14 @@ def load_deployment_info():
         with open(lambda_file) as f:
             lambda_info = json.load(f)
     
-    return risk_manager_info, gateway_info, lambda_info
+    # Lambda Layer 정보
+    layer_info = None
+    layer_file = current_dir / "lambda_layer" / "layer_deployment_info.json"
+    if layer_file.exists():
+        with open(layer_file) as f:
+            layer_info = json.load(f)
+    
+    return risk_manager_info, gateway_info, lambda_info, layer_info
 
 def delete_runtime(agent_arn, region):
     """Runtime 삭제"""
@@ -80,6 +87,55 @@ def delete_lambda_function(function_name, region):
         return True
     except Exception as e:
         print(f"⚠️ Lambda 함수 삭제 실패: {e}")
+        return False
+
+def delete_lambda_layer(layer_name, region):
+    """Lambda Layer 삭제"""
+    try:
+        lambda_client = boto3.client('lambda', region_name=region)
+        
+        # Layer의 모든 버전 조회
+        versions = lambda_client.list_layer_versions(LayerName=layer_name)
+        
+        # 각 버전 삭제
+        for version in versions['LayerVersions']:
+            version_number = version['Version']
+            lambda_client.delete_layer_version(
+                LayerName=layer_name,
+                VersionNumber=version_number
+            )
+            print(f"✅ Lambda Layer 버전 삭제: {layer_name} v{version_number}")
+        
+        return True
+    except Exception as e:
+        print(f"⚠️ Lambda Layer 삭제 실패 {layer_name}: {e}")
+        return False
+
+def delete_s3_bucket(bucket_name, region):
+    """S3 버킷 삭제 (객체 포함)"""
+    try:
+        s3 = boto3.client('s3', region_name=region)
+        
+        # 버킷 존재 확인
+        try:
+            s3.head_bucket(Bucket=bucket_name)
+        except:
+            print(f"ℹ️ S3 버킷이 존재하지 않음: {bucket_name}")
+            return True
+        
+        # 버킷 내 모든 객체 삭제
+        paginator = s3.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=bucket_name):
+            if 'Contents' in page:
+                objects = [{'Key': obj['Key']} for obj in page['Contents']]
+                s3.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+        
+        # 버킷 삭제
+        s3.delete_bucket(Bucket=bucket_name)
+        print(f"✅ S3 버킷 삭제: {bucket_name} (리전: {region})")
+        return True
+    except Exception as e:
+        print(f"⚠️ S3 버킷 삭제 실패 {bucket_name}: {e}")
         return False
 
 def delete_ecr_repo(repo_name, region):
@@ -166,9 +222,9 @@ def main():
     print("🧹 Risk Manager 시스템 정리")
     
     # 배포 정보 로드
-    risk_manager_info, gateway_info, lambda_info = load_deployment_info()
+    risk_manager_info, gateway_info, lambda_info, layer_info = load_deployment_info()
     
-    if not risk_manager_info and not gateway_info and not lambda_info:
+    if not risk_manager_info and not gateway_info and not lambda_info and not layer_info:
         print("⚠️ 배포 정보가 없습니다.")
         return
     
@@ -195,12 +251,22 @@ def main():
         region = lambda_info.get('region', 'us-west-2')
         delete_lambda_function(lambda_info['function_name'], region)
     
-    # 4. ECR 리포지토리 삭제
+    # 4. Lambda Layer 삭제
+    if layer_info and 'layer_name' in layer_info:
+        region = layer_info.get('region', 'us-west-2')
+        delete_lambda_layer(layer_info['layer_name'], region)
+    
+    # 5. S3 버킷 삭제 (Layer 배포용)
+    if layer_info and 's3_bucket' in layer_info:
+        region = layer_info.get('region', 'us-west-2')
+        delete_s3_bucket(layer_info['s3_bucket'], region)
+    
+    # 6. ECR 리포지토리 삭제
     if risk_manager_info and 'ecr_repo_name' in risk_manager_info and risk_manager_info['ecr_repo_name']:
         region = risk_manager_info.get('region', 'us-west-2')
         delete_ecr_repo(risk_manager_info['ecr_repo_name'], region)
     
-    # 5. IAM 역할들 삭제
+    # 7. IAM 역할들 삭제
     if risk_manager_info and 'iam_role_name' in risk_manager_info:
         delete_iam_role(risk_manager_info['iam_role_name'])
     
@@ -212,14 +278,14 @@ def main():
         lambda_role_name = f"{lambda_info['function_name']}-role"
         delete_iam_role(lambda_role_name)
     
-    # 6. Cognito 리소스 삭제
+    # 8. Cognito 리소스 삭제
     if gateway_info and 'user_pool_id' in gateway_info:
         region = gateway_info.get('region', 'us-west-2')
         delete_cognito_resources(gateway_info['user_pool_id'], region)
     
     print("\n🎉 AWS 리소스 정리 완료!")
     
-    # 7. 로컬 파일들 정리
+    # 9. 로컬 파일들 정리
     if input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ").lower() == 'y':
         cleanup_local_files()
     else:

@@ -5,6 +5,7 @@ ETF Data MCP Server - 실시간 ETF 데이터 조회
 """
 
 import yfinance as yf
+import numpy as np
 from datetime import datetime, timedelta
 from mcp.server.fastmcp import FastMCP
 
@@ -87,6 +88,72 @@ def get_product_data(ticker: str) -> dict:
         }
     except Exception as e:
         return {"error": f"Error fetching {ticker} price data: {str(e)}"}
+
+@mcp.tool()
+def analyze_etf_performance(ticker: str) -> dict:
+    """
+    개별 ETF 성과 분석 (몬테카를로 시뮬레이션 포함)
+    
+    Args:
+        ticker: ETF 티커 (예: "SPY")
+    
+    Returns:
+        ETF 분석 결과 (수익률, 위험도, 안정성 등)
+    """
+    try:
+        # 2년치 데이터 수집
+        end_date = datetime.today().date()
+        start_date = end_date - timedelta(days=504)  # 약 2년
+        
+        etf = yf.Ticker(ticker)
+        hist = etf.history(start=start_date, end=end_date)
+        
+        if hist.empty:
+            return {"error": f"No data available for ticker: {ticker}"}
+        
+        # 일일 수익률 계산
+        daily_returns = hist['Close'].pct_change().dropna()
+        
+        # 연간 수익률과 변동성 계산
+        annual_return = np.mean(daily_returns) * 252
+        annual_volatility = np.std(daily_returns) * np.sqrt(252)
+        
+        # 몬테카를로 시뮬레이션 (500회로 간소화)
+        n_simulations = 500
+        n_days = 252  # 1년
+        
+        # 1년 후 수익률 분포 계산 (100만원 기준)
+        base_amount = 1000000
+        final_values = []
+        
+        for _ in range(n_simulations):
+            # 정규분포에서 일일 수익률 샘플링
+            simulated_returns = np.random.normal(
+                annual_return / 252, 
+                annual_volatility / np.sqrt(252), 
+                n_days
+            )
+            
+            # 복리 계산
+            final_value = base_amount * np.prod(1 + simulated_returns)
+            final_values.append(final_value)
+        
+        final_values = np.array(final_values)
+        
+        # 간단한 지표들만 계산
+        expected_return_pct = (np.mean(final_values) / base_amount - 1) * 100
+        loss_probability = np.sum(final_values < base_amount) / n_simulations * 100
+        
+        return {
+            "ticker": ticker,
+            "expected_annual_return": round(expected_return_pct, 1),
+            "loss_probability": round(loss_probability, 1),
+            "historical_annual_return": round(annual_return * 100, 1),
+            "volatility": round(annual_volatility * 100, 1)
+        }
+        
+    except Exception as e:
+        return {"error": f"ETF analysis failed for {ticker}: {str(e)}"}
 
 if __name__ == "__main__":
     mcp.run(transport="streamable-http")

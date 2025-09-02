@@ -108,6 +108,40 @@ def display_portfolio_result(container, portfolio_content):
     except Exception as e:
         container.error(f"포트폴리오 표시 오류: {e}")
 
+def display_etf_analysis_result(container, etf_data):
+    """개별 ETF 분석 결과 표시"""
+    try:
+        container.markdown(f"**📊 {etf_data['ticker']} 분석 결과**")
+        
+        col1, col2, col3, col4 = container.columns(4)
+        
+        with col1:
+            st.metric(
+                "예상 수익률", 
+                f"{etf_data['expected_annual_return']}%"
+            )
+        
+        with col2:
+            st.metric(
+                "손실 확률", 
+                f"{etf_data['loss_probability']}%"
+            )
+        
+        with col3:
+            st.metric(
+                "변동성", 
+                f"{etf_data['volatility']}%"
+            )
+        
+        with col4:
+            st.metric(
+                "과거 수익률", 
+                f"{etf_data['historical_annual_return']}%"
+            )
+        
+    except Exception as e:
+        container.error(f"ETF 분석 결과 표시 오류: {e}")
+
 def invoke_portfolio_architect(financial_analysis):
     """Portfolio Architect 호출"""
     try:
@@ -158,6 +192,12 @@ def invoke_portfolio_architect(financial_analysis):
                             display_products_table(placeholder, body)
                         elif actual_tool_name == "get_product_data":
                             display_price_chart(placeholder, body)
+                        elif actual_tool_name == "analyze_etf_performance":
+                            if isinstance(body, str):
+                                etf_data = json.loads(body)
+                            else:
+                                etf_data = body
+                            display_etf_analysis_result(placeholder, etf_data)
                     
                     current_thinking = ""
                     if tool_use_id in tool_id_to_name:

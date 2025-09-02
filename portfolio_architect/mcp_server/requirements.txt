@@ -6,3 +6,6 @@ mcp
 
 # ETF 데이터 조회
 yfinance
+
+# 몬테카를로 시뮬레이션
+numpy

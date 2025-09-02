@@ -68,38 +68,8 @@ def get_available_products() -> dict:
     return PRODUCTS
 
 @mcp.tool()
-def get_product_data(ticker: str) -> dict:
-    """특정 ETF의 최근 3개월 가격 데이터 조회"""
-    try:
-        end_date = datetime.today().date()
-        start_date = end_date - timedelta(days=100)
-        
-        etf = yf.Ticker(ticker)
-        hist = etf.history(start=start_date, end=end_date)
-        
-        if hist.empty:
-            return {"error": f"No data available for ticker: {ticker}"}
-        
-        return {
-            ticker: {
-                date.strftime('%Y-%m-%d'): round(float(price), 2) 
-                for date, price in hist['Close'].items()
-            }
-        }
-    except Exception as e:
-        return {"error": f"Error fetching {ticker} price data: {str(e)}"}
-
-@mcp.tool()
 def analyze_etf_performance(ticker: str) -> dict:
-    """
-    개별 ETF 성과 분석 (몬테카를로 시뮬레이션 포함)
-    
-    Args:
-        ticker: ETF 티커 (예: "SPY")
-    
-    Returns:
-        ETF 분석 결과 (수익률, 위험도, 안정성 등)
-    """
+    """개별 ETF 성과 분석 (몬테카를로 시뮬레이션 포함)"""
     try:
         # 2년치 데이터 수집
         end_date = datetime.today().date()
@@ -144,12 +114,26 @@ def analyze_etf_performance(ticker: str) -> dict:
         expected_return_pct = (np.mean(final_values) / base_amount - 1) * 100
         loss_probability = np.sum(final_values < base_amount) / n_simulations * 100
         
+        # 수익률 구간별 분포 계산
+        return_percentages = (final_values / base_amount - 1) * 100
+        
+        distribution = {
+            "-20% 이하": int(np.sum(return_percentages <= -20)),
+            "-20% ~ -10%": int(np.sum((return_percentages > -20) & (return_percentages <= -10))),
+            "-10% ~ 0%": int(np.sum((return_percentages > -10) & (return_percentages <= 0))),
+            "0% ~ 10%": int(np.sum((return_percentages > 0) & (return_percentages <= 10))),
+            "10% ~ 20%": int(np.sum((return_percentages > 10) & (return_percentages <= 20))),
+            "20% ~ 30%": int(np.sum((return_percentages > 20) & (return_percentages <= 30))),
+            "30% 이상": int(np.sum(return_percentages > 30))
+        }
+        
         return {
             "ticker": ticker,
             "expected_annual_return": round(expected_return_pct, 1),
             "loss_probability": round(loss_probability, 1),
             "historical_annual_return": round(annual_return * 100, 1),
-            "volatility": round(annual_volatility * 100, 1)
+            "volatility": round(annual_volatility * 100, 1),
+            "return_distribution": distribution
         }
         
     except Exception as e:

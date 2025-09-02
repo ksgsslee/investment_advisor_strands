@@ -59,24 +59,6 @@ def display_products_table(container, products):
     except Exception as e:
         container.error(f"상품 목록 표시 오류: {e}")
 
-def display_price_chart(container, price_data):
-    """ETF 가격 차트 표시"""
-    try:
-        if isinstance(price_data, str):
-            price_data = json.loads(price_data)
-        
-        for ticker, prices in price_data.items():
-            df = pd.DataFrame.from_dict(prices, orient='index', columns=['Price'])
-            df.index = pd.to_datetime(df.index)
-            df = df.sort_index()
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df.index, y=df['Price'], mode='lines', name=ticker))
-            fig.update_layout(title=f"{ticker} 가격 추이", height=400)
-            container.plotly_chart(fig, use_container_width=True)
-    except Exception as e:
-        container.error(f"가격 차트 표시 오류: {e}")
-
 def display_portfolio_result(container, portfolio_content):
     """최종 포트폴리오 결과 표시"""
     try:
@@ -113,6 +95,7 @@ def display_etf_analysis_result(container, etf_data):
     try:
         container.markdown(f"**📊 {etf_data['ticker']} 분석 결과**")
         
+        # 기본 지표
         col1, col2, col3, col4 = container.columns(4)
         
         with col1:
@@ -138,6 +121,35 @@ def display_etf_analysis_result(container, etf_data):
                 "과거 수익률", 
                 f"{etf_data['historical_annual_return']}%"
             )
+        
+        # 수익률 분포 차트
+        if 'return_distribution' in etf_data:
+            container.markdown("**수익률 분포 (500회 시뮬레이션)**")
+            
+            distribution = etf_data['return_distribution']
+            ranges = list(distribution.keys())
+            counts = list(distribution.values())
+            
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=ranges,
+                    y=counts,
+                    text=[f"{count}회<br>({count/5:.1f}%)" for count in counts],
+                    textposition='auto',
+                    marker_color='lightblue',
+                    name=etf_data['ticker']
+                )
+            ])
+            
+            fig.update_layout(
+                title=f"{etf_data['ticker']} 1년 후 예상 수익률 분포",
+                xaxis_title="수익률 구간",
+                yaxis_title="시나리오 개수",
+                height=400,
+                showlegend=False
+            )
+            
+            container.plotly_chart(fig, use_container_width=True)
         
     except Exception as e:
         container.error(f"ETF 분석 결과 표시 오류: {e}")
@@ -190,8 +202,6 @@ def invoke_portfolio_architect(financial_analysis):
                         
                         if actual_tool_name == "get_available_products":
                             display_products_table(placeholder, body)
-                        elif actual_tool_name == "get_product_data":
-                            display_price_chart(placeholder, body)
                         elif actual_tool_name == "analyze_etf_performance":
                             if isinstance(body, str):
                                 etf_data = json.loads(body)

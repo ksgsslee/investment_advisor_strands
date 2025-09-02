@@ -1,29 +1,21 @@
 """
 app.py
-Financial Analyst Streamlit 애플리케이션 (AgentCore Runtime 버전)
 
-개인의 재무 상황을 분석하여 투자 성향과 목표 수익률을 계산하는 웹 애플리케이션입니다.
-Reflection 패턴을 활용하여 AI가 분석 결과의 품질을 검증하고 신뢰성을 보장합니다.
+Financial Analyst Streamlit 애플리케이션
 """
 
 import streamlit as st
 import json
 import os
-import sys
 import boto3
 from pathlib import Path
-
-# ================================
-# 페이지 설정 및 초기화
-# ================================
 
 st.set_page_config(page_title="Financial Analyst")
 st.title("💰 Financial Analyst")
 
 # 배포 정보 로드
-CURRENT_DIR = Path(__file__).parent.resolve()
 try:
-    with open(CURRENT_DIR / "deployment_info.json", "r") as f:
+    with open(Path(__file__).parent / "deployment_info.json", "r") as f:
         deployment_info = json.load(f)
     AGENT_ARN = deployment_info["agent_arn"]
     REGION = deployment_info["region"]
@@ -31,23 +23,10 @@ except Exception as e:
     st.error("배포 정보를 찾을 수 없습니다. deploy.py를 먼저 실행해주세요.")
     st.stop()
 
-# AgentCore 클라이언트 설정
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 
-
-# ================================
-# 데이터 표시 함수들
-# ================================
-
-
 def display_financial_analysis(trace_container, result):
-    """
-    재무 분석 결과 표시 (financial_analyst 스타일 적용)
-    
-    Args:
-        analysis_content: 재무 분석 데이터 (dict 또는 JSON 문자열)
-    """
-    # 상세 근거 표시
+    """재무 분석 결과 표시"""
     trace_container.markdown("**종합 총평**")
     trace_container.info(result.get("summary", ""))
 
@@ -63,18 +42,13 @@ def display_financial_analysis(trace_container, result):
         st.markdown("**수익률 분석**")
         st.write(result.get("return_rate_reason", ""))
 
-
 def display_calculator_result(trace_container, tool_input, result_text):
-    """Calculator 도구 결과를 깔끔하게 표시"""
+    """Calculator 도구 결과 표시"""
     trace_container.markdown("**Calculator 도구로 계산된 수익률**")
     trace_container.code(f"Input: {tool_input}\n\n{result_text}", language="text")
 
-# ================================
-# 메인 처리 함수
-# ================================  
-
 def invoke_financial_advisor(input_data):
-    """AgentCore Runtime 호출 (기존 함수명 및 동작 유지)"""
+    """AgentCore Runtime 호출"""
     try:
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=AGENT_ARN,
@@ -82,12 +56,9 @@ def invoke_financial_advisor(input_data):
             payload=json.dumps({"input_data": input_data})
         )
 
-        # 응답을 표시할 컨테이너 생성
         placeholder = st.container()
         placeholder.markdown("🤖 **Financial Analyst**")
 
-        # 스트리밍 응답 처리
-        analysis_data = None
         current_thinking = ""
         current_text_placeholder = placeholder.empty()
         tool_id_to_name = {}
@@ -96,11 +67,10 @@ def invoke_financial_advisor(input_data):
         for line in response["response"].iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
-                    event_data = json.loads(line.decode("utf-8")[6:])  # "data: " 제거
-                    
+                    event_data = json.loads(line.decode("utf-8")[6:])
                     event_type = event_data.get("type")
+
                     if event_type == "text_chunk":
-                        # AI 생각 과정을 실시간으로 표시
                         chunk_data = event_data.get("data", "")
                         current_thinking += chunk_data
                         if current_thinking.strip():
@@ -108,18 +78,15 @@ def invoke_financial_advisor(input_data):
                                 st.markdown(current_thinking)
                     
                     elif event_type == "tool_use":
-                        # 도구 사용 시작 - 매핑 정보만 저장 (화면에 표시하지 않음)
                         tool_name = event_data.get("tool_name", "")
                         tool_use_id = event_data.get("tool_use_id", "")
                         tool_input = event_data.get("tool_input", "")
 
-                        # 실제 함수명 추출
                         actual_tool_name = tool_name.split("___")[-1] if "___" in tool_name else tool_name
                         tool_id_to_name[tool_use_id] = actual_tool_name
                         tool_id_to_input[tool_use_id] = tool_input
                     
                     elif event_type == "tool_result":
-                        # 도구 실행 결과 처리
                         tool_use_id = event_data.get("tool_use_id", "")
                         actual_tool_name = tool_id_to_name.get(tool_use_id, "unknown")
                         tool_input = tool_id_to_input.get(tool_use_id, "unknown")
@@ -128,52 +95,36 @@ def invoke_financial_advisor(input_data):
                         if tool_content and len(tool_content) > 0:
                             result_text = tool_content[0].get("text", "{}")
                             
-                            # 도구 타입에 따라 적절한 표시 함수 호출
                             if actual_tool_name == "calculator":
                                 display_calculator_result(placeholder, tool_input, result_text)
                         
-                        # 도구 결과 처리 후 생각 텍스트 리셋 및 새로운 placeholder 생성
                         current_thinking = ""
                         if tool_use_id in tool_id_to_name:
                             del tool_id_to_name[tool_use_id]
                         current_text_placeholder = placeholder.empty()
                     
                     elif event_type == "streaming_complete":
-                        # 최종 결과 처리
                         result_str = event_data.get("result", "")
                         result = json.loads(result_str)
-                        # 최종 분석 결과 표시
+                        
                         placeholder.divider()
                         placeholder.subheader("📌 재무 분석 결과")
                         display_financial_analysis(placeholder, result)
 
                     elif event_type == "error":
-                        return {
-                            "status": "error",
-                            "error": event_data.get("error", "Unknown error")
-                        }
+                        return {"status": "error", "error": event_data.get("error", "Unknown error")}
+                        
                 except json.JSONDecodeError:
                     continue
 
-        return {
-            "analysis": analysis_data,
-            "status": "success"
-        }
+        return {"status": "success"}
 
     except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e)
-        }
-
-# ================================
-# UI 구성
-# ================================
+        return {"status": "error", "error": str(e)}
 
 # 아키텍처 설명
 with st.expander("아키텍처", expanded=True):
     st.image(os.path.join("../static/financial_analyst.png"), width=500)
-
 
 # 입력 폼
 st.markdown("**투자자 정보 입력**")

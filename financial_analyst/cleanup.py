@@ -1,98 +1,53 @@
 """
 cleanup.py
-Financial Analyst Runtime 정리 스크립트
+
+Financial Analyst 시스템 정리 스크립트
 """
 
 import json
 import boto3
-from pathlib import Path
+import time
 import sys
+from pathlib import Path
 
-# deploy.py의 Config 가져오기
 sys.path.insert(0, str(Path(__file__).parent))
 from deploy import Config
 
-def cleanup_generated_files():
-    """배포 과정에서 생성된 파일들 정리"""
-    print("🗑️ 생성된 파일들 정리 중...")
-    
-    current_dir = Path(__file__).parent
-    root_dir = current_dir.parent
-    
-    files_to_delete = [
-        # 로컬 배포 정보
-        current_dir / "deployment_info.json",
-        # Docker 관련 파일들 (루트에 생성됨)
-        current_dir / "Dockerfile",
-        current_dir / ".dockerignore", 
-        current_dir / ".bedrock_agentcore.yaml",
-    ]
-    
-    for file_path in files_to_delete:
-        try:
-            if file_path.exists():
-                file_path.unlink()
-                print(f"  ✅ 삭제: {file_path.name}")
-        except Exception as e:
-            print(f"  ⚠️ 삭제 실패 {file_path.name}: {e}")
-
-def main():
-    print(f"🧹 {Config.AGENT_NAME} Runtime 정리 중...")
-    
-    # 배포 정보 로드
+def load_deployment_info():
+    """배포 정보 로드"""
     info_file = Path(__file__).parent / "deployment_info.json"
-    deployment_info = None
-    
     if info_file.exists():
         with open(info_file) as f:
-            deployment_info = json.load(f)
-        
-        print(f"✅ 배포 정보 로드:")
-        print(f"   📍 Agent: {deployment_info.get('agent_arn', 'N/A')}")
-        print(f"   🔐 IAM Role: agentcore-runtime-{Config.AGENT_NAME}-role")
-        print(f"   📦 ECR Repo: bedrock-agentcore-{Config.AGENT_NAME}")
-    else:
-        print("⚠️ 배포 정보 파일이 없습니다. 기본값으로 진행합니다.")
-    
-    # 확인
-    response = input("\n정말로 모든 리소스를 삭제하시겠습니까? (y/N): ")
-    if response.lower() != 'y':
-        print("❌ 취소됨")
-        return
-    
-    # 1. AgentCore Runtime 삭제
-    if deployment_info and 'agent_arn' in deployment_info:
-        try:
-            # agent_arn에서 runtime_id 추출
-            runtime_id = deployment_info['agent_arn'].split('/')[-1]
-            region = deployment_info.get('region', Config.REGION)
-            client = boto3.client('bedrock-agentcore-control', region_name=region)
-            client.delete_agent_runtime(agentRuntimeId=runtime_id)
-            print(f"✅ Runtime 삭제: {runtime_id}")
-        except Exception as e:
-            print(f"⚠️ Runtime 삭제 실패: {e}")
-    else:
-        print("⚠️ Agent ARN 정보가 없어 Runtime 삭제를 건너뜁니다.")
-    
-    # 2. ECR 리포지토리 삭제
+            return json.load(f)
+    return None
+
+def delete_runtime(agent_arn, region):
+    """Runtime 삭제"""
     try:
-        region = deployment_info.get('region', Config.REGION) if deployment_info else Config.REGION
-        ecr = boto3.client('ecr', region_name=region)
-        
-        # Config에서 ECR 리포지토리 이름 생성
-        repo_name = f"bedrock-agentcore-{Config.AGENT_NAME}"
-        
-        ecr.delete_repository(repositoryName=repo_name, force=True)
-        print(f"✅ ECR 리포지토리 삭제: {repo_name}")
+        runtime_id = agent_arn.split('/')[-1]
+        client = boto3.client('bedrock-agentcore-control', region_name=region)
+        client.delete_agent_runtime(agentRuntimeId=runtime_id)
+        print(f"✅ Runtime 삭제: {runtime_id} (리전: {region})")
+        return True
     except Exception as e:
-        print(f"⚠️ ECR 삭제 실패: {e}")
-    
-    # 3. IAM 역할 삭제
+        print(f"⚠️ Runtime 삭제 실패: {e}")
+        return False
+
+def delete_ecr_repo(repo_name, region):
+    """ECR 리포지토리 삭제"""
+    try:
+        ecr = boto3.client('ecr', region_name=region)
+        ecr.delete_repository(repositoryName=repo_name, force=True)
+        print(f"✅ ECR 삭제: {repo_name} (리전: {region})")
+        return True
+    except Exception as e:
+        print(f"⚠️ ECR 삭제 실패 {repo_name}: {e}")
+        return False
+
+def delete_iam_role(role_name):
+    """IAM 역할 삭제"""
     try:
         iam = boto3.client('iam')
-        
-        # Config에서 IAM 역할 이름 생성
-        role_name = f'agentcore-runtime-{Config.AGENT_NAME}-role'
         
         # 정책 삭제
         policies = iam.list_role_policies(RoleName=role_name)
@@ -102,13 +57,72 @@ def main():
         # 역할 삭제
         iam.delete_role(RoleName=role_name)
         print(f"✅ IAM 역할 삭제: {role_name}")
+        return True
     except Exception as e:
-        print(f"⚠️ IAM 삭제 실패: {e}")
+        print(f"⚠️ IAM 역할 삭제 실패 {role_name}: {e}")
+        return False
+
+def cleanup_local_files():
+    """로컬 생성 파일들 삭제"""
+    current_dir = Path(__file__).parent
+    files_to_delete = [
+        current_dir / "deployment_info.json",
+        current_dir / "Dockerfile",
+        current_dir / ".dockerignore", 
+        current_dir / ".bedrock_agentcore.yaml",
+    ]
     
-    # 4. 생성된 파일들 정리
-    cleanup_generated_files()
+    deleted_count = 0
+    for file_path in files_to_delete:
+        if file_path.exists():
+            file_path.unlink()
+            print(f"✅ 파일 삭제: {file_path.name}")
+            deleted_count += 1
     
-    print("🎉 정리 완료!")
+    if deleted_count > 0:
+        print(f"✅ 로컬 파일 정리 완료! ({deleted_count}개 파일 삭제)")
+    else:
+        print("📁 삭제할 로컬 파일이 없습니다.")
+
+def main():
+    print("🧹 Financial Analyst 시스템 정리")
+    
+    # 배포 정보 로드
+    deployment_info = load_deployment_info()
+    
+    if not deployment_info:
+        print("⚠️ 배포 정보가 없습니다.")
+        return
+    
+    # 확인
+    response = input("\n정말로 모든 리소스를 삭제하시겠습니까? (y/N): ")
+    if response.lower() != 'y':
+        print("❌ 취소됨")
+        return
+    
+    print("\n🗑️ AWS 리소스 삭제 중...")
+    
+    # 1. Runtime 삭제
+    if 'agent_arn' in deployment_info:
+        region = deployment_info.get('region', 'us-west-2')
+        delete_runtime(deployment_info['agent_arn'], region)
+    
+    # 2. ECR 리포지토리 삭제
+    if 'ecr_repo_name' in deployment_info and deployment_info['ecr_repo_name']:
+        region = deployment_info.get('region', 'us-west-2')
+        delete_ecr_repo(deployment_info['ecr_repo_name'], region)
+    
+    # 3. IAM 역할 삭제
+    if 'iam_role_name' in deployment_info:
+        delete_iam_role(deployment_info['iam_role_name'])
+    
+    print("\n🎉 AWS 리소스 정리 완료!")
+    
+    # 4. 로컬 파일들 정리
+    if input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ").lower() == 'y':
+        cleanup_local_files()
+    else:
+        print("📁 로컬 파일들은 유지됩니다.")
 
 if __name__ == "__main__":
     main()

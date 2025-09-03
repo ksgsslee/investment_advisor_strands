@@ -173,12 +173,10 @@ class AgentClient:
                 messages.append((event_json, "OTHER"))
             
             # 에이전트별 세션에 저장
-            agent_session_id = f"{session_id}_{agent_type}"
-            
             self.memory_client.create_event(
                 memory_id=self.memory_id,
                 actor_id=session_id,
-                session_id=agent_session_id,
+                session_id=session_id,
                 messages=messages
             )
             print(f"💾 {agent_type} 배치 저장 완료 ({len(events_list)}개 이벤트)")
@@ -280,23 +278,22 @@ class InvestmentAdvisor:
             elif event_type == "on_chain_end":
                 node_name = event.get("name", "")
                 if node_name in ["financial", "portfolio", "risk"]:
+                    # 이벤트 data에서 노드의 output (return state) 직접 추출
+                    output_state = event.get("data", {}).get("output", {})
+                    
+                    # 각 노드별 결과 매핑
+                    result_mapping = {
+                        "financial": output_state.get("financial_analysis"),
+                        "portfolio": output_state.get("portfolio_recommendation"),
+                        "risk": output_state.get("risk_analysis")
+                    }
+                    
                     yield {
                         "type": "node_complete",
                         "agent_name": node_name,
-                        "session_id": session_id
+                        "session_id": session_id,
+                        "result": result_mapping[node_name]
                     }
-        
-        # 최종 상태 가져오기
-        final_state = await self.graph.ainvoke(initial_state, config=config)
-        
-        # 최종 완료
-        yield {
-            "type": "final_complete",
-            "session_id": session_id,
-            "financial_analysis": final_state["financial_analysis"],
-            "portfolio_recommendation": final_state["portfolio_recommendation"],
-            "risk_analysis": final_state["risk_analysis"]
-        }    
 
     def get_agent_events(self, session_id, agent_name):
         """특정 에이전트의 모든 이벤트 조회"""

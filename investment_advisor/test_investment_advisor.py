@@ -22,11 +22,10 @@ def get_thinking_process(session_id, agent_name):
         
         # Memory Client로 이벤트 조회
         memory_client = MemoryClient(region_name="us-west-2")
-        agent_session_id = f"{session_id}_{agent_name}"
         events = memory_client.get_last_k_turns(
             memory_id=memory_id,
             actor_id=session_id,
-            session_id=agent_session_id,
+            session_id=session_id,
             k=1  # 마지막 턴만 (모든 이벤트가 포함됨)
         )
         

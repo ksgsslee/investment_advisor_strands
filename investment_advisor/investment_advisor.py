@@ -72,8 +72,8 @@ class AgentClient:
             "financial": json.load(open(base_path / "financial_analyst" / "deployment_info.json"))["agent_arn"],
             "portfolio": json.load(open(base_path / "portfolio_architect" / "deployment_info.json"))["agent_arn"],
             "risk": json.load(open(base_path / "risk_manager" / "deployment_info.json"))["agent_arn"]
-        }
-    
+        }  
+  
     def _init_memory(self):
         """AgentCore Memory 초기화"""
         try:
@@ -98,7 +98,7 @@ class AgentClient:
             print(f"❌ 메모리 초기화 실패: {e}")
     
     def call_agent_with_memory(self, agent_type, payload_key, data, session_id):
-        """에이전트 호출하며 중간 과정을 Memory에 저장"""
+        """에이전트 호출하며 중간 과정을 효율적으로 Memory에 저장"""
         response = self.client.invoke_agent_runtime(
             agentRuntimeArn=self.arns[agent_type],
             qualifier="DEFAULT",
@@ -107,7 +107,6 @@ class AgentClient:
         
         final_result = None
         thinking_chunks = []  # text_chunk 임시 저장
-        memory_events = []    # Memory에 저장할 이벤트들
         
         # 스트리밍 응답 처리
         for line in response["response"].iter_lines(chunk_size=1):
@@ -115,74 +114,80 @@ class AgentClient:
                 try:
                     event_data = json.loads(line.decode("utf-8")[6:])
                     event_type = event_data.get("type")
-                    print(event_data)
+                    
                     if event_type == "text_chunk":
-                        # 텍스트 청크는 임시 저장
+                        # 텍스트 청크는 임시 저장만 (메모리에 저장하지 않음)
                         thinking_chunks.append(event_data.get("data", ""))
                     
                     elif event_type == "tool_use":
-                        # 도구 사용 시 지금까지의 텍스트 청크를 Memory에 저장
+                        # tool_use 전에 쌓인 텍스트 청크들 저장
                         if thinking_chunks:
-                            memory_events.append({
-                                "type": "thinking",
-                                "content": "".join(thinking_chunks)
-                            })
-                            thinking_chunks = []
+                            combined_text_event = {
+                                "type": "text",
+                                "data": "".join(thinking_chunks)
+                            }
+                            self._save_event_to_memory(session_id, agent_type, combined_text_event)
+                            thinking_chunks = []  # 저장 후 초기화
                         
-                        # 도구 사용 정보 저장
-                        tool_info = f"🔧 도구 사용: {event_data.get('tool_name', 'Unknown')}"
-                        memory_events.append({
-                            "type": "tool_use",
-                            "content": tool_info
-                        })
+                        # 도구 사용 이벤트 저장
+                        self._save_event_to_memory(session_id, agent_type, event_data)
                     
                     elif event_type == "tool_result":
-                        # 도구 결과 저장
-                        tool_result = f"✅ 도구 실행 완료: {event_data.get('status', 'Unknown')}"
-                        memory_events.append({
-                            "type": "tool_result", 
-                            "content": tool_result
-                        })
+                        # 도구 결과 이벤트는 즉시 저장
+                        self._save_event_to_memory(session_id, agent_type, event_data)
                     
                     elif event_type == "streaming_complete":
-                        # 완료 시 남은 텍스트 청크 저장
+                        # 스트리밍 완료 시점에 남은 텍스트 청크들 저장
                         if thinking_chunks:
-                            memory_events.append({
-                                "type": "thinking",
-                                "content": "".join(thinking_chunks)
-                            })
+                            combined_text_event = {
+                                "type": "text",
+                                "data": "".join(thinking_chunks)
+                            }
+                            self._save_event_to_memory(session_id, agent_type, combined_text_event)
+                        
+                        # streaming_complete 이벤트도 저장
+                        self._save_event_to_memory(session_id, agent_type, event_data)
                         
                         # 최종 결과 캐치
                         if agent_type == "financial":
-                            final_result = event_data.get("result")
+                            final_result = event_data.get("analysis_data")
                         elif agent_type == "portfolio":
                             final_result = event_data.get("portfolio_result")
                         elif agent_type == "risk":
                             final_result = event_data.get("risk_result")
+                    
+                    else:
+                        # 기타 이벤트들은 즉시 저장
+                        self._save_event_to_memory(session_id, agent_type, event_data)
                         
                 except json.JSONDecodeError:
                     continue
         
-        # Memory에 모든 이벤트 저장
-        if self.memory_id and memory_events:
-            try:
-                # 모든 이벤트를 하나의 문자열로 결합
-                full_process = "\n".join([
-                    f"[{event['type']}] {event['content']}" 
-                    for event in memory_events
-                ])
-                
-                self.memory_client.create_event(
-                    memory_id=self.memory_id,
-                    actor_id=session_id,
-                    session_id=f"{session_id}_{agent_type}",
-                    messages=[(f"{agent_type}_process", "user"), (full_process, "assistant")]
-                )
-                print(f"✅ {agent_type} 전체 과정 Memory 저장 완료 ({len(memory_events)}개 이벤트)")
-            except Exception as e:
-                print(f"❌ Memory 저장 실패: {e}")
+        return final_result    
+
+    def _save_event_to_memory(self, session_id, agent_type, event_data):
+        """원본 이벤트 데이터를 JSON 형태로 Memory에 저장"""
+        if not self.memory_id:
+            return
         
-        return final_result
+        try:
+            # 에이전트 타입 추가
+            event_data["agent_type"] = agent_type
+            
+            # JSON 형태로 저장
+            event_json = json.dumps(event_data, ensure_ascii=False, indent=2)
+            
+            self.memory_client.create_event(
+                memory_id=self.memory_id,
+                actor_id=session_id,
+                session_id=session_id,
+                messages=[
+                    (event_json, "OTHER")
+                ]
+            )
+            print(f"💾 {agent_type} [{event_data.get('type')}] JSON 저장")
+        except Exception as e:
+            print(f"❌ Memory 저장 실패 ({agent_type}): {e}")
 
 agent_client = AgentClient()
 
@@ -294,29 +299,110 @@ class InvestmentAdvisor:
             "financial_analysis": final_state["financial_analysis"],
             "portfolio_recommendation": final_state["portfolio_recommendation"],
             "risk_analysis": final_state["risk_analysis"]
-        }
-    
-    def get_thinking_process(self, session_id, agent_name):
-        """Memory에서 중간 과정 조회"""
+        }    
+
+    def get_thinking_process(self, session_id, agent_name=None, format_type="text"):
+        """Memory에서 중간 과정 조회 (JSON 데이터 지원)"""
         if not agent_client.memory_id:
             return "메모리가 초기화되지 않았습니다."
         
         try:
+            # 해당 세션의 모든 대화 조회
             recent_turns = agent_client.memory_client.get_last_k_turns(
                 memory_id=agent_client.memory_id,
                 actor_id=session_id,
-                session_id=f"{session_id}_{agent_name}",
+                session_id=session_id,
+                k=100,  # 충분히 많은 턴 조회
+                branch_name="main"
+            )
+            
+            if not recent_turns:
+                return "중간 과정을 찾을 수 없습니다."
+            
+            # 에이전트별 필터링 및 포맷팅
+            filtered_events = []
+            for turn in recent_turns:
+                if len(turn) >= 2:
+                    user_msg = turn[0]['content']['text']
+                    assistant_msg = turn[1]['content']['text']
+                    
+                    # 특정 에이전트만 조회하는 경우
+                    if agent_name and f"[{agent_name}]" in user_msg:
+                        filtered_events.append(assistant_msg)
+                    # 모든 에이전트 조회하는 경우
+                    elif agent_name is None:
+                        filtered_events.append(assistant_msg)
+            
+            if not filtered_events:
+                return f"{agent_name or '전체'} 중간 과정을 찾을 수 없습니다."
+            
+            # 포맷 타입에 따른 반환
+            if format_type == "json":
+                # JSON 형태로 파싱해서 반환
+                parsed_events = []
+                for event_str in filtered_events:
+                    try:
+                        event_json = json.loads(event_str)
+                        parsed_events.append(event_json)
+                    except json.JSONDecodeError:
+                        # JSON이 아닌 경우 텍스트로 처리
+                        parsed_events.append({"type": "text", "content": event_str})
+                return parsed_events
+            else:
+                # 텍스트 형태로 반환 (기존 방식)
+                formatted_events = []
+                for event_str in filtered_events:
+                    try:
+                        event_json = json.loads(event_str)
+                        # JSON을 읽기 쉬운 텍스트로 변환
+                        event_type = event_json.get("type", "unknown")
+                        agent_type = event_json.get("agent_type", "")
+                        
+                        if event_type == "text":
+                            # 합쳐진 텍스트 표시
+                            data = event_json.get("data", "")[:500]  # 처음 500자만
+                            formatted_events.append(f"[{agent_type}] 💭 사고과정: {data}...")
+                        elif event_type == "tool_use":
+                            tool_name = event_json.get("tool_name", "Unknown")
+                            formatted_events.append(f"[{agent_type}] 🔧 도구 사용: {tool_name}")
+                        elif event_type == "tool_result":
+                            status = event_json.get("status", "Unknown")
+                            formatted_events.append(f"[{agent_type}] ✅ 도구 완료: {status}")
+                        elif event_type == "streaming_complete":
+                            formatted_events.append(f"[{agent_type}] 🏁 스트리밍 완료")
+                        else:
+                            formatted_events.append(f"[{agent_type}] [{event_type}] {str(event_json)[:200]}...")
+                    except json.JSONDecodeError:
+                        # JSON이 아닌 경우 그대로 추가
+                        formatted_events.append(event_str)
+                return "\n".join(formatted_events)
+                
+        except Exception as e:
+            return f"중간 과정 조회 실패: {str(e)}"
+    
+    def get_agent_events_by_type(self, session_id, agent_name, event_type):
+        """특정 에이전트의 특정 이벤트 타입만 조회"""
+        if not agent_client.memory_id:
+            return []
+        
+        try:
+            recent_turns = agent_client.memory_client.get_last_k_turns(
+                memory_id=agent_client.memory_id,
+                actor_id=f"{session_id}_{agent_name}",
+                session_id=f"{session_id}_{agent_name}_{event_type}",
                 k=5,
                 branch_name="main"
             )
             
-            if recent_turns and len(recent_turns[0]) >= 2:
-                return recent_turns[0][1]['content']['text']
-            else:
-                return f"{agent_name} 중간 과정을 찾을 수 없습니다."
-                
+            events = []
+            for turn in recent_turns:
+                if len(turn) >= 2:
+                    events.append(turn[1]['content']['text'])
+            
+            return events
+            
         except Exception as e:
-            return f"중간 과정 조회 실패: {str(e)}"
+            return [f"조회 실패: {str(e)}"]
 
 # ================================
 # Runtime 엔트리포인트

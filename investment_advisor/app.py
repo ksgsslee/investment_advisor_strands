@@ -18,7 +18,7 @@ from datetime import datetime
 # 페이지 설정 및 초기화
 # ================================
 
-st.set_page_config(page_title="🤖 Investment Advisor", layout="wide")
+st.set_page_config(page_title="🤖 Investment Advisor")
 st.title("🤖 Investment Advisor - Multi-Agent 투자 자문")
 
 # 배포 정보 로드

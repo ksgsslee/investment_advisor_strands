@@ -135,11 +135,14 @@ def display_risk_analysis_result(container, analysis_content):
                 container.subheader(f"시나리오 {i}: {scenario.get('name', f'Scenario {i}')}")
                 container.markdown(scenario.get('description', '설명 없음'))
                 
-                # 시나리오 확률 표시
+                # 시나리오 확률 표시 (상단으로 이동)
                 probability_str = scenario.get('probability', '0%')
-                container.markdown(f"**시나리오 발생 확률: {probability_str}**")
-                prob_value = int(probability_str.replace('%', ''))
-                container.progress(prob_value / 100)
+                try:
+                    prob_value = int(probability_str.replace('%', ''))
+                    container.markdown(f"**📊 발생 확률: {probability_str}**")
+                    container.progress(prob_value / 100)
+                except:
+                    container.markdown(f"**📊 발생 확률: {probability_str}**")
                 
                 col1, col2 = container.columns(2)
                 
@@ -159,7 +162,7 @@ def display_risk_analysis_result(container, analysis_content):
                 with col2:
                     st.markdown("**조정 이유 및 전략**")
                     st.info(scenario.get('reason', '근거 없음'))
-                
+
                 container.divider()
         
     except Exception as e:

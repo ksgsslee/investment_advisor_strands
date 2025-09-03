@@ -52,42 +52,29 @@ class AgentClient:
         self.memory_id = self._load_memory_id()
     
     def _load_agent_arns(self):
-        """Agent ARN 로드 (환경변수 우선, 없으면 파일에서 로드)"""
-        # 환경변수에서 시도
+        """환경변수에서 Agent ARN 로드"""
         financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
         portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
         risk_arn = os.getenv("RISK_MANAGER_ARN")
         
-        if financial_arn and portfolio_arn and risk_arn:
-            print("✅ 환경변수에서 Agent ARN 로드")
-            return {
-                "financial": financial_arn,
-                "portfolio": portfolio_arn,
-                "risk": risk_arn
-            }
+        if not financial_arn or not portfolio_arn or not risk_arn:
+            raise ValueError("필수 환경변수가 설정되지 않았습니다: FINANCIAL_ANALYST_ARN, PORTFOLIO_ARCHITECT_ARN, RISK_MANAGER_ARN")
         
-        # 파일에서 로드
-        print("📁 파일에서 Agent ARN 로드")
-        base_path = Path(__file__).parent.parent
+        print("✅ 환경변수에서 Agent ARN 로드")
         return {
-            "financial": json.load(open(base_path / "financial_analyst" / "deployment_info.json"))["agent_arn"],
-            "portfolio": json.load(open(base_path / "portfolio_architect" / "deployment_info.json"))["agent_arn"],
-            "risk": json.load(open(base_path / "risk_manager" / "deployment_info.json"))["agent_arn"]
-        }  
+            "financial": financial_arn,
+            "portfolio": portfolio_arn,
+            "risk": risk_arn
+        }
   
     def _load_memory_id(self):
-        """Memory ID 로드 (환경변수 우선, 없으면 파일에서 로드)"""
-        # 환경변수에서 시도
+        """환경변수에서 Memory ID 로드"""
         memory_id = os.getenv("INVESTMENT_MEMORY_ID")
-        if memory_id:
-            print("✅ 환경변수에서 Memory ID 로드")
-            return memory_id
+        if not memory_id:
+            raise ValueError("필수 환경변수가 설정되지 않았습니다: INVESTMENT_MEMORY_ID")
         
-        # 파일에서 로드
-        print("📁 파일에서 Memory ID 로드")
-        memory_info_file = Path(__file__).parent / "agentcore_memory" / "deployment_info.json"
-        memory_info = json.load(open(memory_info_file))
-        return memory_info["memory_id"]
+        print("✅ 환경변수에서 Memory ID 로드")
+        return memory_id
     
     def call_agent_with_memory(self, agent_type, data, session_id):
         """에이전트 호출하며 중간 과정을 배열에 모아서 한 번에 Memory에 저장"""

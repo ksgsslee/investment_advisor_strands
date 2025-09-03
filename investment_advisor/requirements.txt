@@ -1,6 +1,9 @@
 # requirements.txt
 # Investment Advisor AgentCore Runtime 의존성
 
+# Langgraph
+langgraph
+
 # AI 에이전트 프레임워크
 strands-agents
 

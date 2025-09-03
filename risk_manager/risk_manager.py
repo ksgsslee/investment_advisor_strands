@@ -99,8 +99,12 @@ class RiskManager:
     "ticker2": 비율2,
     "ticker3": 비율3
   }},
-  "strategy": "투자 전략 설명",
-  "reason": "포트폴리오 구성 근거"
+  "reason": "포트폴리오 구성 근거 및 투자 전략 설명",
+  "portfolio_scores": {{
+    "profitability": {{"score": 점수, "reason": "평가 근거"}},
+    "risk_management": {{"score": 점수, "reason": "평가 근거"}},
+    "diversification": {{"score": 점수, "reason": "평가 근거"}}
+  }}
 }}
 
 당신의 작업:
@@ -115,6 +119,7 @@ class RiskManager:
   "scenario1": {{
     "name": "시나리오 1 이름",
     "description": "시나리오 1 상세 설명",
+    "probability": "발생 확률 (예: 30%)",
     "allocation_management": {{
       "ticker1": 새로운_비율1,
       "ticker2": 새로운_비율2,
@@ -123,8 +128,9 @@ class RiskManager:
     "reason": "조정 이유 및 전략"
   }},
   "scenario2": {{
-    "name": "시나리오 2 이름",
+    "name": "시나리오 2 이름", 
     "description": "시나리오 2 상세 설명",
+    "probability": "발생 확률 (예: 25%)",
     "allocation_management": {{
       "ticker1": 새로운_비율1,
       "ticker2": 새로운_비율2,

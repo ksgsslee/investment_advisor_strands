@@ -135,9 +135,16 @@ def display_risk_analysis_result(container, analysis_content):
                 container.subheader(f"시나리오 {i}: {scenario.get('name', f'Scenario {i}')}")
                 container.markdown(scenario.get('description', '설명 없음'))
                 
+                # 시나리오 확률 표시
+                probability_str = scenario.get('probability', '0%')
+                container.markdown(f"**시나리오 발생 확률: {probability_str}**")
+                prob_value = int(probability_str.replace('%', ''))
+                container.progress(prob_value / 100)
+                
                 col1, col2 = container.columns(2)
                 
                 with col1:
+                    st.markdown("**조정된 포트폴리오 배분**")
                     allocation = scenario.get('allocation_management', {})
                     if allocation:
                         fig = go.Figure(data=[go.Pie(
@@ -146,12 +153,14 @@ def display_risk_analysis_result(container, analysis_content):
                             hole=.3,
                             textinfo='label+percent'
                         )])
-                        fig.update_layout(height=400)
-                        st.plotly_chart(fig)
+                        fig.update_layout(height=400, title=f"시나리오 {i} 포트폴리오")
+                        st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
                     st.markdown("**조정 이유 및 전략**")
                     st.info(scenario.get('reason', '근거 없음'))
+                
+                container.divider()
         
     except Exception as e:
         container.error(f"리스크 분석 표시 오류: {str(e)}")
@@ -240,8 +249,20 @@ with col3:
     ticker3 = st.text_input("ETF 3", value="GLD")
     allocation3 = st.number_input("비율 3 (%)", min_value=0, max_value=100, value=10)
 
-strategy = st.text_input("투자 전략", value="고성장 기술주 중심의 공격적 포트폴리오")
-reason = st.text_area("구성 근거", value="고객의 공격적인 위험 성향과 높은 목표 수익률 달성을 위한 전략", height=100)
+reason = st.text_area("포트폴리오 구성 근거 및 투자 전략", value="고성장 기술주 중심의 공격적 포트폴리오로, 고객의 공격적인 위험 성향과 높은 목표 수익률 달성을 위한 전략", height=100)
+
+# Portfolio Scores 입력
+st.markdown("**포트폴리오 평가 점수**")
+col1, col2, col3 = st.columns(3)
+with col1:
+    profitability_score = st.number_input("수익성 (1-10)", min_value=1, max_value=10, value=8)
+    profitability_reason = st.text_input("수익성 평가 근거", value="목표 수익률 달성 가능성 높음")
+with col2:
+    risk_score = st.number_input("리스크 관리 (1-10)", min_value=1, max_value=10, value=6)
+    risk_reason = st.text_input("리스크 관리 평가 근거", value="높은 변동성으로 리스크 관리 필요")
+with col3:
+    diversification_score = st.number_input("분산투자 완성도 (1-10)", min_value=1, max_value=10, value=7)
+    diversification_reason = st.text_input("분산투자 평가 근거", value="일부 상관관계 존재하나 적절한 분산")
 
 submitted = st.button("리스크 분석 시작", use_container_width=True)
 
@@ -255,8 +276,12 @@ if submitted:
                 ticker2: allocation2,
                 ticker3: allocation3
             },
-            "strategy": strategy,
-            "reason": reason
+            "reason": reason,
+            "portfolio_scores": {
+                "profitability": {"score": profitability_score, "reason": profitability_reason},
+                "risk_management": {"score": risk_score, "reason": risk_reason},
+                "diversification": {"score": diversification_score, "reason": diversification_reason}
+            }
         }
         
         result = invoke_risk_manager(portfolio_dict)

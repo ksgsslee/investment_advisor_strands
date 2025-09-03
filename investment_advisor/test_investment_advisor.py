@@ -109,13 +109,4 @@ def test_graph_structure():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    print("🎯 테스트 선택:")
-    print("1. 전체 테스트 (실제 에이전트 호출)")
-    print("2. 구조 테스트만")
-    
-    choice = input("선택 (1 또는 2): ").strip()
-    
-    if choice == "2":
-        test_graph_structure()
-    else:
-        asyncio.run(test_investment_advisor())
+    asyncio.run(test_investment_advisor())

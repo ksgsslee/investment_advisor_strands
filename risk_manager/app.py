@@ -175,7 +175,7 @@ def invoke_risk_manager(portfolio_data):
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=AGENT_ARN,
             qualifier="DEFAULT",
-            payload=json.dumps({"portfolio_data": portfolio_data})
+            payload=json.dumps({"input_data": portfolio_data})
         )
         
         placeholder = st.container()

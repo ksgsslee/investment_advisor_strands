@@ -208,8 +208,8 @@ async def risk_manager(payload):
         
         manager = RiskManager(gateway_info)
 
-    portfolio_data = payload.get("portfolio_data")
-    async for chunk in manager.analyze_risk_async(portfolio_data):
+    input_data = payload.get("input_data")
+    async for chunk in manager.analyze_risk_async(input_data):
         yield chunk
 
 if __name__ == "__main__":

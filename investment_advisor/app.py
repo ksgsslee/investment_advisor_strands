@@ -250,9 +250,11 @@ def invoke_investment_advisor(input_data):
                             st.markdown(final_report)
                             results["final_report"] = final_report
 
-                    elif event_type == "streaming_complete":
-                        final_result = event_data.get("final_result", {})
-                        results.update(final_result)
+                    elif event_type == "final_complete":
+                        # 최종 결과 저장
+                        results["financial_analysis"] = event_data.get("financial_analysis", "")
+                        results["portfolio_recommendation"] = event_data.get("portfolio_recommendation", "")
+                        results["risk_analysis"] = event_data.get("risk_analysis", "")
                         break
                             
                     elif event_type == "error":

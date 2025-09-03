@@ -214,7 +214,7 @@ def invoke_portfolio_architect(financial_analysis):
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=AGENT_ARN,
             qualifier="DEFAULT",
-            payload=json.dumps({"financial_analysis": financial_analysis})
+            payload=json.dumps({"input_data": financial_analysis})
         )
         
         placeholder = st.container()

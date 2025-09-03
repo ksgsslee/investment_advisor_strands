@@ -167,8 +167,8 @@ async def portfolio_architect(payload):
         
         architect = PortfolioArchitect(mcp_server_info)
 
-    financial_analysis = payload.get("financial_analysis")
-    async for chunk in architect.design_portfolio_async(financial_analysis):
+    input_data = payload.get("input_data")
+    async for chunk in architect.design_portfolio_async(input_data):
         yield chunk
 
 if __name__ == "__main__":

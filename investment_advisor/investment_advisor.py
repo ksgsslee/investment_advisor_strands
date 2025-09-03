@@ -97,12 +97,12 @@ class AgentClient:
         except Exception as e:
             print(f"❌ 메모리 초기화 실패: {e}")
     
-    def call_agent_with_memory(self, agent_type, payload_key, data, session_id):
+    def call_agent_with_memory(self, agent_type, data, session_id):
         """에이전트 호출하며 중간 과정을 효율적으로 Memory에 저장"""
         response = self.client.invoke_agent_runtime(
             agentRuntimeArn=self.arns[agent_type],
             qualifier="DEFAULT",
-            payload=json.dumps({payload_key: data})
+            payload=json.dumps({"input_data": data})
         )
         
         final_result = None
@@ -194,7 +194,7 @@ def financial_node(state: InvestmentState):
     """재무 분석 노드"""
     print("🤖 재무 분석가 시작...")
     result = agent_client.call_agent_with_memory(
-        "financial", "input_data", state["user_input"], state["session_id"]
+        "financial", state["user_input"], state["session_id"]
     )
     state["financial_analysis"] = result
     print("✅ 재무 분석가 완료")
@@ -204,7 +204,7 @@ def portfolio_node(state: InvestmentState):
     """포트폴리오 노드"""
     print("🤖 포트폴리오 아키텍트 시작...")
     result = agent_client.call_agent_with_memory(
-        "portfolio", "financial_analysis", state["financial_analysis"], state["session_id"]
+        "portfolio", state["financial_analysis"], state["session_id"]
     )
     state["portfolio_recommendation"] = result
     print("✅ 포트폴리오 아키텍트 완료")
@@ -214,7 +214,7 @@ def risk_node(state: InvestmentState):
     """리스크 노드"""
     print("🤖 리스크 매니저 시작...")
     result = agent_client.call_agent_with_memory(
-        "risk", "portfolio_data", state["portfolio_recommendation"], state["session_id"]
+        "risk", state["portfolio_recommendation"], state["session_id"]
     )
     state["risk_analysis"] = result
     print("✅ 리스크 매니저 완료")

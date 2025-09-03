@@ -161,7 +161,7 @@ class AgentClient:
         return final_result    
 
     def _save_event_to_memory(self, session_id, agent_type, event_data):
-        """원본 이벤트 데이터를 JSON 형태로 Memory에 저장"""
+        """원본 이벤트 데이터를 에이전트별 세션에 저장"""
         if not self.memory_id:
             return
         
@@ -172,15 +172,18 @@ class AgentClient:
             # JSON 형태로 저장
             event_json = json.dumps(event_data, ensure_ascii=False, indent=2)
             
+            # 에이전트별 세션에 저장
+            agent_session_id = f"{session_id}_{agent_type}"
+            
             self.memory_client.create_event(
                 memory_id=self.memory_id,
-                actor_id=session_id,
-                session_id=session_id,
+                actor_id=session_id,  # 같은 actor
+                session_id=agent_session_id,  # 에이전트별 세션
                 messages=[
                     (event_json, "OTHER")
                 ]
             )
-            print(f"💾 {agent_type} [{event_data.get('type')}] JSON 저장")
+            print(f"💾 {agent_type} [{event_data.get('type')}] 세션 저장")
         except Exception as e:
             print(f"❌ Memory 저장 실패 ({agent_type}): {e}")
 
@@ -296,108 +299,24 @@ class InvestmentAdvisor:
             "risk_analysis": final_state["risk_analysis"]
         }    
 
-    def get_thinking_process(self, session_id, agent_name=None, format_type="text"):
-        """Memory에서 중간 과정 조회 (JSON 데이터 지원)"""
-        if not agent_client.memory_id:
-            return "메모리가 초기화되지 않았습니다."
-        
-        try:
-            # 해당 세션의 모든 대화 조회
-            recent_turns = agent_client.memory_client.get_last_k_turns(
-                memory_id=agent_client.memory_id,
-                actor_id=session_id,
-                session_id=session_id,
-                k=100,  # 충분히 많은 턴 조회
-                branch_name="main"
-            )
-            
-            if not recent_turns:
-                return "중간 과정을 찾을 수 없습니다."
-            
-            # 에이전트별 필터링 및 포맷팅
-            filtered_events = []
-            for turn in recent_turns:
-                if len(turn) >= 2:
-                    user_msg = turn[0]['content']['text']
-                    assistant_msg = turn[1]['content']['text']
-                    
-                    # 특정 에이전트만 조회하는 경우
-                    if agent_name and f"[{agent_name}]" in user_msg:
-                        filtered_events.append(assistant_msg)
-                    # 모든 에이전트 조회하는 경우
-                    elif agent_name is None:
-                        filtered_events.append(assistant_msg)
-            
-            if not filtered_events:
-                return f"{agent_name or '전체'} 중간 과정을 찾을 수 없습니다."
-            
-            # 포맷 타입에 따른 반환
-            if format_type == "json":
-                # JSON 형태로 파싱해서 반환
-                parsed_events = []
-                for event_str in filtered_events:
-                    try:
-                        event_json = json.loads(event_str)
-                        parsed_events.append(event_json)
-                    except json.JSONDecodeError:
-                        # JSON이 아닌 경우 텍스트로 처리
-                        parsed_events.append({"type": "text", "content": event_str})
-                return parsed_events
-            else:
-                # 텍스트 형태로 반환 (기존 방식)
-                formatted_events = []
-                for event_str in filtered_events:
-                    try:
-                        event_json = json.loads(event_str)
-                        # JSON을 읽기 쉬운 텍스트로 변환
-                        event_type = event_json.get("type", "unknown")
-                        agent_type = event_json.get("agent_type", "")
-                        
-                        if event_type == "text":
-                            # 합쳐진 텍스트 표시
-                            data = event_json.get("data", "")[:500]  # 처음 500자만
-                            formatted_events.append(f"[{agent_type}] 💭 사고과정: {data}...")
-                        elif event_type == "tool_use":
-                            tool_name = event_json.get("tool_name", "Unknown")
-                            formatted_events.append(f"[{agent_type}] 🔧 도구 사용: {tool_name}")
-                        elif event_type == "tool_result":
-                            status = event_json.get("status", "Unknown")
-                            formatted_events.append(f"[{agent_type}] ✅ 도구 완료: {status}")
-                        elif event_type == "streaming_complete":
-                            formatted_events.append(f"[{agent_type}] 🏁 스트리밍 완료")
-                        else:
-                            formatted_events.append(f"[{agent_type}] [{event_type}] {str(event_json)[:200]}...")
-                    except json.JSONDecodeError:
-                        # JSON이 아닌 경우 그대로 추가
-                        formatted_events.append(event_str)
-                return "\n".join(formatted_events)
-                
-        except Exception as e:
-            return f"중간 과정 조회 실패: {str(e)}"
-    
-    def get_agent_events_by_type(self, session_id, agent_name, event_type):
-        """특정 에이전트의 특정 이벤트 타입만 조회"""
+    def get_agent_events(self, session_id, agent_name):
+        """특정 에이전트의 모든 이벤트 조회"""
         if not agent_client.memory_id:
             return []
         
         try:
-            recent_turns = agent_client.memory_client.get_last_k_turns(
+            agent_session_id = f"{session_id}_{agent_name}"
+            events = agent_client.memory_client.list_events(
                 memory_id=agent_client.memory_id,
-                actor_id=f"{session_id}_{agent_name}",
-                session_id=f"{session_id}_{agent_name}_{event_type}",
-                k=5,
-                branch_name="main"
+                actor_id=session_id,
+                session_id=agent_session_id,
+                max_results=100
             )
-            
-            events = []
-            for turn in recent_turns:
-                if len(turn) >= 2:
-                    events.append(turn[1]['content']['text'])
-            
             return events
             
         except Exception as e:
-            return [f"조회 실패: {str(e)}"]
+            print(f"이벤트 조회 실패: {str(e)}")
+            return []
 
 # ================================
 # Runtime 엔트리포인트

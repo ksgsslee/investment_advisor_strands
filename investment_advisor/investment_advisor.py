@@ -90,7 +90,7 @@ class AgentClient:
         return memory_info["memory_id"]
     
     def call_agent_with_memory(self, agent_type, data, session_id):
-        """에이전트 호출하며 중간 과정을 효율적으로 Memory에 저장"""
+        """에이전트 호출하며 중간 과정을 배열에 모아서 한 번에 Memory에 저장"""
         response = self.client.invoke_agent_runtime(
             agentRuntimeArn=self.arns[agent_type],
             qualifier="DEFAULT",
@@ -99,6 +99,7 @@ class AgentClient:
         
         final_result = None
         thinking_chunks = []  # text_chunk 임시 저장
+        events_to_save = []  # 저장할 이벤트들 배열
         
         # 스트리밍 응답 처리
         for line in response["response"].iter_lines(chunk_size=1):
@@ -108,76 +109,82 @@ class AgentClient:
                     event_type = event_data.get("type")
                     
                     if event_type == "text_chunk":
-                        # 텍스트 청크는 임시 저장만 (메모리에 저장하지 않음)
+                        # 텍스트 청크는 임시 저장만
                         thinking_chunks.append(event_data.get("data", ""))
                     
                     elif event_type == "tool_use":
-                        # tool_use 전에 쌓인 텍스트 청크들 저장
+                        # tool_use 전에 쌓인 텍스트 청크들 배열에 추가
                         if thinking_chunks:
                             combined_text_event = {
                                 "type": "text",
                                 "data": "".join(thinking_chunks)
                             }
-                            self._save_event_to_memory(session_id, agent_type, combined_text_event)
-                            thinking_chunks = []  # 저장 후 초기화
+                            events_to_save.append(combined_text_event)
+                            thinking_chunks = []  # 초기화
                         
-                        # 도구 사용 이벤트 저장
-                        self._save_event_to_memory(session_id, agent_type, event_data)
+                        # 도구 사용 이벤트 배열에 추가
+                        events_to_save.append(event_data)
                     
                     elif event_type == "tool_result":
-                        # 도구 결과 이벤트는 즉시 저장
-                        self._save_event_to_memory(session_id, agent_type, event_data)
+                        # 도구 결과 이벤트 배열에 추가
+                        events_to_save.append(event_data)
                     
                     elif event_type == "streaming_complete":
-                        # 스트리밍 완료 시점에 남은 텍스트 청크들 저장
+                        # 스트리밍 완료 시점에 남은 텍스트 청크들 배열에 추가
                         if thinking_chunks:
                             combined_text_event = {
                                 "type": "text",
                                 "data": "".join(thinking_chunks)
                             }
-                            self._save_event_to_memory(session_id, agent_type, combined_text_event)
+                            events_to_save.append(combined_text_event)
                         
-                        # streaming_complete 이벤트도 저장
-                        self._save_event_to_memory(session_id, agent_type, event_data)
+                        # streaming_complete 이벤트도 배열에 추가
+                        events_to_save.append(event_data)
                         
-                        # 최종 결과 캐치 (모든 에이전트 통일)
+                        # 한 번에 모든 이벤트 저장
+                        self._save_events_batch(session_id, agent_type, events_to_save)
+                        
+                        # 최종 결과 캐치
                         final_result = event_data.get("result")
                     
                     else:
-                        # 기타 이벤트들은 즉시 저장
-                        self._save_event_to_memory(session_id, agent_type, event_data)
+                        # 기타 이벤트들도 배열에 추가
+                        events_to_save.append(event_data)
                         
                 except json.JSONDecodeError:
                     continue
         
         return final_result    
 
-    def _save_event_to_memory(self, session_id, agent_type, event_data):
-        """원본 이벤트 데이터를 에이전트별 세션에 저장"""
-        if not self.memory_id:
+    def _save_events_batch(self, session_id, agent_type, events_list):
+        """이벤트들을 한 번에 배치로 Memory에 저장"""
+        if not self.memory_id or not events_list:
             return
         
         try:
-            # 에이전트 타입 추가
-            event_data["agent_type"] = agent_type
-            
-            # JSON 형태로 저장
-            event_json = json.dumps(event_data, ensure_ascii=False, indent=2)
+            # 각 이벤트를 개별 메시지로 변환
+            messages = []
+            for event_data in events_list:
+                # 에이전트 타입 추가
+                event_data["agent_type"] = agent_type
+                
+                # JSON 형태로 변환
+                event_json = json.dumps(event_data, ensure_ascii=False, indent=2)
+                messages.append((event_json, "OTHER"))
             
             # 에이전트별 세션에 저장
             agent_session_id = f"{session_id}_{agent_type}"
             
             self.memory_client.create_event(
                 memory_id=self.memory_id,
-                actor_id=session_id,  # 같은 actor
-                session_id=agent_session_id,  # 에이전트별 세션
-                messages=[
-                    (event_json, "OTHER")
-                ]
+                actor_id=session_id,
+                session_id=agent_session_id,
+                messages=messages
             )
-            print(f"💾 {agent_type} [{event_data.get('type')}] 세션 저장")
+            print(f"💾 {agent_type} 배치 저장 완료 ({len(events_list)}개 이벤트)")
+            
         except Exception as e:
-            print(f"❌ Memory 저장 실패 ({agent_type}): {e}")
+            print(f"❌ Memory 배치 저장 실패 ({agent_type}): {e}")
 
 agent_client = AgentClient()
 

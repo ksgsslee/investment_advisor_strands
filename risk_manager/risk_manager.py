@@ -182,7 +182,7 @@ class RiskManager:
                                     }
                     
                     if "result" in event:
-                        yield {"type": "streaming_complete", "risk_result": str(event["result"])}
+                        yield {"type": "streaming_complete", "result": str(event["result"])}
 
         except Exception as e:
             yield {"type": "error", "error": str(e), "status": "error"}

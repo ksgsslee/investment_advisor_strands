@@ -142,7 +142,7 @@ class PortfolioArchitect:
                                 }
                 
                 if "result" in event:
-                    yield {"type": "streaming_complete", "portfolio_result": str(event["result"])}
+                    yield {"type": "streaming_complete", "result": str(event["result"])}
 
 # 전역 인스턴스
 architect = None

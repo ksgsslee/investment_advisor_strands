@@ -263,14 +263,17 @@ def invoke_portfolio_architect(financial_analysis):
                     if tool_use_id in tool_id_to_name:
                         del tool_id_to_name[tool_use_id]
                     current_text_placeholder = placeholder.empty()
+                
+                elif event_type == "streaming_complete":
+                    result_str = event_data.get("result", "")
+                    
+                    # 최종 결과 표시
+                    placeholder.divider()
+                    placeholder.subheader("📌 포트폴리오 설계 결과")
+                    display_portfolio_result(placeholder, result_str)
                     
             except json.JSONDecodeError:
                 continue
-        
-        # 최종 결과 표시
-        placeholder.divider()
-        placeholder.subheader("📌 포트폴리오 설계 결과")
-        display_portfolio_result(placeholder, current_thinking)
         
         return {"status": "success"}
         

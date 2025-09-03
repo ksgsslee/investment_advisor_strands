@@ -221,13 +221,17 @@ def invoke_risk_manager(portfolio_data):
                     if tool_use_id in tool_id_to_name:
                         del tool_id_to_name[tool_use_id]
                     current_text_placeholder = placeholder.empty()
+                
+                elif event_type == "streaming_complete":
+                    result_str = event_data.get("result", "")
+                    
+                    # 최종 결과 표시
+                    placeholder.divider()
+                    placeholder.subheader("📌 리스크 분석 및 시나리오 플래닝")
+                    display_risk_analysis_result(placeholder, result_str)
                     
             except json.JSONDecodeError:
                 continue
-        
-        placeholder.divider()
-        placeholder.subheader("📌 리스크 분석 및 시나리오 플래닝")
-        display_risk_analysis_result(placeholder, current_thinking)
         
         return {"status": "success"}
         

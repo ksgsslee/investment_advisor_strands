@@ -148,13 +148,8 @@ class AgentClient:
                         # streaming_complete 이벤트도 저장
                         self._save_event_to_memory(session_id, agent_type, event_data)
                         
-                        # 최종 결과 캐치
-                        if agent_type == "financial":
-                            final_result = event_data.get("analysis_data")
-                        elif agent_type == "portfolio":
-                            final_result = event_data.get("portfolio_result")
-                        elif agent_type == "risk":
-                            final_result = event_data.get("risk_result")
+                        # 최종 결과 캐치 (모든 에이전트 통일)
+                        final_result = event_data.get("result")
                     
                     else:
                         # 기타 이벤트들은 즉시 저장

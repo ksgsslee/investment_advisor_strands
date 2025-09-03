@@ -7,7 +7,34 @@ LangGraph 기반 Investment Advisor 테스트
 
 import asyncio
 import json
+import os
+from pathlib import Path
 from investment_advisor import InvestmentAdvisor
+from bedrock_agentcore.memory import MemoryClient
+
+def get_thinking_process(session_id, agent_name):
+    """특정 에이전트의 중간 과정 조회 (테스트용)"""
+    try:
+        # Memory ID 로드
+        memory_info_file = Path(__file__).parent / "agentcore_memory" / "deployment_info.json"
+        memory_info = json.load(open(memory_info_file))
+        memory_id = memory_info["memory_id"]
+        
+        # Memory Client로 이벤트 조회
+ㅣ런게        memory_client = MemoryClient(region_name="us-west-2")
+        agent_session_id = f"{session_id}_{agent_name}"
+        events = memory_client.list_events(
+            memory_id=memory_id,
+            actor_id=session_id,
+            session_id=agent_session_id,
+            max_results=100
+        )
+        
+        return events
+        
+    except Exception as e:
+        print(f"중간 과정 조회 실패: {str(e)}")
+        return []
 
 async def test_investment_advisor():
     """Investment Advisor 테스트"""
@@ -50,10 +77,12 @@ async def test_investment_advisor():
                 # Memory에서 중간 과정 조회
                 if session_id:
                     print(f"📝 {agent_name} 중간 과정:")
-                    thinking = advisor.get_thinking_process(session_id, agent_name)
-                    # 처음 200자만 표시
-                    preview = thinking[:200] + "..." if len(thinking) > 200 else thinking
-                    print(f"   {preview}")
+                    events = get_thinking_process(session_id, agent_name)
+                    print(f"   이벤트 수: {len(events)}개")
+                    if events:
+                        # 첫 번째 이벤트 미리보기
+                        first_event = str(events[0])[:200] + "..." if len(str(events[0])) > 200 else str(events[0])
+                        print(f"   첫 이벤트: {first_event}")
             
             elif event_type == "final_complete":
                 print("\n" + "=" * 60)

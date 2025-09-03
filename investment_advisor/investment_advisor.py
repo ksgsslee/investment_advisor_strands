@@ -1,570 +1,338 @@
 """
 investment_advisor.py
-Multi-Agent Investment Advisor - Sequential Agent Pattern
 
-3개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
-Sequential Multi-Agent 패턴을 활용하여 체계적인 투자 상담을 수행합니다.
-
-주요 기능:
-- Multi-Agent 패턴: 3개 전문 에이전트 순차 호출
-- Sequential Processing: 각 단계별 순차 처리
-- 실시간 스트리밍: 분석 과정 실시간 시각화
-- 구조화된 결과: JSON 형태의 체계적인 분석 결과
+LangGraph 기반 Investment Advisor
+3개 에이전트를 순차 실행하며 AgentCore Memory에 중간 과정 저장
 """
 
 import json
 import os
-import sys
+import boto3
+from typing import Dict, Any, TypedDict
 from pathlib import Path
-from typing import Dict, Any
 from datetime import datetime
-from strands import Agent
-from strands.models.bedrock import BedrockModel
+
+# LangGraph
+from langgraph.graph import StateGraph, END
+
+# AgentCore
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from bedrock_agentcore.memory import MemoryClient
-import boto3
-
-# ================================
-# 전역 설정
-# ================================
 
 app = BedrockAgentCoreApp()
 
+# ================================
+# 설정
+# ================================
+
 class Config:
-    """Investment Advisor 설정 상수"""
-    # 보고서 작성자 모델 설정
-    REPORT_MODEL_ID = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-    REPORT_TEMPERATURE = 0.1
-    REPORT_MAX_TOKENS = 4000
-    
     REGION = "us-west-2"
-    
-    # 메모리 설정
-    MEMORY_NAME = "InvestmentAdvisor_Reports"
-    SESSION_ID = "investment_session"
+    MEMORY_NAME = "InvestmentAdvisor_LangGraph"
 
 # ================================
-# 유틸리티 함수들
+# State 정의
 # ================================
 
-def extract_json_from_streaming(response_stream):
-    """
-    스트리밍 응답에서 JSON 결과 추출
-    
-    Args:
-        response_stream: AgentCore 스트리밍 응답
-        
-    Returns:
-        dict: 추출된 결과 데이터
-    """
-    try:
-        for line in response_stream.iter_lines(chunk_size=1):
-            if line and line.decode("utf-8").startswith("data: "):
-                try:
-                    event_data = json.loads(line.decode("utf-8")[6:])
-                    if event_data.get("type") == "streaming_complete":
-                        return event_data
-                except json.JSONDecodeError:
-                    continue
-        return None
-    except Exception as e:
-        print(f"스트리밍 처리 오류: {e}")
-        return None
-
-def extract_json_from_text(text_content):
-    """
-    텍스트에서 JSON 데이터를 추출하는 함수
-    
-    Args:
-        text_content (str): JSON이 포함된 텍스트
-        
-    Returns:
-        dict: 파싱된 JSON 데이터 또는 None
-    """
-    if isinstance(text_content, dict):
-        return text_content
-    
-    if not isinstance(text_content, str):
-        return None
-    
-    # JSON 블록 찾기
-    start_idx = text_content.find('{')
-    end_idx = text_content.rfind('}') + 1
-    
-    if start_idx != -1 and end_idx != -1:
-        try:
-            json_str = text_content[start_idx:end_idx]
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            return None
-    
-    return None
+class InvestmentState(TypedDict):
+    user_input: Dict[str, Any]
+    session_id: str
+    financial_analysis: str
+    portfolio_recommendation: str
+    risk_analysis: str
 
 # ================================
-# 외부 에이전트 호출 클라이언트
+# 에이전트 호출 클라이언트
 # ================================
 
 class AgentClient:
-    """외부 에이전트 호출을 위한 클라이언트 클래스"""
-    
     def __init__(self):
-        self.agentcore_client = None
-        self.agent_arns = {}
-    
-    def _initialize_clients(self):
-        """에이전트 클라이언트 초기화 (환경변수 우선, 파일 백업)"""
-        if self.agentcore_client is None:
-            self.agentcore_client = boto3.client('bedrock-agentcore', region_name=Config.REGION)
-            
-            # 환경변수에서 Agent ARN 로드 (Runtime 환경)
-            financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
-            portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
-            risk_arn = os.getenv("RISK_MANAGER_ARN")
-            
-            if financial_arn and portfolio_arn and risk_arn:
-                # Runtime 환경: 환경변수 사용
-                self.agent_arns = {
-                    "financial_analyst": financial_arn,
-                    "portfolio_architect": portfolio_arn,
-                    "risk_manager": risk_arn
-                }
-                print("✅ 환경변수에서 Agent ARN 로드 완료")
-            else:
-                # 로컬 환경: 파일에서 로드
-                try:
-                    base_path = Path(__file__).parent.parent
-                    
-                    with open(base_path / "financial_analyst" / "deployment_info.json") as f:
-                        self.agent_arns["financial_analyst"] = json.load(f)["agent_arn"]
-                    
-                    with open(base_path / "portfolio_architect" / "deployment_info.json") as f:
-                        self.agent_arns["portfolio_architect"] = json.load(f)["agent_arn"]
-                    
-                    with open(base_path / "risk_manager" / "deployment_info.json") as f:
-                        self.agent_arns["risk_manager"] = json.load(f)["agent_arn"]
-                    
-                    print("✅ 파일에서 Agent ARN 로드 완료")
-                except Exception as e:
-                    raise RuntimeError(f"Agent ARN 로드 실패: {e}")
-    
-    def _call_agent(self, agent_name, payload_key, data):
-        """공통 에이전트 호출 로직"""
-        try:
-            self._initialize_clients()
-            
-            # 데이터를 문자열로 변환
-            if isinstance(data, dict):
-                input_data = json.dumps(data, ensure_ascii=False)
-            else:
-                input_data = str(data)
-            
-            response = self.agentcore_client.invoke_agent_runtime(
-                agentRuntimeArn=self.agent_arns[agent_name],
-                qualifier="DEFAULT",
-                payload=json.dumps({payload_key: input_data if payload_key != "input_data" else data})
-            )
-            
-            result = extract_json_from_streaming(response["response"])
-            
-            if result is None:
-                return {"error": f"{agent_name} 결과를 가져올 수 없습니다"}
-            
-            return result
-            
-        except Exception as e:
-            print(f"{agent_name} 호출 실패: {e}")
-            return {"error": str(e)}
-    
-    def call_financial_analyst(self, user_input):
-        """재무 분석사 에이전트 호출"""
-        return self._call_agent("financial_analyst", "input_data", user_input)
-    
-    def call_portfolio_architect(self, financial_analysis):
-        """포트폴리오 설계사 에이전트 호출"""
-        return self._call_agent("portfolio_architect", "financial_analysis", financial_analysis)
-    
-    def call_risk_manager(self, portfolio_data):
-        """리스크 관리자 에이전트 호출"""
-        return self._call_agent("risk_manager", "portfolio_data", portfolio_data)
-
-# 전역 클라이언트 인스턴스
-agent_client = AgentClient()
-
-# ================================
-# 메인 투자 자문 클래스
-# ================================
-
-class InvestmentAdvisor:
-    """
-    Multi-Agent 투자 자문 시스템 - Sequential Pattern
-    
-    3개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
-    Sequential Multi-Agent 패턴을 활용하여 체계적인 투자 상담을 수행합니다.
-    """
-    
-    def __init__(self):
-        """
-        투자 자문 시스템 초기화
-        
-        투자 보고서 작성 AI 에이전트를 생성하고 종합 분석 보고서 작성을 위한 시스템 프롬프트를 설정합니다.
-        """
-        self._create_report_agent()
+        self.client = boto3.client('bedrock-agentcore', region_name=Config.REGION)
+        self.memory_client = MemoryClient(region_name=Config.REGION)
+        self.memory_id = None
+        self.arns = self._load_agent_arns()
         self._init_memory()
     
-    def _init_memory(self):
-        """메모리 클라이언트 초기화"""
-        try:
-            self.memory_client = MemoryClient(region_name=Config.REGION)
-            self.memory_id = None
-            self._ensure_memory_exists()
-        except Exception as e:
-            print(f"메모리 초기화 실패: {e}")
-            self.memory_client = None
+    def _load_agent_arns(self):
+        """Agent ARN 로드"""
+        # 환경변수에서 시도
+        financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
+        portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
+        risk_arn = os.getenv("RISK_MANAGER_ARN")
+        
+        if financial_arn and portfolio_arn and risk_arn:
+            return {
+                "financial": financial_arn,
+                "portfolio": portfolio_arn,
+                "risk": risk_arn
+            }
+        
+        # 파일에서 로드
+        base_path = Path(__file__).parent.parent
+        return {
+            "financial": json.load(open(base_path / "financial_analyst" / "deployment_info.json"))["agent_arn"],
+            "portfolio": json.load(open(base_path / "portfolio_architect" / "deployment_info.json"))["agent_arn"],
+            "risk": json.load(open(base_path / "risk_manager" / "deployment_info.json"))["agent_arn"]
+        }
     
-    def _ensure_memory_exists(self):
-        """메모리 리소스 존재 확인 및 생성"""
+    def _init_memory(self):
+        """AgentCore Memory 초기화"""
         try:
-            # 기존 메모리 검색
             memories = self.memory_client.list_memories()
             existing_memory = next((m for m in memories if m['id'].startswith(Config.MEMORY_NAME)), None)
             
             if existing_memory:
                 self.memory_id = existing_memory['id']
-                print(f"기존 메모리 사용: {self.memory_id}")
+                print(f"✅ 기존 메모리 사용: {self.memory_id}")
             else:
-                # 새 메모리 생성
                 memory = self.memory_client.create_memory_and_wait(
                     name=Config.MEMORY_NAME,
-                    description="Investment Advisor Report History",
+                    description="Investment Advisor Thinking Process",
                     strategies=[],
-                    event_expiry_days=30,
+                    event_expiry_days=7,
                     max_wait=300,
                     poll_interval=10
                 )
                 self.memory_id = memory['id']
-                print(f"새 메모리 생성: {self.memory_id}")
+                print(f"✅ 새 메모리 생성: {self.memory_id}")
         except Exception as e:
-            print(f"메모리 설정 실패: {e}")
-            self.memory_id = None
-
-    def _create_report_agent(self):
-        """투자 보고서 작성 AI 에이전트 생성"""
-        self.report_agent = Agent(
-            name="investment_report_writer",
-            model=BedrockModel(
-                model_id=Config.REPORT_MODEL_ID,
-                temperature=Config.REPORT_TEMPERATURE,
-                max_tokens=Config.REPORT_MAX_TOKENS
-            ),
-            system_prompt=self._get_report_prompt()
+            print(f"❌ 메모리 초기화 실패: {e}")
+    
+    def call_agent_with_memory(self, agent_type, payload_key, data, session_id):
+        """에이전트 호출하며 중간 과정을 Memory에 저장"""
+        response = self.client.invoke_agent_runtime(
+            agentRuntimeArn=self.arns[agent_type],
+            qualifier="DEFAULT",
+            payload=json.dumps({payload_key: data})
         )
         
-    def _get_report_prompt(self) -> str:
-        """
-        투자 보고서 작성 AI 에이전트용 시스템 프롬프트 생성
+        final_result = None
+        thinking_chunks = []  # text_chunk 임시 저장
+        memory_events = []    # Memory에 저장할 이벤트들
         
-        Returns:
-            str: 투자 보고서 작성자 역할과 작업 지침이 포함된 프롬프트
-        """
-        return """당신은 투자 보고서 작성 전문가입니다. 고객의 투자 정보와 3개 전문 에이전트의 분석 결과를 종합하여 실행 가능한 투자 가이드 보고서를 작성해야 합니다.
-
-입력 데이터는 다음과 같은 JSON 형식으로 제공됩니다:
-{
-"user_input": {
-    "total_investable_amount": <총 투자 가능 금액>,
-    "age": <나이>,
-    "stock_investment_experience_years": <주식 투자 경험 연수>,
-    "target_amount": <1년 후 목표 금액>
-},
-"financial_analysis": <재무 분석사 결과>,
-"portfolio_design": <포트폴리오 설계사 결과>,
-"risk_analysis": <리스크 관리자 결과>
-}
-
-다음 구조로 종합 투자 보고서를 작성하세요:
-
-## 📋 투자 상담 종합 보고서
-
-### 1. 고객 프로필 요약
-- 투자 가능 금액, 나이, 경험, 목표 등 핵심 정보 요약
-
-### 2. 재무 분석 결과
-- 위험 성향 평가 및 근거
-- 필요 연간 수익률 및 달성 가능성
-
-### 3. 추천 포트폴리오
-- 자산 배분 비율 및 근거
-- 추천 투자 상품 및 전략
-
-### 4. 리스크 관리 전략
-- 주요 위험 요소 및 대응 방안
-- 시나리오별 손실 가능성
-
-### 5. 실행 가이드
-- 단계별 투자 실행 계획
-- 주의사항 및 모니터링 포인트
-
-### 6. 결론 및 권고사항
-- 핵심 메시지 및 다음 단계
-
-보고서는 고객이 바로 실행할 수 있도록 구체적이고 실용적으로 작성하세요.
-전문 용어는 쉽게 설명하고, 숫자와 데이터는 명확하게 제시하세요.
-
-출력 형식:
-- 마크다운 형식으로 작성
-- 이모지를 적절히 활용하여 가독성 향상
-- 추가적인 JSON이나 코드 블록은 포함하지 마세요"""
-
-    async def run_consultation_async(self, user_input):
-        """
-        실시간 스트리밍 투자 상담 수행 (Sequential Multi-Agent 패턴)
+        # 스트리밍 응답 처리
+        for line in response["response"].iter_lines(chunk_size=1):
+            if line and line.decode("utf-8").startswith("data: "):
+                try:
+                    event_data = json.loads(line.decode("utf-8")[6:])
+                    event_type = event_data.get("type")
+                    print(event_data)
+                    if event_type == "text_chunk":
+                        # 텍스트 청크는 임시 저장
+                        thinking_chunks.append(event_data.get("data", ""))
+                    
+                    elif event_type == "tool_use":
+                        # 도구 사용 시 지금까지의 텍스트 청크를 Memory에 저장
+                        if thinking_chunks:
+                            memory_events.append({
+                                "type": "thinking",
+                                "content": "".join(thinking_chunks)
+                            })
+                            thinking_chunks = []
+                        
+                        # 도구 사용 정보 저장
+                        tool_info = f"🔧 도구 사용: {event_data.get('tool_name', 'Unknown')}"
+                        memory_events.append({
+                            "type": "tool_use",
+                            "content": tool_info
+                        })
+                    
+                    elif event_type == "tool_result":
+                        # 도구 결과 저장
+                        tool_result = f"✅ 도구 실행 완료: {event_data.get('status', 'Unknown')}"
+                        memory_events.append({
+                            "type": "tool_result", 
+                            "content": tool_result
+                        })
+                    
+                    elif event_type == "streaming_complete":
+                        # 완료 시 남은 텍스트 청크 저장
+                        if thinking_chunks:
+                            memory_events.append({
+                                "type": "thinking",
+                                "content": "".join(thinking_chunks)
+                            })
+                        
+                        # 최종 결과 캐치
+                        if agent_type == "financial":
+                            final_result = event_data.get("result")
+                        elif agent_type == "portfolio":
+                            final_result = event_data.get("portfolio_result")
+                        elif agent_type == "risk":
+                            final_result = event_data.get("risk_result")
+                        
+                except json.JSONDecodeError:
+                    continue
         
-        3개의 전문 에이전트가 순차적으로 협업하여 종합적인 투자 분석을 제공합니다.
-        분석 과정과 결과를 스트리밍 이벤트로 실시간 전송합니다.
-        
-        Args:
-            user_input (dict): 고객 투자 정보
-                - total_investable_amount: 총 투자 가능 금액
-                - age: 나이
-                - stock_investment_experience_years: 주식 투자 경험 년수
-                - target_amount: 1년 후 목표 금액
-            
-        Yields:
-            dict: 스트리밍 이벤트
-                - type: 이벤트 타입 (data, step_complete, streaming_complete, error)
-                - message: 진행 상황 메시지
-                - data: 각 단계별 분석 결과
-                - final_result: 최종 종합 결과 (실행 가능한 투자 가이드 포함)
-        """
-        try:
-            # 1단계: 재무 분석 수행
-            yield {
-                "type": "data", 
-                "message": "🔍 재무 분석사가 위험 성향과 목표 수익률을 계산 중입니다."
-            }
-            
-            financial_analyst_response = agent_client.call_financial_analyst(user_input)
-            if "error" in financial_analyst_response:
-                yield {"type": "error", "error": f"재무 분석 실패: {financial_analyst_response['error']}"}
-                return
-                
-            reflection_result = financial_analyst_response['reflection_result'].lower()
-            financial_result = financial_analyst_response['analysis_data']
-            
-            # Reflection 검증 확인
-            if reflection_result != "yes":
-                yield {"type": "error", "error": f"재무 분석 검증 실패: {financial_result}"}
-                return
-
-            yield {
-                "type": "step_complete",
-                "step_name": "financial_analyst",
-                "data": financial_result
-            }
-            
-            # 2단계: 포트폴리오 설계 수행
-            yield {
-                "type": "data", 
-                "message": "📊 포트폴리오 설계사가 최적 자산 배분을 계산 중입니다."
-            }
-                            
-            portfolio_architect_response = agent_client.call_portfolio_architect(financial_result)
-            if "error" in portfolio_architect_response:
-                yield {"type": "error", "error": f"포트폴리오 설계 실패: {portfolio_architect_response['error']}"}
-                return
-                
-            portfolio_result = extract_json_from_text(portfolio_architect_response['portfolio_result'])
-            
-            yield {
-                "type": "step_complete",
-                "step_name": "portfolio_architect",
-                "data": portfolio_result
-            }
-
-            # 3단계: 리스크 분석 수행
-            yield {
-                "type": "data", 
-                "message": "⚠️ 리스크 관리자가 시나리오별 위험도를 분석 중입니다."
-            }
-            
-            risk_manager_response = agent_client.call_risk_manager(portfolio_result)
-            if "error" in risk_manager_response:
-                yield {"type": "error", "error": f"리스크 분석 실패: {risk_manager_response['error']}"}
-                return
-                
-            risk_result = extract_json_from_text(risk_manager_response['risk_result'])
-            
-            yield {
-                "type": "step_complete",
-                "step_name": "risk_manager",
-                "data": risk_result
-            }
-
-            # 4단계: 종합 보고서 작성
-            yield {
-                "type": "data", 
-                "message": "📝 투자 보고서 작성자가 종합 분석 보고서를 작성 중입니다."
-            }
-            
-            # 모든 분석 결과를 종합하여 보고서 작성
-            comprehensive_data = {
-                "user_input": user_input,
-                "financial_analysis": financial_result,
-                "portfolio_design": portfolio_result,
-                "risk_analysis": risk_result
-            }
-            
+        # Memory에 모든 이벤트 저장
+        if self.memory_id and memory_events:
             try:
-                comprehensive_data_str = json.dumps(comprehensive_data, ensure_ascii=False)
-                report_response = self.report_agent(comprehensive_data_str)
-                final_report = report_response.message['content'][0]['text']
+                # 모든 이벤트를 하나의 문자열로 결합
+                full_process = "\n".join([
+                    f"[{event['type']}] {event['content']}" 
+                    for event in memory_events
+                ])
                 
-                yield {
-                    "type": "step_complete",
-                    "step_name": "종합 보고서 작성",
-                    "data": {"final_report": final_report}
-                }
-                
+                self.memory_client.create_event(
+                    memory_id=self.memory_id,
+                    actor_id=session_id,
+                    session_id=f"{session_id}_{agent_type}",
+                    messages=[(f"{agent_type}_process", "user"), (full_process, "assistant")]
+                )
+                print(f"✅ {agent_type} 전체 과정 Memory 저장 완료 ({len(memory_events)}개 이벤트)")
             except Exception as e:
-                yield {"type": "error", "error": f"보고서 작성 실패: {str(e)}"}
-                return
-            
-            # 메모리에 리포트 저장
-            self._save_report_to_memory(user_input, final_report)
-            
-            # 분석 완료 신호 (최종 결과 포함)
-            yield {
-                "type": "streaming_complete",
-                "final_result": {
-                    "financial_analysis": financial_result,
-                    "portfolio_design": portfolio_result,
-                    "risk_analysis": risk_result,
-                    "final_report": final_report
-                }
-            }
+                print(f"❌ Memory 저장 실패: {e}")
+        
+        return final_result
 
-        except Exception as e:
-            yield {"type": "error", "error": str(e), "status": "error"}
+agent_client = AgentClient()
+
+# ================================
+# LangGraph 노드들
+# ================================
+
+def financial_node(state: InvestmentState):
+    """재무 분석 노드"""
+    print("🤖 재무 분석가 시작...")
+    result = agent_client.call_agent_with_memory(
+        "financial", "input_data", state["user_input"], state["session_id"]
+    )
+    state["financial_analysis"] = result
+    print("✅ 재무 분석가 완료")
+    return state
+
+def portfolio_node(state: InvestmentState):
+    """포트폴리오 노드"""
+    print("🤖 포트폴리오 아키텍트 시작...")
+    result = agent_client.call_agent_with_memory(
+        "portfolio", "financial_analysis", state["financial_analysis"], state["session_id"]
+    )
+    state["portfolio_recommendation"] = result
+    print("✅ 포트폴리오 아키텍트 완료")
+    return state
+
+def risk_node(state: InvestmentState):
+    """리스크 노드"""
+    print("🤖 리스크 매니저 시작...")
+    result = agent_client.call_agent_with_memory(
+        "risk", "portfolio_data", state["portfolio_recommendation"], state["session_id"]
+    )
+    state["risk_analysis"] = result
+    print("✅ 리스크 매니저 완료")
+    return state
+
+# ================================
+# LangGraph 구성
+# ================================
+
+def create_graph():
+    workflow = StateGraph(InvestmentState)
     
-    def _save_report_to_memory(self, user_input, final_report):
-        """리포트를 메모리에 저장"""
-        if not self.memory_client or not self.memory_id:
-            return
+    workflow.add_node("financial", financial_node)
+    workflow.add_node("portfolio", portfolio_node)
+    workflow.add_node("risk", risk_node)
+    
+    workflow.set_entry_point("financial")
+    workflow.add_edge("financial", "portfolio")
+    workflow.add_edge("portfolio", "risk")
+    workflow.add_edge("risk", END)
+    
+    return workflow.compile()
+
+# ================================
+# 메인 클래스
+# ================================
+
+class InvestmentAdvisor:
+    def __init__(self):
+        self.graph = create_graph()
+    
+    async def run_consultation(self, user_input):
+        """투자 상담 실행"""
+        session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        initial_state = {
+            "user_input": user_input,
+            "session_id": session_id,
+            "financial_analysis": "",
+            "portfolio_recommendation": "",
+            "risk_analysis": ""
+        }
+        
+        config = {"configurable": {"thread_id": session_id}}
+        
+        # LangGraph astream_events로 실시간 진행 상황 전달
+        async for event in self.graph.astream_events(initial_state, config=config, version="v2"):
+            event_type = event.get("event")
+            
+            # 노드 시작
+            if event_type == "on_chain_start":
+                node_name = event.get("name", "")
+                if node_name in ["financial", "portfolio", "risk"]:
+                    yield {
+                        "type": "node_start",
+                        "agent_name": node_name,
+                        "session_id": session_id
+                    }
+            
+            # 노드 완료
+            elif event_type == "on_chain_end":
+                node_name = event.get("name", "")
+                if node_name in ["financial", "portfolio", "risk"]:
+                    yield {
+                        "type": "node_complete",
+                        "agent_name": node_name,
+                        "session_id": session_id
+                    }
+        
+        # 최종 상태 가져오기
+        final_state = await self.graph.ainvoke(initial_state, config=config)
+        
+        # 최종 완료
+        yield {
+            "type": "final_complete",
+            "session_id": session_id,
+            "financial_analysis": final_state["financial_analysis"],
+            "portfolio_recommendation": final_state["portfolio_recommendation"],
+            "risk_analysis": final_state["risk_analysis"]
+        }
+    
+    def get_thinking_process(self, session_id, agent_name):
+        """Memory에서 중간 과정 조회"""
+        if not agent_client.memory_id:
+            return "메모리가 초기화되지 않았습니다."
         
         try:
-            # 고정된 가상 사용자 ID
-            user_id = "demo_user"
-            
-            # 리포트 요약 생성
-            report_summary = f"투자금액: {user_input.get('total_investable_amount', 0)//100000000}억원, 나이: {user_input.get('age')}세"
-            
-            self.memory_client.create_event(
-                memory_id=self.memory_id,
-                actor_id=user_id,
-                session_id=Config.SESSION_ID,
-                messages=[(report_summary, "user"), (final_report, "assistant")]
-            )
-            print(f"리포트 저장 완료: {user_id}")
-        except Exception as e:
-            print(f"리포트 저장 실패: {e}")
-    
-    def get_report_history(self, limit=5):
-        """리포트 히스토리 조회"""
-        if not self.memory_client or not self.memory_id:
-            # 메모리가 없을 때 더미 데이터 반환 (테스트용)
-            return [
-                {
-                    'timestamp': datetime.now().isoformat(),
-                    'user_info': '투자금액: 1억원, 나이: 35세',
-                    'report': '## 📋 투자 상담 종합 보고서\n\n### 1. 고객 프로필 요약\n- 투자 가능 금액: 1억원\n- 나이: 35세\n- 투자 경험: 중급\n\n### 2. 추천 포트폴리오\n- 주식 60%\n- 채권 30%\n- 현금 10%'
-                }
-            ]
-        
-        try:
-            # 고정된 사용자 ID로 히스토리 조회
-            user_id = "demo_user"
-            
-            recent_turns = self.memory_client.get_last_k_turns(
-                memory_id=self.memory_id,
-                actor_id=user_id,
-                session_id=Config.SESSION_ID,
-                k=limit,
+            recent_turns = agent_client.memory_client.get_last_k_turns(
+                memory_id=agent_client.memory_id,
+                actor_id=session_id,
+                session_id=f"{session_id}_{agent_name}",
+                k=5,
                 branch_name="main"
             )
             
-            history = []
-            for turn in recent_turns:
-                if len(turn) >= 2:
-                    user_msg = turn[0]['content']['text']
-                    assistant_msg = turn[1]['content']['text']
-                    timestamp = turn[0].get('timestamp', datetime.now().isoformat())
-                    
-                    history.append({
-                        'timestamp': timestamp,
-                        'user_info': user_msg,
-                        'report': assistant_msg
-                    })
-            
-            return history
+            if recent_turns and len(recent_turns[0]) >= 2:
+                return recent_turns[0][1]['content']['text']
+            else:
+                return f"{agent_name} 중간 과정을 찾을 수 없습니다."
+                
         except Exception as e:
-            print(f"히스토리 조회 실패: {e}")
-            # 실패 시에도 더미 데이터 반환
-            return [
-                {
-                    'timestamp': datetime.now().isoformat(),
-                    'user_info': '투자금액: 0.5억원, 나이: 30세',
-                    'report': '## 📋 투자 상담 종합 보고서\n\n### 1. 고객 프로필 요약\n- 투자 가능 금액: 5천만원\n- 나이: 30세\n- 투자 경험: 초급\n\n### 2. 추천 포트폴리오\n- 주식 40%\n- 채권 50%\n- 현금 10%'
-                }
-            ]
+            return f"중간 과정 조회 실패: {str(e)}"
 
 # ================================
-# AgentCore Runtime 엔트리포인트
+# Runtime 엔트리포인트
 # ================================
 
-# 전역 인스턴스 (지연 초기화)
 advisor = None
 
 @app.entrypoint
 async def investment_advisor_entrypoint(payload):
-    """
-    AgentCore Runtime 엔트리포인트
-    
-    AWS AgentCore Runtime 환경에서 호출되는 메인 함수입니다.
-    3개의 전문 에이전트를 순차적으로 호출하여 종합적인 투자 분석을 제공합니다.
-    
-    Args:
-        payload (dict): 요청 페이로드
-            - input_data: 고객 투자 정보
-    
-    Yields:
-        dict: 스트리밍 응답 이벤트들
-    
-    Environment Variables:
-        - FINANCIAL_ANALYST_ARN: Financial Analyst Agent ARN
-        - PORTFOLIO_ARCHITECT_ARN: Portfolio Architect Agent ARN
-        - RISK_MANAGER_ARN: Risk Manager Agent ARN
-        - AWS_REGION: AWS 리전 (기본값: us-west-2)
-    
-    Note:
-        - 지연 초기화로 첫 호출 시에만 InvestmentAdvisor 인스턴스 생성
-        - 실시간 스트리밍으로 분석 과정 전송
-        - Sequential Multi-Agent 패턴으로 3개 에이전트 순차 협업
-        - 구조화된 JSON 형태의 분석 결과 제공
-    """
     global advisor
-    
-    # Runtime 환경에서 지연 초기화
     if advisor is None:
         advisor = InvestmentAdvisor()
-
-    # 고객 정보 추출 및 투자 상담 실행
+    
     user_input = payload.get("input_data")
-    async for chunk in advisor.run_consultation_async(user_input):
+    async for chunk in advisor.run_consultation(user_input):
         yield chunk
-
-# ================================
-# 직접 실행 시 Runtime 서버 시작
-# ================================
 
 if __name__ == "__main__":
     app.run()

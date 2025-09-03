@@ -3,6 +3,9 @@ strands-agents
 strands-agents-tools
 bedrock-agentcore-starter-toolkit
 
+# Langgraph
+langgraph
+
 # MCP (Model Context Protocol)
 mcp
 

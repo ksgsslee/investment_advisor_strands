@@ -1,140 +1,137 @@
-#!/usr/bin/env python3
 """
 test_investment_advisor.py
 
-LangGraph 기반 Investment Advisor 테스트
+Investment Advisor 테스트 코드
+환경변수 없이 JSON 파일 기반으로 테스트
 """
 
 import asyncio
 import json
-import os
 from pathlib import Path
-from investment_advisor import InvestmentAdvisor
-from bedrock_agentcore.memory import MemoryClient
+from investment_advisor import InvestmentAdvisor, AgentClient
 
-def get_thinking_process(session_id, agent_name):
-    """특정 에이전트의 중간 과정 조회 (테스트용)"""
+def test_agent_client_loading():
+    """Agent ARN과 Memory ID 로딩 테스트"""
+    print("🧪 Agent Client 로딩 테스트")
+    
     try:
-        # Memory ID 로드
-        memory_info_file = Path(__file__).parent / "agentcore_memory" / "deployment_info.json"
-        memory_info = json.load(open(memory_info_file))
-        memory_id = memory_info["memory_id"]
+        # AgentClient 초기화 (JSON 파일에서 로드)
+        agent_client = AgentClient()
         
-        # Memory Client로 이벤트 조회
-        memory_client = MemoryClient(region_name="us-west-2")
-        events = memory_client.get_last_k_turns(
-            memory_id=memory_id,
-            actor_id=session_id,
-            session_id=session_id,
-            k=1  # 마지막 턴만 (모든 이벤트가 포함됨)
-        )
+        print(f"✅ Financial Analyst ARN: {agent_client.arns['financial']}")
+        print(f"✅ Portfolio Architect ARN: {agent_client.arns['portfolio']}")
+        print(f"✅ Risk Manager ARN: {agent_client.arns['risk']}")
+        print(f"✅ Memory ID: {agent_client.memory_id}")
         
-        return events
+        return True
         
     except Exception as e:
-        print(f"중간 과정 조회 실패: {str(e)}")
-        return []
+        print(f"❌ Agent Client 로딩 실패: {e}")
+        return False
 
-async def test_investment_advisor():
-    """Investment Advisor 테스트"""
-    print("🧪 LangGraph Investment Advisor 테스트")
-    print("=" * 60)
-    
-    # 테스트 데이터
-    test_input = {
-        "total_investable_amount": 50000000,  # 5천만원
-        "age": 35,
-        "stock_investment_experience_years": 5,
-        "target_amount": 70000000  # 7천만원
-    }
-    
-    print("📋 테스트 입력:")
-    print(json.dumps(test_input, indent=2, ensure_ascii=False))
-    print("\n" + "=" * 60)
+async def test_investment_consultation():
+    """투자 상담 테스트"""
+    print("\n🧪 투자 상담 테스트")
     
     try:
+        # Investment Advisor 초기화
         advisor = InvestmentAdvisor()
-        print("✅ InvestmentAdvisor 생성 완료")
-        print(f"✅ LangGraph 노드: {list(advisor.graph.nodes.keys())}")
         
+        # 테스트 입력 데이터
+        test_input = {
+            "total_investable_amount": 50000000,  # 5천만원
+            "age": 35,
+            "stock_investment_experience_years": 10,
+            "target_amount": 70000000,  # 7천만원
+            "investment_purpose": "단기 수익 추구",
+            "preferred_sectors": ["ETF (분산 투자)", "성장주 (기술/바이오)"]
+        }
+        
+        print(f"📝 테스트 입력: {json.dumps(test_input, ensure_ascii=False, indent=2)}")
         print("\n🚀 투자 상담 시작...")
-        print("-" * 60)
         
-        session_id = None
-        
+        # 실시간 스트리밍 테스트
         async for event in advisor.run_consultation(test_input):
-            event_type = event.get("type")
-            agent_name = event.get("agent_name", "")
+            event_type = event.get("type", "unknown")
             
-            if event_type == "node_start":
-                print(f"\n🤖 {agent_name.upper()} 에이전트 시작...")
-                session_id = event.get("session_id")
+            if event_type == "thinking":
+                # AI 사고 과정 출력
+                thinking_data = event.get("data", "")
+                if thinking_data.strip():
+                    print(f"💭 {thinking_data}")
             
-            elif event_type == "node_complete":
-                print(f"✅ {agent_name.upper()} 에이전트 완료")
-                
-                # Memory에서 중간 과정 조회
-                if session_id:
-                    print(f"📝 {agent_name} 중간 과정:")
-                    events = get_thinking_process(session_id, agent_name)
-                    print(f"   이벤트 수: {len(events)}개")
-                    if events:
-                        # 첫 번째 이벤트 미리보기
-                        first_event = str(events[0])[:200] + "..." if len(str(events[0])) > 200 else str(events[0])
-                        print(f"   첫 이벤트: {first_event}")
-            
-            elif event_type == "final_complete":
-                print("\n" + "=" * 60)
-                print("🎉 투자 상담 완료!")
-                print("=" * 60)
-                
-                # 최종 결과 요약
-                print("\n📊 최종 결과:")
-                results = [
-                    ("재무 분석", event.get('financial_analysis')),
-                    ("포트폴리오 추천", event.get('portfolio_recommendation')),
-                    ("리스크 분석", event.get('risk_analysis'))
-                ]
-                
-                for name, result in results:
-                    status = "✅" if result else "❌"
-                    print(f"- {name}: {status}")
-                    if result:
-                        # 처음 100자만 미리보기
-                        preview = str(result)[:100] + "..." if len(str(result)) > 100 else str(result)
-                        print(f"  {preview}")
-                
-                print(f"\n🔗 세션 ID: {session_id}")
-                print("   (이 ID로 나중에 중간 과정을 다시 조회할 수 있습니다)")
+            else:
+                # 기타 이벤트 출력
+                print(f"📢 {event}")
         
-        print("\n✨ 테스트 완료!")
+        print("\n✅ 투자 상담 완료!")
+        return True
         
     except Exception as e:
-        print(f"\n❌ 테스트 실패: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ 투자 상담 테스트 실패: {e}")
+        return False
 
-def test_graph_structure():
-    """그래프 구조만 테스트"""
-    print("🧪 그래프 구조 테스트")
+def check_deployment_files():
+    """배포 파일 존재 여부 확인"""
+    print("🧪 배포 파일 확인")
     
-    try:
-        advisor = InvestmentAdvisor()
-        print("✅ InvestmentAdvisor 생성 성공")
-        print(f"✅ 노드: {list(advisor.graph.nodes.keys())}")
-        print(f"✅ 엣지: {list(advisor.graph.edges)}")
-        
-        # Memory 상태 확인
-        from investment_advisor import agent_client
-        if agent_client.memory_id:
-            print(f"✅ Memory ID: {agent_client.memory_id}")
+    current_dir = Path(__file__).parent
+    base_dir = current_dir.parent
+    
+    required_files = [
+        base_dir / "financial_analyst" / "deployment_info.json",
+        base_dir / "portfolio_architect" / "deployment_info.json", 
+        base_dir / "risk_manager" / "deployment_info.json",
+        current_dir / "agentcore_memory" / "deployment_info.json"
+    ]
+    
+    all_exist = True
+    for file_path in required_files:
+        if file_path.exists():
+            print(f"✅ {file_path.name} 존재")
+            
+            # 파일 내용 간단 확인
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                    if "agent_arn" in data:
+                        print(f"   📋 Agent ARN: {data['agent_arn'][:50]}...")
+                    elif "memory_id" in data:
+                        print(f"   📋 Memory ID: {data['memory_id']}")
+            except Exception as e:
+                print(f"   ⚠️ 파일 읽기 오류: {e}")
         else:
-            print("❌ Memory 초기화 실패")
-        
-    except Exception as e:
-        print(f"❌ 구조 테스트 실패: {e}")
-        import traceback
-        traceback.print_exc()
+            print(f"❌ {file_path.name} 없음")
+            all_exist = False
+    
+    return all_exist
+
+async def main():
+    """메인 테스트 함수"""
+    print("🎯 Investment Advisor 테스트 시작\n")
+    
+    # 1. 배포 파일 확인
+    if not check_deployment_files():
+        print("\n❌ 필요한 배포 파일이 없습니다. 먼저 각 에이전트를 배포하세요.")
+        return
+    
+    print("\n" + "="*50)
+    
+    # 2. Agent Client 로딩 테스트
+    if not test_agent_client_loading():
+        print("\n❌ Agent Client 로딩 실패")
+        return
+    
+    print("\n" + "="*50)
+    
+    # 3. 투자 상담 테스트 (실제 API 호출)
+    user_input = input("\n실제 투자 상담 테스트를 진행하시겠습니까? (y/N): ")
+    if user_input.lower() == 'y':
+        await test_investment_consultation()
+    else:
+        print("📋 투자 상담 테스트 건너뜀")
+    
+    print("\n🎉 모든 테스트 완료!")
 
 if __name__ == "__main__":
-    asyncio.run(test_investment_advisor())
+    asyncio.run(main())

@@ -14,6 +14,7 @@ from datetime import datetime
 
 # LangGraph
 from langgraph.graph import StateGraph, END
+from langgraph.config import get_stream_writer
 
 # AgentCore
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -52,32 +53,88 @@ class AgentClient:
         self.memory_id = self._load_memory_id()
     
     def _load_agent_arns(self):
-        """환경변수에서 Agent ARN 로드"""
+        """환경변수 또는 JSON 파일에서 Agent ARN 로드"""
+        # 1. 환경변수에서 시도
         financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
         portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
         risk_arn = os.getenv("RISK_MANAGER_ARN")
         
-        if not financial_arn or not portfolio_arn or not risk_arn:
-            raise ValueError("필수 환경변수가 설정되지 않았습니다: FINANCIAL_ANALYST_ARN, PORTFOLIO_ARCHITECT_ARN, RISK_MANAGER_ARN")
+        if financial_arn and portfolio_arn and risk_arn:
+            print("✅ 환경변수에서 Agent ARN 로드")
+            return {
+                "financial": financial_arn,
+                "portfolio": portfolio_arn,
+                "risk": risk_arn
+            }
         
-        print("✅ 환경변수에서 Agent ARN 로드")
-        return {
-            "financial": financial_arn,
-            "portfolio": portfolio_arn,
-            "risk": risk_arn
-        }
+        # 2. JSON 파일에서 fallback
+        try:
+            current_dir = Path(__file__).parent
+            base_dir = current_dir.parent
+            
+            # 각 에이전트의 deployment_info.json 파일 읽기
+            arns = {}
+            agent_dirs = {
+                "financial": "financial_analyst",
+                "portfolio": "portfolio_architect", 
+                "risk": "risk_manager"
+            }
+            
+            for agent_key, agent_dir in agent_dirs.items():
+                info_file = base_dir / agent_dir / "deployment_info.json"
+                if info_file.exists():
+                    with open(info_file, 'r') as f:
+                        deployment_info = json.load(f)
+                        arns[agent_key] = deployment_info.get("agent_arn")
+                else:
+                    raise FileNotFoundError(f"{agent_dir}/deployment_info.json 파일이 없습니다.")
+            
+            if len(arns) == 3 and all(arns.values()):
+                print("✅ JSON 파일에서 Agent ARN 로드")
+                return arns
+            else:
+                raise ValueError("일부 Agent ARN을 찾을 수 없습니다.")
+                
+        except Exception as e:
+            raise ValueError(
+                f"Agent ARN 로드 실패: {str(e)}\n"
+                "환경변수 또는 각 에이전트의 deployment_info.json 파일을 확인하세요."
+            )
   
     def _load_memory_id(self):
-        """환경변수에서 Memory ID 로드"""
+        """환경변수 또는 JSON 파일에서 Memory ID 로드"""
+        # 1. 환경변수에서 시도
         memory_id = os.getenv("INVESTMENT_MEMORY_ID")
-        if not memory_id:
-            raise ValueError("필수 환경변수가 설정되지 않았습니다: INVESTMENT_MEMORY_ID")
+        if memory_id:
+            print("✅ 환경변수에서 Memory ID 로드")
+            return memory_id
         
-        print("✅ 환경변수에서 Memory ID 로드")
-        return memory_id
+        # 2. JSON 파일에서 fallback
+        try:
+            current_dir = Path(__file__).parent
+            memory_info_file = current_dir / "agentcore_memory" / "deployment_info.json"
+            
+            if memory_info_file.exists():
+                with open(memory_info_file, 'r') as f:
+                    memory_info = json.load(f)
+                    memory_id = memory_info.get("memory_id")
+                    if memory_id:
+                        print("✅ JSON 파일에서 Memory ID 로드")
+                        return memory_id
+                    else:
+                        raise ValueError("Memory ID가 JSON 파일에 없습니다.")
+            else:
+                raise FileNotFoundError("agentcore_memory/deployment_info.json 파일이 없습니다.")
+                
+        except Exception as e:
+            raise ValueError(
+                f"Memory ID 로드 실패: {str(e)}\n"
+                "환경변수 INVESTMENT_MEMORY_ID 또는 agentcore_memory/deployment_info.json 파일을 확인하세요."
+            )
     
-    def call_agent_with_memory(self, agent_type, data, session_id):
-        """에이전트 호출하며 중간 과정을 배열에 모아서 한 번에 Memory에 저장"""
+    def call_agent_with_streaming(self, agent_type, data, writer):
+        """에이전트 호출하며 실시간 스트리밍 + Memory 저장 (동기 버전)"""
+        
         response = self.client.invoke_agent_runtime(
             agentRuntimeArn=self.arns[agent_type],
             qualifier="DEFAULT",
@@ -85,59 +142,18 @@ class AgentClient:
         )
         
         final_result = None
-        thinking_chunks = []  # text_chunk 임시 저장
-        events_to_save = []  # 저장할 이벤트들 배열
         
         # 스트리밍 응답 처리
         for line in response["response"].iter_lines(chunk_size=1):
             if line and line.decode("utf-8").startswith("data: "):
                 try:
                     event_data = json.loads(line.decode("utf-8")[6:])
+                    writer(event_data)
+
                     event_type = event_data.get("type")
-                    
-                    if event_type == "text_chunk":
-                        # 텍스트 청크는 임시 저장만
-                        thinking_chunks.append(event_data.get("data", ""))
-                    
-                    elif event_type == "tool_use":
-                        # tool_use 전에 쌓인 텍스트 청크들 배열에 추가
-                        if thinking_chunks:
-                            combined_text_event = {
-                                "type": "text",
-                                "data": "".join(thinking_chunks)
-                            }
-                            events_to_save.append(combined_text_event)
-                            thinking_chunks = []  # 초기화
-                        
-                        # 도구 사용 이벤트 배열에 추가
-                        events_to_save.append(event_data)
-                    
-                    elif event_type == "tool_result":
-                        # 도구 결과 이벤트 배열에 추가
-                        events_to_save.append(event_data)
-                    
-                    elif event_type == "streaming_complete":
-                        # 스트리밍 완료 시점에 남은 텍스트 청크들 배열에 추가
-                        if thinking_chunks:
-                            combined_text_event = {
-                                "type": "text",
-                                "data": "".join(thinking_chunks)
-                            }
-                            events_to_save.append(combined_text_event)
-                        
-                        # streaming_complete 이벤트도 배열에 추가
-                        events_to_save.append(event_data)
-                        
-                        # 한 번에 모든 이벤트 저장
-                        self._save_events_batch(session_id, agent_type, events_to_save)
-                        
-                        # 최종 결과 캐치
+                    if event_type == "streaming_complete":
                         final_result = event_data.get("result")
-                    
-                    else:
-                        # 기타 이벤트들도 배열에 추가
-                        events_to_save.append(event_data)
-                        
+                
                 except json.JSONDecodeError:
                     continue
         
@@ -178,33 +194,39 @@ agent_client = AgentClient()
 # ================================
 
 def financial_node(state: InvestmentState):
-    """재무 분석 노드"""
-    print("🤖 재무 분석가 시작...")
-    result = agent_client.call_agent_with_memory(
-        "financial", state["user_input"], state["session_id"]
+    """재무 분석 노드 - 커스텀 스트리밍 지원"""
+    writer = get_stream_writer()
+
+    # 에이전트 호출하며 실시간 스트리밍
+    final_result = agent_client.call_agent_with_streaming(
+        "financial", state["user_input"], writer
     )
-    state["financial_analysis"] = result
-    print("✅ 재무 분석가 완료")
+    
+    state["financial_analysis"] = final_result
     return state
 
 def portfolio_node(state: InvestmentState):
-    """포트폴리오 노드"""
-    print("🤖 포트폴리오 아키텍트 시작...")
-    result = agent_client.call_agent_with_memory(
-        "portfolio", state["financial_analysis"], state["session_id"]
+    """포트폴리오 노드 - 커스텀 스트리밍 지원"""
+    writer = get_stream_writer()
+  
+    # 에이전트 호출하며 실시간 스트리밍
+    final_result = agent_client.call_agent_with_streaming(
+        "portfolio", state["financial_analysis"], writer
     )
-    state["portfolio_recommendation"] = result
-    print("✅ 포트폴리오 아키텍트 완료")
+    
+    state["portfolio_recommendation"] = final_result
     return state
 
 def risk_node(state: InvestmentState):
-    """리스크 노드"""
-    print("🤖 리스크 매니저 시작...")
-    result = agent_client.call_agent_with_memory(
-        "risk", state["portfolio_recommendation"], state["session_id"]
+    """리스크 노드 - 커스텀 스트리밍 지원"""
+    writer = get_stream_writer()
+
+    # 에이전트 호출하며 실시간 스트리밍
+    final_result = agent_client.call_agent_with_streaming(
+        "risk", state["portfolio_recommendation"], writer
     )
-    state["risk_analysis"] = result
-    print("✅ 리스크 매니저 완료")
+    
+    state["risk_analysis"] = final_result
     return state
 
 # ================================
@@ -234,7 +256,7 @@ class InvestmentAdvisor:
         self.graph = create_graph()
     
     async def run_consultation(self, user_input):
-        """투자 상담 실행"""
+        """투자 상담 실행 - 커스텀 스트리밍 지원"""
         session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         initial_state = {
@@ -247,59 +269,15 @@ class InvestmentAdvisor:
         
         config = {"configurable": {"thread_id": session_id}}
         
-        # LangGraph astream_events로 실시간 진행 상황 전달
-        async for event in self.graph.astream_events(initial_state, config=config, version="v2"):
-            event_type = event.get("event")
-            
-            # 노드 시작
-            if event_type == "on_chain_start":
-                node_name = event.get("name", "")
-                if node_name in ["financial", "portfolio", "risk"]:
-                    yield {
-                        "type": "node_start",
-                        "agent_name": node_name,
-                        "session_id": session_id
-                    }
-            
-            # 노드 완료
-            elif event_type == "on_chain_end":
-                node_name = event.get("name", "")
-                if node_name in ["financial", "portfolio", "risk"]:
-                    # 이벤트 data에서 노드의 output (return state) 직접 추출
-                    output_state = event.get("data", {}).get("output", {})
-                    
-                    # 각 노드별 결과 매핑
-                    result_mapping = {
-                        "financial": output_state.get("financial_analysis"),
-                        "portfolio": output_state.get("portfolio_recommendation"),
-                        "risk": output_state.get("risk_analysis")
-                    }
-                    
-                    yield {
-                        "type": "node_complete",
-                        "agent_name": node_name,
-                        "session_id": session_id,
-                        "result": result_mapping[node_name]
-                    }
+        # 커스텀 스트리밍 모드로 실행 (동기 노드이므로 stream 사용)
+        for chunk in self.graph.stream(
+            initial_state, 
+            config=config,
+            stream_mode="custom"  # 커스텀 데이터만 받기
+        ):
+            print(chunk)
+            yield chunk
 
-    def get_agent_events(self, session_id, agent_name):
-        """특정 에이전트의 모든 이벤트 조회"""
-        if not agent_client.memory_id:
-            return []
-        
-        try:
-            agent_session_id = f"{session_id}_{agent_name}"
-            events = agent_client.memory_client.list_events(
-                memory_id=agent_client.memory_id,
-                actor_id=session_id,
-                session_id=agent_session_id,
-                max_results=100
-            )
-            return events
-            
-        except Exception as e:
-            print(f"이벤트 조회 실패: {str(e)}")
-            return []
 
 # ================================
 # Runtime 엔트리포인트

@@ -11,6 +11,7 @@ import boto3
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -64,6 +65,142 @@ def create_pie_chart(allocation_data, chart_title=""):
     )])
     fig.update_layout(title=chart_title, showlegend=True, width=400, height=400)
     return fig
+
+# ================================
+# Memory 조회 및 사고 과정 표시 함수들
+# ================================
+
+def get_agent_thinking_process(session_id, agent_name):
+    """특정 에이전트의 사고 과정 조회 (Memory에서)"""
+    try:
+        from bedrock_agentcore.memory import MemoryClient
+        
+        # 환경변수에서 Memory ID 로드 (deployment_info.json 대신)
+        memory_id = os.getenv("INVESTMENT_MEMORY_ID")
+        if not memory_id:
+            # fallback: deployment_info.json에서 로드
+            memory_info_file = Path(__file__).parent / "agentcore_memory" / "deployment_info.json"
+            if memory_info_file.exists():
+                memory_info = json.load(open(memory_info_file))
+                memory_id = memory_info["memory_id"]
+            else:
+                return []
+        
+        memory_client = MemoryClient(region_name=REGION)
+        events = memory_client.list_events(
+            memory_id=memory_id,
+            actor_id=session_id,
+            session_id=session_id,
+            max_results=100
+        )
+        
+        # 해당 에이전트의 이벤트만 필터링
+        agent_events = []
+        for event in events:
+            try:
+                event_data = json.loads(event.content)
+                if event_data.get("agent_type") == agent_name:
+                    agent_events.append(event_data)
+            except:
+                continue
+        
+        return agent_events
+        
+    except Exception as e:
+        st.error(f"사고 과정 조회 실패: {str(e)}")
+        return []
+
+def display_agent_thinking_process(container, session_id, agent_name):
+    """에이전트의 사고 과정을 멋지게 표시"""
+    agent_display_names = {
+        "financial": "🔍 재무 분석가",
+        "portfolio": "📊 포트폴리오 아키텍트", 
+        "risk": "⚠️ 리스크 매니저"
+    }
+    
+    with container.expander(f"🧠 {agent_display_names.get(agent_name, agent_name)} 사고 과정 보기", expanded=False):
+        with st.spinner("사고 과정을 불러오는 중..."):
+            events = get_agent_thinking_process(session_id, agent_name)
+        
+        if not events:
+            st.info("사고 과정 데이터가 없습니다.")
+            return
+        
+        st.markdown(f"**총 {len(events)}개의 사고 단계**")
+        
+        # 이벤트를 시간순으로 정렬하고 표시
+        for i, event in enumerate(events, 1):
+            event_type = event.get("type", "unknown")
+            
+            if event_type == "text":
+                # AI의 사고 과정 텍스트
+                thinking_text = event.get("data", "")
+                if thinking_text.strip():
+                    with st.chat_message("assistant"):
+                        st.markdown(f"**단계 {i}: 분석 중**")
+                        st.markdown(thinking_text)
+            
+            elif event_type == "tool_use":
+                # 도구 사용
+                tool_name = event.get("tool_name", "")
+                tool_input = event.get("tool_input", {})
+                
+                with st.chat_message("assistant"):
+                    st.markdown(f"**단계 {i}: 도구 사용**")
+                    st.code(f"🔧 도구: {tool_name}\n입력: {json.dumps(tool_input, indent=2, ensure_ascii=False)}")
+            
+            elif event_type == "tool_result":
+                # 도구 결과
+                tool_content = event.get("content", [])
+                if tool_content:
+                    result_text = tool_content[0].get("text", "") if tool_content else ""
+                    
+                    with st.chat_message("assistant"):
+                        st.markdown(f"**단계 {i}: 도구 결과**")
+                        
+                        # 결과가 JSON인 경우 파싱해서 표시
+                        try:
+                            result_data = json.loads(result_text)
+                            if isinstance(result_data, dict):
+                                # 특별한 도구 결과 표시
+                                if "ticker" in result_data and "news" in result_data:
+                                    # 뉴스 데이터
+                                    st.markdown(f"📰 **{result_data['ticker']} 뉴스 ({result_data.get('count', 0)}개)**")
+                                    for news in result_data.get('news', [])[:3]:  # 상위 3개만
+                                        st.markdown(f"- {news.get('title', 'No title')}")
+                                
+                                elif "correlation_matrix" in result_data:
+                                    # 상관관계 매트릭스
+                                    st.markdown("🔗 **ETF 상관관계 분석 완료**")
+                                    matrix = result_data["correlation_matrix"]
+                                    if matrix:
+                                        st.json(matrix)
+                                
+                                elif "expected_annual_return" in result_data:
+                                    # ETF 성과 분석
+                                    st.markdown(f"📊 **{result_data.get('ticker', 'ETF')} 성과 분석**")
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        st.metric("예상 수익률", f"{result_data.get('expected_annual_return', 0)}%")
+                                    with col2:
+                                        st.metric("손실 확률", f"{result_data.get('loss_probability', 0)}%")
+                                
+                                else:
+                                    # 일반 JSON 결과
+                                    st.json(result_data)
+                            else:
+                                st.text(result_text[:500] + "..." if len(result_text) > 500 else result_text)
+                        except:
+                            # JSON이 아닌 경우 텍스트로 표시
+                            st.text(result_text[:500] + "..." if len(result_text) > 500 else result_text)
+            
+            elif event_type == "streaming_complete":
+                # 최종 결과
+                result = event.get("result", "")
+                if result:
+                    with st.chat_message("assistant"):
+                        st.markdown(f"**단계 {i}: 최종 결과**")
+                        st.success("분석 완료!")
 
 # ================================
 # 각 에이전트별 결과 표시 함수들 (각 app.py에서 복사)
@@ -251,14 +388,20 @@ def invoke_investment_advisor(input_data):
                             if agent_name == "financial":
                                 container.subheader("🔍 재무 분석 결과")
                                 display_financial_analysis(container, result)
+                                # 사고 과정 표시
+                                display_agent_thinking_process(container, event_data.get("session_id"), "financial")
                                 
                             elif agent_name == "portfolio":
                                 container.subheader("📊 포트폴리오 설계")
                                 display_portfolio_result(container, result)
+                                # 사고 과정 표시
+                                display_agent_thinking_process(container, event_data.get("session_id"), "portfolio")
                                 
                             elif agent_name == "risk":
                                 container.subheader("⚠️ 리스크 분석 및 시나리오 플래닝")
                                 display_risk_analysis_result(container, result)
+                                # 사고 과정 표시
+                                display_agent_thinking_process(container, event_data.get("session_id"), "risk")
                         
                         with progress_container:
                             agent_display_names = {

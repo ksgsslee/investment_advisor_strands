@@ -88,6 +88,32 @@ def load_agent_arns():
     
     return agent_arns
 
+def load_memory_info():
+    """
+    AgentCore Memory 배포 정보 로드
+    
+    Returns:
+        str: Memory ID
+        
+    Raises:
+        FileNotFoundError: Memory 배포 정보가 없을 때
+    """
+    print("🧠 AgentCore Memory 배포 정보 로드 중...")
+    
+    info_file = Path(__file__).parent / "agentcore_memory" / "deployment_info.json"
+    
+    if not info_file.exists():
+        raise FileNotFoundError(
+            "AgentCore Memory가 먼저 배포되어야 합니다.\n"
+            "다음 명령을 실행하세요: cd agentcore_memory && python deploy_agentcore_memory.py"
+        )
+    
+    with open(info_file, 'r') as f:
+        memory_info = json.load(f)
+        memory_id = memory_info["memory_id"]
+        print(f"✅ Memory ID: {memory_id}")
+        return memory_id
+
 def create_iam_role():
     """
     Investment Advisor용 특별 IAM 역할 생성 (다른 에이전트 호출 권한 포함)
@@ -168,16 +194,17 @@ def configure_runtime(role_arn):
     print("✅ Runtime 구성 완료")
     return runtime
 
-def deploy_and_wait(runtime, agent_arns):
+def deploy_and_wait(runtime, agent_arns, memory_id):
     """
     Runtime 배포 및 상태 대기
     
     Runtime을 AWS에 배포하고 완료될 때까지 상태를 모니터링합니다.
-    다른 에이전트 ARN을 환경변수로 설정하여 Runtime에서 사용할 수 있도록 합니다.
+    다른 에이전트 ARN과 Memory ID를 환경변수로 설정하여 Runtime에서 사용할 수 있도록 합니다.
     
     Args:
         runtime (Runtime): 구성된 Runtime 객체
         agent_arns (dict): 다른 에이전트들의 ARN 정보
+        memory_id (str): AgentCore Memory ID
         
     Returns:
         tuple: (성공 여부, Agent ARN, 최종 상태)
@@ -187,11 +214,12 @@ def deploy_and_wait(runtime, agent_arns):
     print("   - ECR 업로드")
     print("   - 서비스 생성/업데이트")
     
-    # 다른 에이전트 ARN을 환경변수로 설정
+    # 다른 에이전트 ARN과 Memory ID를 환경변수로 설정
     env_vars = {
         "FINANCIAL_ANALYST_ARN": agent_arns["financial_analyst"],
         "PORTFOLIO_ARCHITECT_ARN": agent_arns["portfolio_architect"],
         "RISK_MANAGER_ARN": agent_arns["risk_manager"],
+        "INVESTMENT_MEMORY_ID": memory_id,
         "AWS_REGION": Config.REGION
     }
     
@@ -317,14 +345,17 @@ def main():
         # 2. 다른 에이전트 ARN 로드
         agent_arns = load_agent_arns()
         
-        # 3. IAM 역할 생성
+        # 3. AgentCore Memory 정보 로드
+        memory_id = load_memory_info()
+        
+        # 4. IAM 역할 생성
         role_arn = create_iam_role()
         
-        # 4. Runtime 구성
+        # 5. Runtime 구성
         runtime = configure_runtime(role_arn)
         
-        # 5. 배포 및 대기
-        success, agent_arn, status = deploy_and_wait(runtime, agent_arns)
+        # 6. 배포 및 대기
+        success, agent_arn, status = deploy_and_wait(runtime, agent_arns, memory_id)
         
         if success:
             # 6. 배포 정보 저장

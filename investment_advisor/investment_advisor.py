@@ -48,18 +48,18 @@ class AgentClient:
     def __init__(self):
         self.client = boto3.client('bedrock-agentcore', region_name=Config.REGION)
         self.memory_client = MemoryClient(region_name=Config.REGION)
-        self.memory_id = None
         self.arns = self._load_agent_arns()
-        self._init_memory()
+        self.memory_id = self._load_memory_id()
     
     def _load_agent_arns(self):
-        """Agent ARN 로드"""
+        """Agent ARN 로드 (환경변수 우선, 없으면 파일에서 로드)"""
         # 환경변수에서 시도
         financial_arn = os.getenv("FINANCIAL_ANALYST_ARN")
         portfolio_arn = os.getenv("PORTFOLIO_ARCHITECT_ARN") 
         risk_arn = os.getenv("RISK_MANAGER_ARN")
         
         if financial_arn and portfolio_arn and risk_arn:
+            print("✅ 환경변수에서 Agent ARN 로드")
             return {
                 "financial": financial_arn,
                 "portfolio": portfolio_arn,
@@ -67,6 +67,7 @@ class AgentClient:
             }
         
         # 파일에서 로드
+        print("📁 파일에서 Agent ARN 로드")
         base_path = Path(__file__).parent.parent
         return {
             "financial": json.load(open(base_path / "financial_analyst" / "deployment_info.json"))["agent_arn"],
@@ -74,28 +75,19 @@ class AgentClient:
             "risk": json.load(open(base_path / "risk_manager" / "deployment_info.json"))["agent_arn"]
         }  
   
-    def _init_memory(self):
-        """AgentCore Memory 초기화"""
-        try:
-            memories = self.memory_client.list_memories()
-            existing_memory = next((m for m in memories if m['id'].startswith(Config.MEMORY_NAME)), None)
-            
-            if existing_memory:
-                self.memory_id = existing_memory['id']
-                print(f"✅ 기존 메모리 사용: {self.memory_id}")
-            else:
-                memory = self.memory_client.create_memory_and_wait(
-                    name=Config.MEMORY_NAME,
-                    description="Investment Advisor Thinking Process",
-                    strategies=[],
-                    event_expiry_days=7,
-                    max_wait=300,
-                    poll_interval=10
-                )
-                self.memory_id = memory['id']
-                print(f"✅ 새 메모리 생성: {self.memory_id}")
-        except Exception as e:
-            print(f"❌ 메모리 초기화 실패: {e}")
+    def _load_memory_id(self):
+        """Memory ID 로드 (환경변수 우선, 없으면 파일에서 로드)"""
+        # 환경변수에서 시도
+        memory_id = os.getenv("INVESTMENT_MEMORY_ID")
+        if memory_id:
+            print("✅ 환경변수에서 Memory ID 로드")
+            return memory_id
+        
+        # 파일에서 로드
+        print("📁 파일에서 Memory ID 로드")
+        memory_info_file = Path(__file__).parent / "agentcore_memory" / "deployment_info.json"
+        memory_info = json.load(open(memory_info_file))
+        return memory_info["memory_id"]
     
     def call_agent_with_memory(self, agent_type, data, session_id):
         """에이전트 호출하며 중간 과정을 효율적으로 Memory에 저장"""

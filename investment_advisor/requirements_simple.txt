@@ -1,8 +1,0 @@
-# requirements.txt
-# Investment Advisor 의존성
-
-# Strands Agents SDK
-strands-agents
-
-# AWS SDK
-boto3

@@ -133,7 +133,7 @@ def deploy_investment_advisor(agent_arns, memory_id):
     runtime = Runtime()
     runtime.configure(
         entrypoint=str(current_dir / "investment_advisor.py"),
-        execution_role=iam_role['Role']['Arn'],
+        execution_role=role_arn,
         auto_create_ecr=True,
         requirements_file=str(current_dir / "requirements.txt"),
         region=Config.REGION,

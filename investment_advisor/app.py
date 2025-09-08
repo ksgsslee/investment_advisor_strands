@@ -534,16 +534,8 @@ def load_long_term_summaries():
 # 메뉴별 UI 구성
 if menu == "🤖 새로운 투자 상담":
     with st.expander("🏗️ Multi-Agent 아키텍처", expanded=False):
-        st.markdown("""
-        **3개의 전문 AI 에이전트가 순차적으로 협업합니다:**
-        
-        1. **🔍 재무 분석가** - 개인 재무 상황 분석 및 위험 성향 평가
-        2. **�  포트폴리오 아키텍트** - 실시간 ETF 데이터 기반 포트폴리오 설계  
-        3. **⚠️ 리스크 매니저** - 뉴스 기반 리스크 분석 및 시나리오 플래닝
-        
-        **메모리 시스템:**
-        - AgentCore SUMMARY 전략이 자동 요약 생성 (영구 저장)
-        """)
+        st.image(os.path.join("../static/investment_advisor.png"), width=500)
+
 
     st.markdown("**투자자 정보 입력**")
 

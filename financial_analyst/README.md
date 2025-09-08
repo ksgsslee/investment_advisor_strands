@@ -17,23 +17,23 @@
 graph TB
     subgraph "사용자 인터페이스"
         UI[Streamlit App]
-        USER[투자자 정보 입력]
+        INPUT[투자자 정보 입력]
     end
     
-    subgraph "AWS Bedrock AgentCore"
-        RUNTIME[AgentCore Runtime]
+    subgraph "AWS Bedrock AgentCore Runtime"
+        RUNTIME[Financial Analyst Runtime]
         AGENT[Financial Analyst Agent]
         CALC[Calculator Tool]
     end
     
-    USER --> UI
+    INPUT --> UI
     UI --> RUNTIME
     RUNTIME --> AGENT
     AGENT --> CALC
     CALC --> AGENT
     AGENT --> RUNTIME
     RUNTIME --> UI
-    UI --> USER
+    UI --> INPUT
     
     style RUNTIME fill:#e1f5fe
     style AGENT fill:#f3e5f5
@@ -43,7 +43,7 @@ graph TB
 ### 기술 스택
 - **AI Framework**: Strands Agents SDK
 - **Infrastructure**: AWS Bedrock AgentCore Runtime (서버리스)
-- **LLM**: OpenAI GPT-OSS-120B (설정 가능)
+- **LLM**: Claude 3.7 Sonnet (설정 가능)
 - **Tools**: Calculator (수익률 계산)
 - **UI**: Streamlit
 
@@ -67,7 +67,7 @@ cd financial_analyst
 # AgentCore Runtime 배포 (필수)
 python deploy.py
 
-# 배포 상태 확인
+# 배포 상태 확인 (deployment_info.json 자동 생성)
 cat deployment_info.json
 ```
 
@@ -146,11 +146,11 @@ options=[
 
 ```
 financial_analyst/
-├── financial_analyst.py    # 메인 에이전트
+├── financial_analyst.py    # 메인 에이전트 (AgentCore Runtime)
 ├── deploy.py               # AgentCore Runtime 배포
+├── cleanup.py              # 시스템 정리
 ├── app.py                  # Streamlit 웹 앱
-├── requirements.txt        # Python 의존성
-└── deployment_info.json    # 배포 정보 (자동 생성)
+└── requirements.txt        # Python 의존성
 ```
 
 ## 🔗 전체 시스템 연동

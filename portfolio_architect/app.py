@@ -218,7 +218,7 @@ def invoke_portfolio_architect(financial_analysis):
         )
         
         placeholder = st.container()
-        placeholder.subheader("AI 분석 과정")
+        placeholder.subheader("Reasoning")
         
         current_thinking = ""
         current_text_placeholder = placeholder.empty()

@@ -179,7 +179,7 @@ def invoke_risk_manager(portfolio_data):
         )
         
         placeholder = st.container()
-        placeholder.subheader("AI 분석 과정")
+        placeholder.subheader("Reasoning")
         
         current_thinking = ""
         current_text_placeholder = placeholder.empty()

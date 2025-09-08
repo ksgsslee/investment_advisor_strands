@@ -1,6 +1,4 @@
 """
-app.py
-
 Investment Advisor Streamlit 앱
 Multi-Agent 투자 자문 시스템 웹 인터페이스
 """
@@ -45,7 +43,6 @@ try:
     AGENT_ARN = deployment_info["agent_arn"]
     REGION = deployment_info["region"]
     
-    # Memory 정보 로드
     with open(Path(__file__).parent / "agentcore_memory" / "deployment_info.json") as f:
         memory_info = json.load(f)
     MEMORY_ID = memory_info["memory_id"]
@@ -75,7 +72,7 @@ def extract_json_from_text(text):
 
 def display_calculator_result(container, tool_input, result_text):
     """Calculator 도구 결과 표시"""
-    container.markdown("**🧮 Calculator 도구로 계산된 수익률**")
+    container.markdown("**🧮 Calculator 계산 결과**")
     container.code(f"Input: {tool_input}\n\n{result_text}", language="text")
 
 def display_etf_analysis_result(container, etf_data):
@@ -445,15 +442,15 @@ def invoke_investment_advisor(input_data):
                         current_agent = agent_name
                         
                         agent_display_names = {
-                            "financial": "🔍 재무 분석가",
-                            "portfolio": "📊 포트폴리오 아키텍트", 
-                            "risk": "⚠️ 리스크 매니저"
+                            "financial": "Financial Analyst",
+                            "portfolio": "Portfolio Architect", 
+                            "risk": "Risk Manager"
                         }
                         
                         agent_containers[agent_name] = results_container.container()
                         
                         # 사고과정을 expander로 감싸기
-                        thinking_expander = agent_containers[agent_name].expander(f"🧠 Reasoning {agent_display_names.get(agent_name, agent_name)}", expanded=True)
+                        thinking_expander = agent_containers[agent_name].expander(f"🧠 {agent_display_names.get(agent_name, agent_name)} Reasoning", expanded=True)
                         agent_thinking_containers[agent_name] = thinking_expander.container()
                         
                         current_thinking[agent_name] = ""
@@ -482,12 +479,7 @@ def invoke_investment_advisor(input_data):
                                 display_risk_analysis_result(container, result)
                                 container.divider()
                         
-                        with progress_container:
-                            agent_display_names = {
-                                "financial": "Financial Analyst",
-                                "portfolio": "Portfolio Architect", 
-                                "risk": "Risk Manager"
-                            }
+
 
                     elif event_type == "error":
                         return {"status": "error", "error": event_data.get("error", "Unknown error")}
@@ -552,18 +544,16 @@ def load_long_term_summaries():
 
 # 메뉴별 UI 구성
 if menu == "🤖 새로운 투자 상담":
-    # 기존 투자 상담 UI
     with st.expander("🏗️ Multi-Agent 아키텍처", expanded=False):
         st.markdown("""
         **3개의 전문 AI 에이전트가 순차적으로 협업합니다:**
         
         1. **🔍 재무 분석가** - 개인 재무 상황 분석 및 위험 성향 평가
-        2. **📊 포트폴리오 아키텍트** - 실시간 ETF 데이터 기반 포트폴리오 설계  
+        2. **�  포트폴리오 아키텍트** - 실시간 ETF 데이터 기반 포트폴리오 설계  
         3. **⚠️ 리스크 매니저** - 뉴스 기반 리스크 분석 및 시나리오 플래닝
         
         **메모리 시스템:**
-        - Short-term: 각 에이전트 결과를 상세 저장 (7일)
-        - Long-term: AgentCore SUMMARY 전략이 자동 요약 생성 (영구)
+        - AgentCore SUMMARY 전략이 자동 요약 생성 (영구 저장)
         """)
 
     st.markdown("**투자자 정보 입력**")
@@ -662,9 +652,9 @@ if menu == "🤖 새로운 투자 상담":
 
 elif menu == "📚 상담 히스토리 (Long-term Memory)":
     st.markdown("### 📚 투자 상담 히스토리")
-    st.info("AgentCore Long-term Memory 가 자동으로 생성한 투자 상담 요약을 확인할 수 있습니다.")
+    st.info("AgentCore SUMMARY 전략이 자동으로 생성한 투자 상담 요약을 확인할 수 있습니다.")
     
-    if st.button("🔄 히스토리 새로고침 (최대 10개)", use_container_width=True):
+    if st.button("🔄 히스토리 새로고침", use_container_width=True):
         st.rerun()
     
     with st.spinner("Long-term Memory에서 요약 데이터 로딩 중..."):
@@ -695,7 +685,7 @@ elif menu == "📚 상담 히스토리 (Long-term Memory)":
                     session_display = namespace.split('/')[-1]
             
             with st.expander(f"📋 {time_display} - Session: {session_display}"):
-                st.markdown("**투자 상담 요약 (AgentCore Long-term Memory 자동 생성)**")
+                st.markdown("**투자 상담 요약 (AgentCore SUMMARY 자동 생성)**")
                 content = summary['content']
                 
                 # XML 형태의 summary를 더 읽기 쉽게 처리

@@ -12,9 +12,16 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 from pathlib import Path
+from bedrock_agentcore.memory import MemoryClient
 
 st.set_page_config(page_title="🤖 Investment Advisor")
 st.title("🤖 Investment Advisor")
+
+# 사이드바 메뉴
+menu = st.sidebar.selectbox(
+    "메뉴 선택",
+    ["🤖 새로운 투자 상담", "📚 상담 히스토리 (Long-term Memory)"]
+)
 
 # 배포 정보 로드
 try:
@@ -22,11 +29,18 @@ try:
         deployment_info = json.load(f)
     AGENT_ARN = deployment_info["agent_arn"]
     REGION = deployment_info["region"]
+    
+    # Memory 정보 로드
+    with open(Path(__file__).parent / "agentcore_memory" / "deployment_info.json") as f:
+        memory_info = json.load(f)
+    MEMORY_ID = memory_info["memory_id"]
+    
 except Exception:
     st.error("배포 정보를 찾을 수 없습니다. deploy.py를 먼저 실행해주세요.")
     st.stop()
 
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
+memory_client = MemoryClient(region_name=REGION)
 
 def extract_json_from_text(text):
     """텍스트에서 JSON 추출"""
@@ -473,106 +487,216 @@ def invoke_investment_advisor(input_data):
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-# UI 구성
-with st.expander("🏗️ Multi-Agent 아키텍처", expanded=False):
-    st.markdown("""
-    **3개의 전문 AI 에이전트가 순차적으로 협업합니다:**
-    
-    1. **🔍 재무 분석가** - 개인 재무 상황 분석 및 위험 성향 평가
-    2. **📊 포트폴리오 아키텍트** - 실시간 ETF 데이터 기반 포트폴리오 설계  
-    3. **⚠️ 리스크 매니저** - 뉴스 기반 리스크 분석 및 시나리오 플래닝
-    """)
-
-st.markdown("**투자자 정보 입력**")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    total_investable_amount = st.number_input(
-        "💰 투자 가능 금액 (억원 단위)",
-        min_value=0.0,
-        max_value=1000.0,
-        value=0.5,
-        step=0.1,
-        format="%.1f"
-    )
-    st.caption("예: 0.5 = 5천만원")
-
-with col2:
-    target_amount = st.number_input(
-        "🎯 1년 후 목표 금액 (억원 단위)",
-        min_value=0.0,
-        max_value=1000.0,
-        value=0.7,
-        step=0.1,
-        format="%.1f"
-    )
-    st.caption("예: 0.7 = 7천만원")
-
-col3, col4, col5 = st.columns(3)
-
-with col3:
-    age_options = [f"{i}-{i+4}세" for i in range(20, 101, 5)]
-    age = st.selectbox(
-        "나이",
-        options=age_options,
-        index=3
-    )
-
-with col4:
-    experience_categories = ["0-1년", "1-3년", "3-5년", "5-10년", "10-20년", "20년 이상"]
-    stock_investment_experience_years = st.selectbox(
-        "주식 투자 경험",
-        options=experience_categories,
-        index=3
-    )
-
-with col5:
-    investment_purpose = st.selectbox(
-        "🎯 투자 목적",
-        options=["단기 수익 추구", "노후 준비", "주택 구입 자금", "자녀 교육비", "여유 자금 운용"],
-        index=0
-    )
-
-preferred_sectors = st.multiselect(
-    "📈 관심 투자 분야 (복수 선택)",
-    options=[
-        "배당주 (안정적 배당)",
-        "성장주 (기술/바이오)",
-        "가치주 (저평가 우량주)", 
-        "리츠 (부동산 투자)",
-        "ETF (분산 투자)",
-        "해외 주식",
-        "채권 (안전 자산)",
-        "원자재/금"
-    ],
-    default=["ETF (분산 투자)"]
-)
-
-submitted = st.button("분석 시작", use_container_width=True)
-
-if submitted:
-    age_number = int(age.split('-')[0]) + 2
-    
-    experience_mapping = {
-        "0-1년": 1, "1-3년": 2, "3-5년": 4, 
-        "5-10년": 7, "10-20년": 15, "20년 이상": 25
-    }
-    experience_years = experience_mapping[stock_investment_experience_years]
-    
-    input_data = {
-        "total_investable_amount": int(total_investable_amount * 100000000),
-        "age": age_number,
-        "stock_investment_experience_years": experience_years,
-        "target_amount": int(target_amount * 100000000),
-        "investment_purpose": investment_purpose,
-        "preferred_sectors": preferred_sectors
-    }
-    
-    st.divider()
-    
-    with st.spinner("AI 분석 중..."):
-        result = invoke_investment_advisor(input_data)
+def load_long_term_summaries():
+    """Long-term Memory에서 요약 데이터 로드 - retrieve_memories 사용"""
+    try:
+        # SUMMARY 전략이 생성한 Long-term Memory 조회
+        response = memory_client.retrieve_memories(
+            memory_id=MEMORY_ID,
+            namespace="investment/session",
+            query="investment consultation summary"  # 투자 상담 요약 검색
+        )
         
-        if result['status'] == 'error':
-            st.error(f"❌ 분석 중 오류: {result.get('error', 'Unknown error')}")
+        summaries = []
+        for record in response:
+            # content 추출 (간단화)
+            content = record.get('content', {})
+            content_text = content.get('text', str(content)) if isinstance(content, dict) else str(content)
+            
+            # timestamp 추출 (간단화)
+            timestamp = record.get('createdAt', record.get('created_at', 'Unknown'))
+            timestamp_str = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
+            
+            summaries.append({
+                'session_id': record.get('memoryRecordId', 'Unknown'),
+                'timestamp': timestamp_str,
+                'content': content_text,
+                'namespaces': record.get('namespaces', [])
+            })
+
+        # 시간순으로 정렬 (최신순)
+        summaries.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        return summaries[:10]  # 최대 10개만 반환
+        
+    except Exception as e:
+        st.error(f"Long-term Memory 조회 실패: {e}")
+        st.error(f"오류 상세: {str(e)}")
+        
+        # 디버깅을 위해 MemoryClient의 사용 가능한 메서드 표시
+        try:
+            available_methods = [method for method in dir(memory_client) if not method.startswith('_')]
+            st.info(f"사용 가능한 MemoryClient 메서드들: {', '.join(available_methods)}")
+        except:
+            pass
+            
+        return []
+
+# 메뉴별 UI 구성
+if menu == "🤖 새로운 투자 상담":
+    # 기존 투자 상담 UI
+    with st.expander("🏗️ Multi-Agent 아키텍처", expanded=False):
+        st.markdown("""
+        **3개의 전문 AI 에이전트가 순차적으로 협업합니다:**
+        
+        1. **🔍 재무 분석가** - 개인 재무 상황 분석 및 위험 성향 평가
+        2. **📊 포트폴리오 아키텍트** - 실시간 ETF 데이터 기반 포트폴리오 설계  
+        3. **⚠️ 리스크 매니저** - 뉴스 기반 리스크 분석 및 시나리오 플래닝
+        
+        **메모리 시스템:**
+        - Short-term: 각 에이전트 결과를 상세 저장 (7일)
+        - Long-term: AgentCore SUMMARY 전략이 자동 요약 생성 (영구)
+        """)
+
+    st.markdown("**투자자 정보 입력**")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        total_investable_amount = st.number_input(
+            "💰 투자 가능 금액 (억원 단위)",
+            min_value=0.0,
+            max_value=1000.0,
+            value=0.5,
+            step=0.1,
+            format="%.1f"
+        )
+        st.caption("예: 0.5 = 5천만원")
+
+    with col2:
+        target_amount = st.number_input(
+            "🎯 1년 후 목표 금액 (억원 단위)",
+            min_value=0.0,
+            max_value=1000.0,
+            value=0.7,
+            step=0.1,
+            format="%.1f"
+        )
+        st.caption("예: 0.7 = 7천만원")
+
+    col3, col4, col5 = st.columns(3)
+
+    with col3:
+        age_options = [f"{i}-{i+4}세" for i in range(20, 101, 5)]
+        age = st.selectbox(
+            "나이",
+            options=age_options,
+            index=3
+        )
+
+    with col4:
+        experience_categories = ["0-1년", "1-3년", "3-5년", "5-10년", "10-20년", "20년 이상"]
+        stock_investment_experience_years = st.selectbox(
+            "주식 투자 경험",
+            options=experience_categories,
+            index=3
+        )
+
+    with col5:
+        investment_purpose = st.selectbox(
+            "🎯 투자 목적",
+            options=["단기 수익 추구", "노후 준비", "주택 구입 자금", "자녀 교육비", "여유 자금 운용"],
+            index=0
+        )
+
+    preferred_sectors = st.multiselect(
+        "📈 관심 투자 분야 (복수 선택)",
+        options=[
+            "배당주 (안정적 배당)",
+            "성장주 (기술/바이오)",
+            "가치주 (저평가 우량주)", 
+            "리츠 (부동산 투자)",
+            "ETF (분산 투자)",
+            "해외 주식",
+            "채권 (안전 자산)",
+            "원자재/금"
+        ],
+        default=["ETF (분산 투자)"]
+    )
+
+    submitted = st.button("분석 시작", use_container_width=True)
+
+    if submitted:
+        age_number = int(age.split('-')[0]) + 2
+        
+        experience_mapping = {
+            "0-1년": 1, "1-3년": 2, "3-5년": 4, 
+            "5-10년": 7, "10-20년": 15, "20년 이상": 25
+        }
+        experience_years = experience_mapping[stock_investment_experience_years]
+        
+        input_data = {
+            "total_investable_amount": int(total_investable_amount * 100000000),
+            "age": age_number,
+            "stock_investment_experience_years": experience_years,
+            "target_amount": int(target_amount * 100000000),
+            "investment_purpose": investment_purpose,
+            "preferred_sectors": preferred_sectors
+        }
+        
+        st.divider()
+        
+        with st.spinner("AI 분석 중..."):
+            result = invoke_investment_advisor(input_data)
+            
+            if result['status'] == 'error':
+                st.error(f"❌ 분석 중 오류: {result.get('error', 'Unknown error')}")
+
+elif menu == "📚 상담 히스토리 (Long-term Memory)":
+    st.markdown("### 📚 투자 상담 히스토리")
+    st.info("AgentCore Long-term Memory 가 자동으로 생성한 투자 상담 요약을 확인할 수 있습니다.")
+    
+    if st.button("🔄 히스토리 새로고침 (최대 10개)", use_container_width=True):
+        st.rerun()
+    
+    with st.spinner("Long-term Memory에서 요약 데이터 로딩 중..."):
+        summaries = load_long_term_summaries()
+    
+    if not summaries:
+        st.warning("아직 저장된 투자 상담 히스토리가 없습니다.")
+        st.markdown("새로운 투자 상담을 진행하면 자동으로 요약이 생성됩니다.")
+    else:
+        for i, summary in enumerate(summaries, 1):
+            timestamp = summary['timestamp']
+            # 시간 표시를 더 읽기 쉽게 포맷
+            try:
+                from datetime import datetime
+                if isinstance(timestamp, str) and 'T' in timestamp:
+                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    time_display = dt.strftime('%Y-%m-%d %H:%M')
+                else:
+                    time_display = str(timestamp)
+            except:
+                time_display = str(timestamp)
+            
+            # 네임스페이스에서 session ID 추출 (마지막 / 부분)
+            session_display = summary['session_id']
+            if summary.get('namespaces'):
+                namespace = summary['namespaces'][0] if isinstance(summary['namespaces'], list) else str(summary['namespaces'])
+                if '/' in namespace:
+                    session_display = namespace.split('/')[-1]
+            
+            with st.expander(f"📋 {time_display} - Session: {session_display}"):
+                st.markdown("**투자 상담 요약 (AgentCore Long-term Memory 자동 생성)**")
+                content = summary['content']
+                
+                # XML 형태의 summary를 더 읽기 쉽게 처리
+                if isinstance(content, str) and '<summary>' in content:
+                    # XML에서 topic들을 추출해서 표시
+                    import re
+                    topics = re.findall(r'<topic name="([^"]+)">\s*(.*?)\s*</topic>', content, re.DOTALL)
+                    
+                    if topics:
+                        for topic_name, topic_content in topics:
+                            st.markdown(f"**📌 {topic_name}**")
+                            # HTML 엔티티 디코딩
+                            clean_content = topic_content.replace('&quot;', '"').replace('&#39;', "'")
+                            st.write(clean_content.strip())
+                            st.write("")  # 빈 줄 추가
+                    else:
+                        # XML 파싱 실패 시 원본 표시
+                        st.text(content)
+                else:
+                    # 일반 텍스트 처리
+                    content_str = str(content)
+                    st.markdown(content_str)

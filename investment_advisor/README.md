@@ -12,9 +12,10 @@
 - **실시간 스트리밍**: AI 사고 과정을 실시간으로 시각화
 
 ### AgentCore Memory 통합
-- **자동 메모리 관리**: 상담 히스토리 자동 저장 및 로드
-- **개인화 서비스**: 과거 상담 내용을 바탕으로 한 맞춤형 분석
-- **장기 관계 구축**: 사용자별 투자 성향 학습 및 개선
+- **Short-term Memory**: 각 에이전트의 최종 리포트를 상세하게 저장 (7일 보존)
+- **Long-term Memory**: 매니지드 SUMMARY 전략이 자동으로 요약 생성 및 영구 보존
+- **에이전트별 네임스페이스**: `investment/{actorId}/long_term` 구조로 분리
+- **자동 요약 처리**: 수동 요약 없이 AgentCore가 자동으로 장기 보존용 요약 생성
 
 ### 종합 투자 분석
 - **완전 자동화**: 사용자 입력만으로 전체 투자 자문 프로세스 완료
@@ -152,23 +153,24 @@ streamlit run app.py
 ```
 
 ### Memory 저장 데이터
+
+#### Short-term Memory (상세 결과 - 7일 보존)
 ```json
 {
-  "session_id": "consultation_1724567890",
-  "user_id": "user123",
+  "agent_type": "financial",
   "timestamp": "2024-08-25T12:00:00Z",
-  "consultation_title": "공격적 투자자 - QQQ 중심 포트폴리오",
-  "user_profile": {사용자 기본 정보},
-  "analysis_results": {
-    "risk_profile": "공격적",
-    "target_return": 40.0,
-    "recommended_portfolio": {"QQQ": 60, "SPY": 30, "GLD": 10},
-    "investment_strategy": "고성장 기술주 중심 전략",
-    "risk_scenarios": {시나리오별 분석}
-  },
-  "final_report": {AI 생성 통합 리포트},
-  "tags": ["공격적", "QQQ_중심", "고수익_추구"]
+  "input": "투자 상담 요청: {...}",
+  "detailed_result": "상세한 재무 분석 결과 전문...",
+  "session_id": "session_20240825_120000"
 }
+```
+
+#### Long-term Memory (매니지드 자동 요약 - 영구 보존)
+```
+AgentCore SUMMARY 전략이 자동으로 생성:
+- 네임스페이스: investment/investment_financial/long_term
+- 요약 내용: AI가 자동으로 핵심 내용 추출 및 요약
+- 보존 기간: 영구 (전략에 따라 관리)
 ```
 
 ## 🔧 고급 설정
@@ -230,13 +232,20 @@ async for event in advisor.run_comprehensive_analysis_async(user_input, user_id)
 ```
 
 ### Memory 검색 최적화
-사용자별 히스토리 조회 성능을 위해 메타데이터 필터링을 활용합니다:
+메모리 조회 방법:
 
 ```python
-results = memory.search(
-    query=f"user_id:{user_id}",
-    limit=limit,
-    metadata_filter={"consultation_type": "comprehensive_analysis"}
+# Short-term: 세션별 상세 결과 조회
+short_term_results = memory_client.get_events(
+    memory_id=memory_id,
+    session_id=session_id  # 동일한 세션 ID 사용
+)
+
+# Long-term: 매니지드 SUMMARY 조회
+long_term_summaries = memory_client.search(
+    memory_id=memory_id,
+    query="investment analysis summary",
+    namespace="investment/investment_*/long_term"
 )
 ```
 

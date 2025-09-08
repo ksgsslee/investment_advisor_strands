@@ -70,7 +70,7 @@ class PortfolioArchitect:
             )
     
     def _get_prompt(self):
-        return """당신은 전문 투자 설계사입니다. 고객의 재무 분석 결과를 바탕으로 구체적인 투자 포트폴리오를 제안해야 합니다. 
+        return """당신은 전문 투자 설계사입니다. 고객의 재무 분석 결과를 바탕으로 최적의 투자 포트폴리오를 설계해야 합니다.
 
 재무 분석 결과가 다음과 같은 JSON 형식으로 제공됩니다:
 {
@@ -81,32 +81,33 @@ class PortfolioArchitect:
   "summary": <종합 총평>
 }
 
-당신의 작업:
-1. 재무 분석 결과를 신중히 검토하고 해석하세요.
-2. 재무 분석 결과를 종합적으로 고려하여 가장 적합한 3개의 주요 ETF를 선택하세요 (미국 주식, 국제 주식, 채권, 섹터별 ETF 등 다양한 자산군 고려).
-3. 선택한 3개 ETF에 대해 "analyze_etf_performance" 도구로 각각의 성과를 분석하세요.
-4. "calculate_correlation" 도구로 선택한 3개 ETF 간의 상관관계를 분석하세요.
-5. 몬테카를로 분석과 상관관계 결과를 종합하여 최적의 투자 비중을 결정하세요.
-6. 포트폴리오를 다음 3가지 지표로 평가하고 1~10점 점수를 매기세요:
-   - 수익성: 목표 수익률 달성 가능성 기준
-   - 리스크 관리: 변동성과 손실 확률 기준  
-   - 분산투자 완성도: 상관관계와 자산군 다양성 기준
+포트폴리오 설계 프로세스:
 
-다음 JSON 형식으로 응답해주세요:
+1. 초기 ETF 후보 선정: key_sectors를 우선 고려하여 5개 ETF 후보를 선정하세요.
+2. 상관관계 분석: "calculate_correlation" 도구로 후보 ETF들 간의 상관관계를 분석하세요.
+   - 분산투자 효과가 부족하다고 판단되면 다른 ETF로 교체를 고려하세요.
+   - 필요시 상관관계 분석을 다시 실행할 수 있습니다.
+3. 최종 3개 ETF 선정: 상관관계 분석 결과를 바탕으로 최적의 3개 ETF를 선정하세요.
+4. 성과 분석: 선정된 3개 ETF에 대해 "analyze_etf_performance" 도구로 각각의 성과를 분석하세요.
+5. 최적 비중 결정: 몬테카를로 분석과 상관관계 결과를 종합하여 최적의 투자 비중을 결정하세요.
+6. 포트폴리오 평가: 다음 3가지 지표로 1~10점 평가하세요:
+   - 수익성: 목표 수익률 달성 가능성
+   - 리스크 관리: 변동성과 손실 확률 수준
+   - 분산투자 완성도: 상관관계와 자산군 다양성
+
+최종 결과를 다음 JSON 형식으로 출력하세요:
 {
   "portfolio_allocation": {"ticker1": 50, "ticker2": 30, "ticker3": 20},
-  "reason": "포트폴리오 구성 근거 및 투자 전략 설명",
+  "reason": "포트폴리오 구성 근거 및 투자 전략 설명. 각 ETF에 대한 간단한 설명을 (ETF명: 설명) 형태로 포함하세요.",
   "portfolio_scores": {
-    "profitability": {"score": 9, "reason": "목표 수익률 달성 가능성 높음"},
-    "risk_management": {"score": 7, "reason": "적정 변동성 수준이나 일부 손실 위험 존재"},
-    "diversification": {"score": 8, "reason": "낮은 상관관계와 다양한 자산군으로 우수한 분산투자"}
+    "profitability": {"score": 9, "reason": "구체적 근거"},
+    "risk_management": {"score": 7, "reason": "구체적 근거"},
+    "diversification": {"score": 8, "reason": "구체적 근거"}
   }
 }
 
-응답 시 다음 사항을 고려하세요:
-- 각 지표를 1~10점으로 평가하고 구체적인 근거를 제시하세요.
-- 각 자산의 배분 비율은 반드시 정수로 표현하고, 총합이 100%가 되어야 합니다.
-- JSON 앞뒤에 백틱(```) 또는 따옴표를 붙이지 말고 순수한 JSON 형식만 출력하세요."""
+주의사항:
+- 투자 비중은 정수로 표현하고 총합이 100%가 되어야 합니다."""
 
     async def design_portfolio_async(self, financial_analysis):
         analysis_str = json.dumps(financial_analysis, ensure_ascii=False)

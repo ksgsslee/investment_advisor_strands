@@ -289,7 +289,16 @@ st.markdown("**재무 분석 결과 입력**")
 risk_profile = st.text_input("위험 성향", value="공격적")
 risk_profile_reason = st.text_input("위험 성향 근거", value="35세, 공격적 투자 성향")
 required_return = st.number_input("필요 연간 수익률 (%)", value=40.0)
-return_rate_reason = st.text_input("수익률 근거", value="1년간 연평균 40.0% 수익률 필요")
+key_sectors = st.multiselect(
+    "추천 투자 분야", 
+    options=[
+        "기술주 (Technology)", "헬스케어 (Healthcare)", "금융 (Financial)", 
+        "소비재 (Consumer)", "에너지 (Energy)", "부동산 (Real Estate)", 
+        "유틸리티 (Utilities)", "산업재 (Industrial)", "원자재 (Materials)", 
+        "암호화폐 (Cryptocurrency)"
+    ],
+    default=["기술주 (Technology)", "헬스케어 (Healthcare)"]
+)
 summary = st.text_area("종합 총평", value="높은 목표 수익률을 위해 공격적 투자 전략이 필요합니다.")
 
 if st.button("분석 시작", use_container_width=True):
@@ -297,7 +306,7 @@ if st.button("분석 시작", use_container_width=True):
         "risk_profile": risk_profile,
         "risk_profile_reason": risk_profile_reason,
         "required_annual_return_rate": required_return,
-        "return_rate_reason": return_rate_reason,
+        "key_sectors": key_sectors,
         "summary": summary
     }
     

@@ -39,8 +39,14 @@ def display_financial_analysis(trace_container, result):
     
     with col2:
         st.metric("**필요 수익률**", f"{result.get('required_annual_return_rate', 'N/A')}%")
-        st.markdown("**수익률 분석**")
-        st.write(result.get("return_rate_reason", ""))
+        
+        # 추천 투자 섹터를 태그로 표시
+        st.markdown("**🎯 추천 투자 섹터**")
+        sectors = result.get("key_sectors", [])
+        tag_html = ""
+        for sector in sectors:
+            tag_html += f'<span style="background-color: #e8f5e8; color: #2e7d32; padding: 4px 8px; margin: 2px; border-radius: 12px; font-size: 12px; display: inline-block;">{sector}</span> '
+        st.markdown(tag_html, unsafe_allow_html=True)
 
 def display_calculator_result(trace_container, tool_input, result_text):
     """Calculator 도구 결과 표시"""
@@ -184,12 +190,14 @@ preferred_sectors = st.multiselect(
         "성장주 (기술/바이오)",
         "가치주 (저평가 우량주)", 
         "리츠 (부동산 투자)",
-        "ETF (분산 투자)",
-        "해외 주식",
+        "암호화폐 (디지털 자산)",
+        "글로벌 주식 (해외 분산)",
         "채권 (안전 자산)",
-        "원자재/금"
+        "원자재/금 (인플레이션 헤지)",
+        "ESG/친환경 (지속가능 투자)",
+        "인프라/유틸리티 (필수 서비스)"
     ],
-    default=["ETF (분산 투자)"]
+    default=["성장주 (기술/바이오)"]
 )
 
 submitted = st.button("분석 시작", use_container_width=True)

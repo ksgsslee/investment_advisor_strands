@@ -67,7 +67,7 @@ class FinancialAnalyst:
 "risk_profile": "매우 보수적|보수적|중립적|공격적|매우 공격적",
 "risk_profile_reason": "위험성향 평가 근거 (2-3문장)",
 "required_annual_return_rate": 수익률(소수점2자리),
-"return_rate_reason": "수익률 계산 과정",
+"key_sectors": ["추천 투자 섹터1", "추천 투자 섹터2", "추천 투자 섹터3"],
 "summary": "종합 총평 (3-4문장)"
 }"""
 

@@ -14,21 +14,10 @@ from bedrock_agentcore.memory import MemoryClient
 
 st.set_page_config(
     page_title="🤖 Investment Advisor",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 st.title("🤖 Investment Advisor")
-
-# 컨테이너 너비 조정을 위한 CSS
-st.markdown("""
-<style>
-    .main .block-container {
-        max-width: 1200px;
-        padding-left: 2rem;
-        padding-right: 2rem;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # 사이드바 메뉴
 menu = st.sidebar.selectbox(
@@ -490,7 +479,7 @@ def invoke_investment_advisor(input_data):
         # 모든 분석 완료 메시지를 results_container 맨 아래에 표시
         with results_container:
             st.success("🎉 모든 에이전트 분석 완료!")
-            st.info("💾 이 상담 내용은 AgentCore Memory에 자동으로 요약되어 저장됩니다. \n 좌측 📚 상담 히스토리 메뉴에서 확인하실 수 있습니다.")
+            st.info("💾 이 상담 내용은 AgentCore Memory에 자동으로 요약되어 저장됩니다. 좌측 📚 상담 히스토리 메뉴에서 확인하실 수 있습니다.")
 
         return {"status": "success"}
         

@@ -14,8 +14,23 @@ import pandas as pd
 from pathlib import Path
 from bedrock_agentcore.memory import MemoryClient
 
-st.set_page_config(page_title="🤖 Investment Advisor")
+st.set_page_config(
+    page_title="🤖 Investment Advisor",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 st.title("🤖 Investment Advisor")
+
+# 컨테이너 너비 조정을 위한 CSS
+st.markdown("""
+<style>
+    .main .block-container {
+        max-width: 1200px;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # 사이드바 메뉴
 menu = st.sidebar.selectbox(
@@ -330,7 +345,6 @@ def display_risk_analysis_result(container, analysis_content):
                     st.markdown("**조정 이유 및 전략**")
                     st.info(scenario.get('reason', '근거 없음'))
 
-                container.divider()
         
     except Exception as e:
         container.error(f"리스크 분석 표시 오류: {str(e)}")
@@ -366,6 +380,7 @@ def invoke_investment_advisor(input_data):
                         if current_agent and current_agent in current_thinking:
                             current_thinking[current_agent] += chunk_data
                             if current_thinking[current_agent].strip() and current_agent in current_text_placeholders:
+                                # expander 내부에서 채팅 형태로 표시
                                 with current_text_placeholders[current_agent].chat_message("assistant"):
                                     st.markdown(current_thinking[current_agent])
                     
@@ -435,12 +450,11 @@ def invoke_investment_advisor(input_data):
                             "risk": "⚠️ 리스크 매니저"
                         }
                         
-                        with progress_container:
-                            st.info(f"{agent_display_names.get(agent_name, agent_name)} 분석 시작...")
-                        
                         agent_containers[agent_name] = results_container.container()
-                        agent_thinking_containers[agent_name] = agent_containers[agent_name].container()
-                        agent_thinking_containers[agent_name].subheader(f"AI 분석 과정")
+                        
+                        # 사고과정을 expander로 감싸기
+                        thinking_expander = agent_containers[agent_name].expander(f"🧠 Reasoning {agent_display_names.get(agent_name, agent_name)}", expanded=True)
+                        agent_thinking_containers[agent_name] = thinking_expander.container()
                         
                         current_thinking[agent_name] = ""
                         current_text_placeholders[agent_name] = agent_thinking_containers[agent_name].empty()
@@ -452,27 +466,29 @@ def invoke_investment_advisor(input_data):
                         if agent_name in agent_containers and result:
                             container = agent_containers[agent_name]
                             
-                            container.divider()
+                            # 최종 결과는 expander 밖에 표시 (메인 영역)
                             if agent_name == "financial":
                                 container.subheader("📌 재무 분석 결과")
                                 display_financial_analysis(container, result)
+                                container.divider()
                                 
                             elif agent_name == "portfolio":
                                 container.subheader("📌 포트폴리오 설계 결과")
                                 display_portfolio_result(container, result)
+                                container.divider()
                                 
                             elif agent_name == "risk":
                                 container.subheader("📌 리스크 분석 및 시나리오 플래닝")
                                 display_risk_analysis_result(container, result)
+                                container.divider()
                         
                         with progress_container:
                             agent_display_names = {
-                                "financial": "🔍 재무 분석가",
-                                "portfolio": "📊 포트폴리오 아키텍트", 
-                                "risk": "⚠️ 리스크 매니저"
+                                "financial": "Financial Analyst",
+                                "portfolio": "Portfolio Architect", 
+                                "risk": "Risk Manager"
                             }
-                            st.success(f"{agent_display_names.get(agent_name, agent_name)} 분석 완료!")
-                            
+
                     elif event_type == "error":
                         return {"status": "error", "error": event_data.get("error", "Unknown error")}
                         

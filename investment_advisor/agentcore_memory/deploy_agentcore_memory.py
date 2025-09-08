@@ -29,12 +29,22 @@ def deploy_memory():
             memory_id = existing_memory['id']
             print(f"✅ 기존 메모리 사용: {memory_id}")
         else:
-            # 새 메모리 생성
+            # 새 메모리 생성 - SUMMARY 전략으로 Long-term 자동 요약
+            from bedrock_agentcore.memory.constants import StrategyType
+            
             memory = memory_client.create_memory_and_wait(
                 name=Config.MEMORY_NAME,
-                description="Investment Advisor Thinking Process",
-                strategies=[],
-                event_expiry_days=7,
+                description="Investment Advisor - Session-based conversation summary",
+                strategies=[
+                    {
+                        StrategyType.SUMMARY.value: {
+                            "name": "InvestmentSessionSummary",
+                            "description": "Auto-summarizes entire investment consultation session",
+                            "namespaces": ["investment/session/{sessionId}"]
+                        }
+                    }
+                ],
+                event_expiry_days=7,   # Short-term 보존 기간
                 max_wait=300,
                 poll_interval=10
             )

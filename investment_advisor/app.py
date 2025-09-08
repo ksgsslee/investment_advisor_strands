@@ -4,6 +4,7 @@ Multi-Agent 투자 자문 시스템 웹 인터페이스
 """
 
 import streamlit as st
+import os
 import json
 import boto3
 import plotly.graph_objects as go
@@ -533,8 +534,8 @@ def load_long_term_summaries():
 
 # 메뉴별 UI 구성
 if menu == "🤖 새로운 투자 상담":
-    with st.expander("🏗️ Multi-Agent 아키텍처", expanded=False):
-        st.image(os.path.join("../static/investment_advisor.png"), width=500)
+    with st.expander("🏗️ Investment Advisor 아키텍처", expanded=False):
+        st.image(os.path.join("../static/investment_advisor.png"))
 
 
     st.markdown("**투자자 정보 입력**")

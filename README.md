@@ -108,7 +108,7 @@ graph LR
 **구조**:
 - **AgentCore Runtime**: 서버리스 에이전트 호스팅
 - **도구**: Calculator (정확한 수익률 계산)
-- **AI 모델**: Claude 3.7 Sonnet
+- **AI 모델**: OpenAI GPT-OSS 120B
 
 **처리 과정**:
 1. 사용자 입력 데이터 분석 (나이, 투자경험, 투자금액, 목표금액)
@@ -407,7 +407,11 @@ python cleanup_all.py
 ### 핵심 기술
 - **AI Framework**: Strands Agents SDK + LangGraph
 - **Infrastructure**: AWS Bedrock AgentCore (Runtime, Gateway, Memory, Observability)
-- **LLM**: Claude 3.7 Sonnet
+- **LLM**: 
+  - Financial Analyst: OpenAI GPT-OSS 120B
+  - Portfolio Architect: Claude 3.7 Sonnet
+  - Risk Manager: Claude 3.7 Sonnet
+  - Investment Advisor: Claude 3.7 Sonnet (다른 에이전트 호출)
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **Authentication**: Cognito JWT OAuth2
 - **UI**: Streamlit (실시간 스트리밍 지원)

@@ -43,7 +43,7 @@ graph TB
 ### 기술 스택
 - **AI Framework**: Strands Agents SDK
 - **Infrastructure**: AWS Bedrock AgentCore Runtime (서버리스)
-- **LLM**: Claude 3.7 Sonnet (설정 가능)
+- **LLM**: OpenAI GPT-OSS 120B
 - **Tools**: Calculator (수익률 계산)
 - **UI**: Streamlit
 
@@ -127,7 +127,7 @@ sequenceDiagram
 ```python
 # financial_analyst.py
 class Config:
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # 원하는 모델로 변경
+    MODEL_ID = "openai.gpt-oss-120b-1:0"  # 원하는 모델로 변경
     TEMPERATURE = 0.1
     MAX_TOKENS = 3000
 ```

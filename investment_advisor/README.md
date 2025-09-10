@@ -82,7 +82,7 @@ workflow.add_edge("risk", END)
 ### 기술 스택
 - **AI Framework**: LangGraph + Strands Agents SDK
 - **Infrastructure**: AWS Bedrock AgentCore Runtime + Memory
-- **LLM**: Claude 3.7 Sonnet
+- **LLM**: 다른 에이전트 호출 (자체 모델 없음)
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **UI**: Streamlit
 
@@ -161,11 +161,11 @@ streamlit run app.py
 
 ## 🔧 커스터마이징
 
-### 모델 변경
+### 설정 변경
 ```python
 # investment_advisor.py
 class Config:
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # 원하는 모델로 변경
+    REGION = "us-west-2"  # AWS 리전 변경
 ```
 
 ### Memory 조회

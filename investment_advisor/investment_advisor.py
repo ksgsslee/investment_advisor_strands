@@ -2,7 +2,7 @@
 investment_advisor.py
 
 LangGraph 기반 Investment Advisor
-AgentCore Memory의 USER_PREFERENCE 전략을 활용한 자동 요약 시스템
+AgentCore Memory의 SUMMARY 전략을 활용한 자동 요약 시스템
 """
 
 import json
@@ -18,7 +18,10 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from bedrock_agentcore.memory import MemoryClient
 
 app = BedrockAgentCoreApp()
-REGION = "us-west-2"
+
+class Config:
+    """Investment Advisor 설정"""
+    REGION = "us-west-2"
 
 class InvestmentState(TypedDict):
     user_input: Dict[str, Any]
@@ -29,8 +32,8 @@ class InvestmentState(TypedDict):
 
 class AgentClient:
     def __init__(self):
-        self.client = boto3.client('bedrock-agentcore', region_name=REGION)
-        self.memory_client = MemoryClient(region_name=REGION)
+        self.client = boto3.client('bedrock-agentcore', region_name=Config.REGION)
+        self.memory_client = MemoryClient(region_name=Config.REGION)
         self.arns = self._load_agent_arns()
         self.memory_id = self._load_memory_id()
     
@@ -96,26 +99,16 @@ class AgentClient:
         return final_result
 
     def save_to_memory(self, session_id, agent_type, user_input, agent_result):
-        """
-        세션별 대화로 저장 - 3개 에이전트 결과를 하나의 대화 이벤트로 처리
-        Short-term: 각 에이전트 결과를 개별 이벤트로 저장
-        Long-term: SUMMARY 전략이 전체 세션을 하나로 요약
-        """
+        """세션별 대화로 저장 - SUMMARY 전략이 전체 세션을 자동 요약"""
         if not self.memory_id or not agent_result:
             return
         
         try:
-            # 입력을 문자열로 변환
-            if isinstance(user_input, dict):
-                input_text = f"투자 상담 요청: {json.dumps(user_input, ensure_ascii=False)}"
-            else:
-                input_text = str(user_input)
+            input_text = json.dumps(user_input, ensure_ascii=False) if isinstance(user_input, dict) else str(user_input)
             
-            # 세션별로 하나의 대화 - 각 에이전트를 대화의 한 턴으로 처리
-            # SUMMARY 전략이 investment/session/{sessionId} 네임스페이스에 전체 세션 요약 생성
             self.memory_client.create_event(
                 memory_id=self.memory_id,
-                actor_id="investment_user",  # 모든 에이전트가 같은 사용자와 대화
+                actor_id="investment_user",
                 session_id=session_id,
                 messages=[
                     (f"{agent_type} 분석 요청: {input_text}", "USER"),

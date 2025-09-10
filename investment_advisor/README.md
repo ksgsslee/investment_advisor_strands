@@ -4,13 +4,8 @@
 
 3개의 전문 AI 에이전트가 LangGraph 워크플로우로 협업하여 종합적인 투자 분석을 제공하고, AgentCore Memory를 통해 상담 히스토리를 자동으로 관리하는 엔터프라이즈급 투자 자문 시스템입니다.
 
-## 🎯 개요
-
-Financial Analyst, Portfolio Architect, Risk Manager 3개 에이전트의 전문 분석을 LangGraph로 순차 실행하여 완전 자동화된 투자 자문 서비스를 제공합니다.
-
 ## 🎯 핵심 기능
 
-### 핵심 기능
 - **LangGraph 워크플로우**: 3개 에이전트의 순차적 협업 시스템
 - **실시간 스트리밍**: 각 에이전트의 사고 과정과 도구 사용을 실시간 시각화
 - **AgentCore Memory**: SUMMARY 전략으로 상담 히스토리 자동 요약 및 영구 보존
@@ -90,292 +85,118 @@ workflow.add_edge("risk", END)
 ```
 
 ### 기술 스택
-- **AI Framework**: LangGraph (워크플로우 관리) + Strands Agents SDK
+- **AI Framework**: LangGraph + Strands Agents SDK
 - **Infrastructure**: AWS Bedrock AgentCore Runtime + Memory
-- **LLM**: Claude 3.7 Sonnet (각 에이전트별 설정 가능)
+- **LLM**: Claude 3.7 Sonnet
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
-- **UI**: Streamlit (실시간 스트리밍 지원)
+- **UI**: Streamlit
 
-### 에이전트별 역할 및 도구
+### 에이전트 워크플로우
 
-#### **1단계: Financial Analyst** (Reflection Pattern)
-- **역할**: 재무 분석 및 위험 성향 평가
-- **도구**: Calculator (정확한 수익률 계산)
-- **입력**: 사용자 기본 정보 (나이, 투자경험, 투자금액, 목표금액)
-- **출력**: 위험 성향, 필요 수익률, 추천 투자 섹터
-
-#### **2단계: Portfolio Architect** (Tool Use Pattern)
-- **역할**: 실시간 ETF 데이터 기반 포트폴리오 설계
-- **도구**: MCP Server (yfinance 기반 ETF 분석)
-  - `analyze_etf_performance`: 몬테카를로 시뮬레이션 (1000회)
-  - `calculate_correlation`: ETF 간 상관관계 분석
-- **입력**: Financial Analyst 결과
-- **출력**: 3개 ETF 포트폴리오 배분 + 평가 점수
-
-#### **3단계: Risk Manager** (Planning Pattern)
-- **역할**: 뉴스 기반 리스크 분석 및 시나리오 플래닝
-- **도구**: MCP Gateway (Lambda 함수 연동)
-  - `get_product_news`: ETF별 최신 뉴스 5개
-  - `get_market_data`: 거시경제 지표 7개 (금리, 달러, VIX, 원유, 금, S&P500)
-  - `get_geopolitical_indicators`: 지역별 ETF 5개 (중국, 신흥국, 유럽, 일본, 한국)
-- **입력**: Portfolio Architect 결과
-- **출력**: 2개 경제 시나리오별 포트폴리오 조정 전략
+1. **Financial Analyst** → 재무 분석 및 위험 성향 평가 (Calculator 도구)
+2. **Portfolio Architect** → 실시간 ETF 데이터 기반 포트폴리오 설계 (MCP Server)
+3. **Risk Manager** → 뉴스 기반 리스크 분석 및 시나리오 플래닝 (MCP Gateway)
 
 ## 🚀 배포 및 실행
 
-### 1. 환경 설정
-```bash
-# 루트 폴더에서 의존성 설치
-cd ..
-pip install -r requirements.txt
-
-# AWS 자격 증명 설정
-aws configure
-
-# investment_advisor 폴더로 이동
-cd investment_advisor
-```
-
-### 2. 사전 요구사항 (3개 에이전트 배포)
+### 1. 사전 요구사항
 모든 개별 에이전트가 먼저 배포되어 있어야 합니다:
 
 ```bash
-# 1. Financial Analyst 배포
-cd ../financial_analyst
-python deploy.py
+# 1. Financial Analyst
+cd financial_analyst && python deploy.py
 
-# 2. Portfolio Architect 배포 (MCP Server 포함)
-cd ../portfolio_architect/mcp_server
-python deploy_mcp.py
-cd ..
-python deploy.py
+# 2. Portfolio Architect (MCP Server 포함)
+cd ../portfolio_architect/mcp_server && python deploy_mcp.py
+cd .. && python deploy.py
 
-# 3. Risk Manager 배포 (4단계 순차 배포)
-cd ../risk_manager/lambda_layer
-python deploy_lambda_layer.py
-cd ../lambda
-python deploy_lambda.py
-cd ../gateway
-python deploy_gateway.py
-cd ..
-python deploy.py
+# 3. Risk Manager (4단계 순차 배포)
+cd ../risk_manager/lambda_layer && python deploy_lambda_layer.py
+cd ../lambda && python deploy_lambda.py
+cd ../gateway && python deploy_gateway.py
+cd .. && python deploy.py
 ```
 
-### 3. AgentCore Memory 배포
+### 2. Investment Advisor 배포
 ```bash
-# Memory 먼저 배포 (필수)
-cd agentcore_memory
+# Memory 먼저 배포
+cd investment_advisor/agentcore_memory
 python deploy_agentcore_memory.py
 
-# Memory 배포 확인
-cat deployment_info.json
-```
+# Investment Advisor Runtime 배포
+cd .. && python deploy.py
 
-### 4. Investment Advisor Runtime 배포
-```bash
-# 다른 에이전트 ARN 자동 로드하여 배포
-cd ..
-python deploy.py
-
-# 배포 상태 확인
-cat deployment_info.json
-```
-
-### 5. Streamlit 앱 실행
-```bash
-# 웹 애플리케이션 실행
+# Streamlit 앱 실행
 streamlit run app.py
-
-# 브라우저에서 http://localhost:8501 접속
 ```
 
 ## 📊 사용 방법
 
-### 1. 새로운 투자 상담
-- **투자자 정보 입력**: 나이, 투자 경험, 투자 금액, 목표 금액, 투자 목적, 관심 분야
-- **LangGraph 워크플로우 실행**: 3개 에이전트 순차 실행
-- **실시간 모니터링**: 각 에이전트의 사고 과정과 도구 사용 과정 실시간 확인
-- **종합 결과 확인**: 재무 분석 → 포트폴리오 설계 → 리스크 시나리오 순차 표시
+### 새로운 투자 상담
+1. 투자자 정보 입력 (나이, 투자 경험, 투자 금액, 목표 금액 등)
+2. LangGraph 워크플로우 실행 (3개 에이전트 순차 실행)
+3. 실시간 모니터링 (각 에이전트의 사고 과정 확인)
+4. 종합 결과 확인 (재무 분석 → 포트폴리오 설계 → 리스크 시나리오)
 
-### 2. 상담 히스토리 (Long-term Memory)
-- **자동 요약**: AgentCore SUMMARY 전략이 전체 상담 세션을 자동 요약
-- **영구 보존**: 중요한 투자 상담 내용을 장기간 보존
-- **검색 가능**: 과거 상담 내용을 쉽게 검색하고 참조
+### 상담 히스토리
+- AgentCore SUMMARY 전략이 전체 상담 세션을 자동 요약
+- 중요한 투자 상담 내용을 장기간 보존
+- 과거 상담 내용을 쉽게 검색하고 참조
 
-## 📋 입력/출력 명세
+## 📋 입력/출력
 
 ### 입력 정보
-- **투자 가능 금액**: 억원 단위 (예: 0.5 = 5천만원)
-- **목표 금액**: 1년 후 목표 금액
-- **나이**: 연령대 선택
-- **투자 경험**: 주식 투자 경험 연수
-- **투자 목적**: 단기 수익, 노후 준비 등
-- **관심 분야**: 10개 투자 섹터 중 복수 선택
+- 투자 가능 금액, 목표 금액 (억원 단위)
+- 나이, 투자 경험 연수
+- 투자 목적, 관심 투자 분야
 
 ### 처리 흐름
-```mermaid
-sequenceDiagram
-    participant U as 사용자
-    participant S as Streamlit
-    participant L as LangGraph
-    participant FA as Financial Analyst
-    participant PA as Portfolio Architect
-    participant RM as Risk Manager
-    participant M as AgentCore Memory
-    
-    U->>S: 투자 정보 입력
-    S->>L: LangGraph 워크플로우 시작
-    
-    L->>FA: 1단계: 재무 분석 요청
-    FA->>FA: Calculator로 수익률 계산
-    FA-->>L: 위험 성향 + 목표 수익률
-    
-    L->>PA: 2단계: 포트폴리오 설계 요청
-    PA->>PA: MCP Server로 ETF 분석
-    PA-->>L: 포트폴리오 배분 + 평가
-    
-    L->>RM: 3단계: 리스크 분석 요청
-    RM->>RM: MCP Gateway로 뉴스/시장/지정학적 데이터 분석
-    RM-->>L: 2개 시나리오별 조정 전략
-    
-    L->>M: 세션별 결과 저장
-    M->>M: SUMMARY 전략으로 자동 요약
-    L-->>S: 전체 결과 반환
-    S-->>U: 실시간 시각화 표시
-```
+1. **Financial Analyst**: Calculator로 수익률 계산 → 위험 성향 평가
+2. **Portfolio Architect**: MCP Server로 ETF 분석 → 포트폴리오 배분
+3. **Risk Manager**: MCP Gateway로 뉴스/시장 데이터 분석 → 리스크 시나리오
+4. **Memory**: SUMMARY 전략으로 상담 세션 자동 요약
 
 ## 🧠 AgentCore Memory 시스템
 
-### SUMMARY 전략 자동 요약
+### SUMMARY 전략
+- 전체 투자 상담 세션을 자동 요약
+- Short-term: 각 에이전트 결과를 세션별 대화로 저장
+- Long-term: SUMMARY 전략이 전체 세션을 자동 요약하여 영구 보존
+- 네임스페이스: `investment/session/{sessionId}` 구조
+
+## 🔧 커스터마이징
+
+### 모델 변경
 ```python
-# agentcore_memory/deploy_agentcore_memory.py
-strategies=[
-    {
-        StrategyType.SUMMARY.value: {
-            "name": "InvestmentSessionSummary",
-            "description": "Auto-summarizes entire investment consultation session",
-            "namespaces": ["investment/session/{sessionId}"]
-        }
-    }
-]
+# investment_advisor.py
+class Config:
+    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # 원하는 모델로 변경
 ```
 
-### 메모리 저장 구조
-- **Short-term Memory**: 각 에이전트 결과를 세션별 대화로 저장 (7일 보존)
-- **Long-term Memory**: SUMMARY 전략이 전체 세션을 자동 요약하여 영구 보존
-- **네임스페이스**: `investment/session/{sessionId}` 구조로 세션별 관리
-
-## 🔧 고급 설정
-
-### 에이전트 호출 최적화
-각 에이전트는 `streaming_complete` 이벤트에 최종 결과를 포함하여 효율적인 데이터 추출이 가능합니다:
-
+### Memory 조회
 ```python
-class ExternalAgentCaller:
-    def call_financial_analyst(self, user_input):
-        """Financial Analyst 호출 - streaming_complete에서 최종 결과 추출"""
-        try:
-            response = self.agentcore_client.invoke_agent_runtime(
-                agentRuntimeArn=self.financial_analyst_arn,
-                qualifier="DEFAULT",
-                payload=json.dumps({"input_data": user_input})
-            )
-            
-            # 공통 유틸리티로 streaming_complete에서 최종 결과 추출
-            result = extract_final_result_from_streaming(response["response"])
-            
-            if result is None:
-                raise Exception("유효한 결과를 받지 못했습니다.")
-            
-            return result
-            
-        except Exception as e:
-            raise Exception(f"Financial Analyst 호출 실패: {str(e)}")
+# Short-term: 세션별 상세 결과
+memory_client.get_events(memory_id=memory_id, session_id=session_id)
+
+# Long-term: SUMMARY 조회
+memory_client.search(memory_id=memory_id, query="investment analysis summary")
 ```
 
-### 공통 JSON 유틸리티 활용
-`shared/json_utils.py`에서 제공하는 공통 함수들을 활용합니다:
-
-```python
-from json_utils import extract_final_result_from_streaming, extract_json_from_text
-
-# 스트리밍 응답에서 최종 결과 추출
-result = extract_final_result_from_streaming(response_stream)
-
-# 텍스트에서 JSON 추출
-json_data = extract_json_from_text(text_content)
-```
-
-### 리포트 생성 프롬프트 수정
-`get_report_prompt()` 함수에서 리포트 형식을 커스터마이징할 수 있습니다.
-
-### 순차 호출 최적화
-순차 호출 성능을 위한 최적화 방법:
-
-```python
-# 각 단계별 진행 상황 스트리밍
-async for event in advisor.run_comprehensive_analysis_async(user_input, user_id):
-    if event["type"] == "step_start":
-        print(f"시작: {event['message']}")
-    elif event["type"] == "step_complete":
-        print(f"완료: {event['step']}")
-    elif event["type"] == "analysis_complete":
-        print("전체 분석 완료!")
-```
-
-### Memory 검색 최적화
-메모리 조회 방법:
-
-```python
-# Short-term: 세션별 상세 결과 조회
-short_term_results = memory_client.get_events(
-    memory_id=memory_id,
-    session_id=session_id  # 동일한 세션 ID 사용
-)
-
-# Long-term: 매니지드 SUMMARY 조회
-long_term_summaries = memory_client.search(
-    memory_id=memory_id,
-    query="investment analysis summary",
-    namespace="investment/investment_*/long_term"
-)
-```
-
-## 🔍 모니터링 및 디버깅
+## 🔍 모니터링
 
 ### 로그 확인
 ```bash
-# Runtime 로그 확인
 aws logs tail /aws/lambda/investment-advisor-runtime --follow
-
-# 각 에이전트별 로그 확인
-aws logs tail /aws/lambda/financial-analyst-runtime --follow
-aws logs tail /aws/lambda/portfolio-architect-runtime --follow
-aws logs tail /aws/lambda/risk-manager-runtime --follow
 ```
 
 ### 성능 메트릭
-- **전체 실행 시간**: 평균 60-120초 (순차 호출)
-- **호출 오버헤드**: 최소 (직접 호출)
-- **Memory 저장 시간**: 평균 2-5초
-- **성공률**: 95%+ (모든 에이전트가 정상 배포된 경우)
-- **비용**: 요청당 약 $0.15-0.30 (모든 에이전트 + 리포트 생성 + Memory 저장)
-
-### 실행 상태 모니터링
-```python
-# 각 단계별 상태 확인
-async for event in advisor.run_comprehensive_analysis_async(user_input, user_id):
-    print(f"Type: {event['type']}")
-    print(f"Message: {event.get('message', '')}")
-    if event['type'] == 'analysis_complete':
-        print(f"Session ID: {event.get('session_id')}")
-        print(f"Final Report: {event.get('final_report')}")
-```
+- 전체 실행 시간: 60-120초 (순차 호출)
+- Memory 저장 시간: 2-5초
+- 성공률: 95%+ (모든 에이전트 정상 배포 시)
 
 ### 문제 해결
-1. **에이전트 호출 실패**: 개별 에이전트 배포 상태 확인
-2. **Memory 저장 실패**: IAM 권한 및 Memory 설정 확인
-3. **리포트 생성 실패**: 입력 데이터 형식 및 프롬프트 확인
+1. 에이전트 호출 실패 → 개별 에이전트 배포 상태 확인
+2. Memory 저장 실패 → IAM 권한 및 Memory 설정 확인
 
 ## 📁 프로젝트 구조
 
@@ -403,13 +224,10 @@ investment_advisor/
 
 ## 🎉 주요 장점
 
-✅ **LangGraph 워크플로우**: 명확한 상태 관리와 에이전트 간 데이터 흐름  
-✅ **실시간 스트리밍**: 각 에이전트의 사고 과정과 도구 사용을 실시간 시각화  
-✅ **완전 자동화**: 사용자 입력만으로 3단계 전문 분석 완료  
-✅ **지능형 메모리**: SUMMARY 전략으로 상담 히스토리 자동 요약 및 영구 보존  
-✅ **엔터프라이즈급**: 각 에이전트가 독립 배포되어 확장성과 유지보수성 확보  
-✅ **종합 분석**: 재무 → 포트폴리오 → 리스크의 체계적 투자 자문 프로세스  
-✅ **실시간 UI**: 도구 호출 결과를 즉시 차트와 표로 시각화  
-✅ **테스트 지원**: 시스템 검증을 위한 완전한 테스트 코드 제공  
+- **LangGraph 워크플로우**: 명확한 상태 관리와 에이전트 간 데이터 흐름
+- **실시간 스트리밍**: 각 에이전트의 사고 과정과 도구 사용을 실시간 시각화
+- **완전 자동화**: 사용자 입력만으로 3단계 전문 분석 완료
+- **지능형 메모리**: SUMMARY 전략으로 상담 히스토리 자동 요약 및 영구 보존
+- **엔터프라이즈급**: 각 에이전트가 독립 배포되어 확장성과 유지보수성 확보
 
 Investment Advisor는 **LangGraph + AgentCore Memory**를 활용한 차세대 Multi-Agent 투자 자문 시스템으로, 3개 전문 에이전트의 협업을 통해 은행급 투자 서비스를 제공합니다! 🚀

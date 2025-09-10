@@ -35,7 +35,7 @@ class FinancialAnalyst:
     """Calculator 도구를 활용한 AI 재무 분석사"""
     
     def __init__(self):
-        self.analyst_agent = Agent(
+        self.agent = Agent(
             name="financial_analyst",
             model=BedrockModel(
                 model_id=Config.MODEL_ID,
@@ -43,10 +43,10 @@ class FinancialAnalyst:
                 max_tokens=Config.MAX_TOKENS
             ),
             tools=[calculator],
-            system_prompt=self._get_analyst_prompt()
+            system_prompt=self._get_prompt()
         )
         
-    def _get_analyst_prompt(self) -> str:
+    def _get_prompt(self) -> str:
         return """재무분석 전문가로서 개인 맞춤형 투자 분석을 수행합니다.
 
 입력 데이터:
@@ -76,7 +76,7 @@ class FinancialAnalyst:
         try:
             user_input_str = json.dumps(user_input, ensure_ascii=False)
 
-            async for event in self.analyst_agent.stream_async(user_input_str):
+            async for event in self.agent.stream_async(user_input_str):
                 if "data" in event:
                     yield {"type": "text_chunk", "data": event["data"]}
                 

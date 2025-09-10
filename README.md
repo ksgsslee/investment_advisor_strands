@@ -4,12 +4,12 @@
 
 ## 🎯 프로젝트 개요
 
-이 프로젝트는 **Agentic AI의 4가지 핵심 패턴**과 **AWS Bedrock AgentCore 서비스**를 완벽하게 매핑하여 개인 맞춤형 투자 포트폴리오를 제안하는 엔터프라이즈급 시스템입니다:
+**Agentic AI의 4가지 핵심 패턴**과 **AWS Bedrock AgentCore 서비스**를 완벽하게 매핑한 엔터프라이즈급 투자 자문 시스템:
 
-- **Reflection Pattern** + **AgentCore Runtime**: 재무 분석 결과의 자체 검증 및 서버리스 배포
-- **Tool Use Pattern** + **AgentCore Gateway**: 다양한 금융 API의 통합 MCP 인터페이스
+- **Reflection Pattern** + **AgentCore Runtime**: 재무 분석 결과 자체 검증 및 서버리스 배포
+- **Tool Use Pattern** + **AgentCore Gateway**: 금융 API의 통합 MCP 인터페이스
 - **Planning Pattern** + **AgentCore Tools**: 웹 크롤링과 고급 분석을 통한 리스크 시나리오 계획
-- **Multi-Agent Pattern** + **AgentCore Memory**: 개인화된 장기 메모리 기반 에이전트 협업
+- **Multi-Agent Pattern** + **AgentCore Memory**: 장기 메모리 기반 에이전트 협업
 
 ## 🏗️ AgentCore 서비스 아키텍처
 
@@ -38,86 +38,71 @@ graph TD
 
 ### 🎯 AgentCore 서비스별 역할
 
-| Lab | AgentCore 서비스 | 핵심 기능 | 시연 포인트 |
-|-----|-----------------|----------|------------|
-| **Lab 1** | **Runtime** | 서버리스 에이전트 배포 | Reflection Pattern + 프로덕션 배포 |
-| **Lab 2** | **Gateway** | 다양한 API 통합 | 실시간 금융 데이터 MCP 도구화 |
-| **Lab 3** | **Tools** | 고급 분석 도구 | 웹 크롤링 + 복잡한 계산 |
-| **Lab 4** | **Memory** | 개인화 및 학습 | 장기 메모리 기반 맞춤 서비스 |
+| Lab | AgentCore 서비스 | 핵심 기능 |
+|-----|-----------------|----------|
+| **Lab 1** | **Runtime** | 서버리스 에이전트 배포 |
+| **Lab 2** | **Gateway** | 다양한 API 통합 |
+| **Lab 3** | **Tools** | 고급 분석 도구 |
+| **Lab 4** | **Memory** | 개인화 및 학습 |
 
-## 📋 Lab 구성 (AgentCore 서비스 매핑)
+## 📋 Lab 구성
 
-### Lab 1: 재무 분석가 (Reflection Pattern + AgentCore Runtime)
-- **AgentCore 서비스**: **Runtime** - 서버리스 에이전트 호스팅
-- **패턴**: Reflection - AI가 자신의 분석 결과를 검증
-- **구현**: `FinancialAnalyst` + `ReflectionAgent` → AgentCore Runtime 배포
-- **핵심 기능**: 프로덕션 준비된 서버리스 재무 분석 서비스
+### Lab 1: Financial Analyst (Reflection Pattern + AgentCore Runtime)
+- Calculator 도구를 활용한 정확한 재무 분석 및 위험 성향 평가
+- 서버리스 에이전트 호스팅으로 프로덕션 준비된 분석 서비스
 
-### Lab 2: 포트폴리오 설계사 (Tool Use Pattern + AgentCore Gateway + Identity)  
-- **AgentCore 서비스**: **Gateway + Identity** - API 통합 및 보안 인증
-- **패턴**: Tool Use - 외부 API 및 데이터 소스 활용
-- **구현**: `PortfolioArchitect` + 보안 금융 API 통합 (Bloomberg, Alpha Vantage, FRED 등)
-- **핵심 기능**: 엔터프라이즈급 보안을 갖춘 실시간 시장 데이터 기반 포트폴리오 설계
+### Lab 2: Portfolio Architect (Tool Use Pattern + AgentCore Gateway)
+- MCP Server 연동으로 실시간 ETF 데이터 기반 포트폴리오 설계
+- 엔터프라이즈급 보안을 갖춘 실시간 시장 데이터 통합
 
-### Lab 3: 리스크 관리사 (Planning Pattern + AgentCore Tools)
-- **AgentCore 서비스**: **Tools** - Browser Tool + Code Interpreter
-- **패턴**: Planning - 체계적인 워크플로우 기반 분석
-- **구현**: `RiskManager` + 웹 크롤링 + 고급 리스크 계산
-- **핵심 기능**: 실시간 뉴스 분석과 복잡한 수학적 리스크 모델링
+### Lab 3: Risk Manager (Planning Pattern + AgentCore Tools)
+- MCP Gateway를 통한 뉴스 분석과 복잡한 수학적 리스크 모델링
+- 체계적인 워크플로우 기반 리스크 시나리오 플래닝
 
-### Lab 4: 투자 어드바이저 (Multi-Agent Pattern + AgentCore Memory)
-- **AgentCore 서비스**: **Memory** - 장기 메모리 및 개인화
-- **패턴**: Multi-Agent - 여러 전문가 에이전트 협업
-- **구현**: `InvestmentAdvisor` + 사용자별 학습 메모리
-- **핵심 기능**: 개인화된 투자 전략 및 장기 관계 구축
+### Lab 4: Investment Advisor (Multi-Agent Pattern + AgentCore Memory)
+- LangGraph 기반 3개 에이전트 협업 시스템
+- SUMMARY 전략을 통한 개인화된 투자 전략 및 장기 관계 구축
 
 ## 🚀 설치 및 실행
 
 ### 1. 환경 설정
-
 ```bash
-# 저장소 클론
+# 저장소 클론 및 패키지 설치
 git clone <repository-url>
 cd investment_advisor_strands
-
-# 가상환경 생성 및 활성화
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 패키지 설치
 pip install -r requirements.txt
+
+# AWS 자격 증명 설정
+aws configure
 ```
 
-### 2. API 키 설정
-
+### 2. 순차 배포
 ```bash
-# .env 파일 생성
-cp .env.example .env
+# Lab 1: Financial Analyst
+cd financial_analyst && python deploy.py
 
-# .env 파일 편집하여 API 키 입력
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# Lab 2: Portfolio Architect (MCP Server 포함)
+cd ../portfolio_architect/mcp_server && python deploy_mcp.py
+cd .. && python deploy.py
+
+# Lab 3: Risk Manager (4단계 순차 배포)
+cd ../risk_manager/lambda_layer && python deploy_lambda_layer.py
+cd ../lambda && python deploy_lambda.py
+cd ../gateway && python deploy_gateway.py
+cd .. && python deploy.py
+
+# Lab 4: Investment Advisor (Memory 포함)
+cd ../investment_advisor/agentcore_memory && python deploy_agentcore_memory.py
+cd .. && python deploy.py
 ```
 
-### 3. 개별 Lab 테스트
-
+### 3. 웹 앱 실행
 ```bash
-# 전체 Lab 순차 테스트
-python test_agents.py
-
-# 개별 Lab 테스트
-python -m agents.lab1_financial_analyst
-python -m agents.lab2_portfolio_architect  
-python -m agents.lab3_risk_manager
-python -m agents.lab4_investment_advisor
+cd investment_advisor
+streamlit run app.py
 ```
-
-### 4. Streamlit 앱 실행
-
-```bash
-streamlit run streamlit_app.py
-```
-
-브라우저에서 `http://localhost:8501`로 접속하여 웹 인터페이스를 사용할 수 있습니다.
 
 ## 📊 사용 방법
 

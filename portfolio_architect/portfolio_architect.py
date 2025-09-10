@@ -30,14 +30,13 @@ class PortfolioArchitect:
         self._create_agent()
     
     def _setup_auth(self):
+        """Cognito OAuth2 토큰 획득"""
         info = self.mcp_server_info
         self.mcp_url = info['mcp_url']
         
-        # Cognito 토큰 URL 구성
         pool_domain = info['user_pool_id'].replace("_", "").lower()
         token_url = f"https://{pool_domain}.auth.{info['region']}.amazoncognito.com/oauth2/token"
         
-        # 액세스 토큰 획득
         response = requests.post(
             token_url,
             data=f"grant_type=client_credentials&client_id={info['client_id']}&client_secret={info['client_secret']}",
@@ -47,6 +46,7 @@ class PortfolioArchitect:
         self.access_token = response.json()['access_token']
     
     def _init_mcp_client(self):
+        """MCP 클라이언트 초기화"""
         self.mcp_client = MCPClient(
             lambda: streamablehttp_client(
                 self.mcp_url, 
@@ -55,6 +55,7 @@ class PortfolioArchitect:
         )
     
     def _create_agent(self):
+        """AI 에이전트 생성"""
         with self.mcp_client as client:
             tools = client.list_tools_sync()
             

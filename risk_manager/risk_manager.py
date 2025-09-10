@@ -24,39 +24,23 @@ class Config:
     MAX_TOKENS = 4000
 
 
-def load_gateway_info():
-    """Gateway 배포 정보를 JSON 파일에서 로드"""
-    gateway_dir = Path(__file__).parent / "gateway"
-    info_file = gateway_dir / "gateway_deployment_info.json"
-    
-    if not info_file.exists():
-        raise FileNotFoundError(
-            f"Gateway 배포 정보 파일을 찾을 수 없습니다: {info_file}\n"
-            "먼저 'python gateway/deploy_gateway.py'를 실행하세요."
-        )
-    
-    with open(info_file, 'r') as f:
-        return json.load(f)
-
-
 class RiskManager:
     """AI 리스크 관리사 - MCP Gateway 연동"""
     
-    def __init__(self, gateway_info=None):
-        self.gateway_info = gateway_info or load_gateway_info()
+    def __init__(self, gateway_info):
+        self.gateway_info = gateway_info
         self._setup_auth()
         self._init_mcp_client()
         self._create_agent()
     
     def _setup_auth(self):
+        """Cognito OAuth2 토큰 획득"""
         info = self.gateway_info
         self.gateway_url = info['gateway_url']
         
-        # Cognito 토큰 URL 구성
         pool_domain = info['user_pool_id'].replace("_", "").lower()
         token_url = f"https://{pool_domain}.auth.{info['region']}.amazoncognito.com/oauth2/token"
         
-        # 액세스 토큰 획득
         response = requests.post(
             token_url,
             data=f"grant_type=client_credentials&client_id={info['client_id']}&client_secret={info['client_secret']}",
@@ -66,6 +50,7 @@ class RiskManager:
         self.access_token = response.json()['access_token']
     
     def _init_mcp_client(self):
+        """MCP 클라이언트 초기화"""
         self.mcp_client = MCPClient(
             lambda: streamablehttp_client(
                 self.gateway_url, 
@@ -74,6 +59,7 @@ class RiskManager:
         )
     
     def _create_agent(self):
+        """AI 에이전트 생성"""
         with self.mcp_client as client:
             tools = client.list_tools_sync()
             

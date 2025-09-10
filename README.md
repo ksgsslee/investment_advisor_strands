@@ -42,9 +42,7 @@ graph TB
     end
     
     subgraph "외부 데이터"
-        YFINANCE[📊 yfinance API]
-        NEWS[📰 뉴스 데이터]
-        MARKET[💹 시장 데이터]
+        YFINANCE[📊 yfinance API<br/>ETF/뉴스/시장 데이터 통합]
     end
     
     subgraph "인증 시스템"
@@ -69,8 +67,6 @@ graph TB
     COGNITO --> LAMBDA
     LAMBDA --> LAYER
     LAYER --> YFINANCE
-    LAYER --> NEWS
-    LAYER --> MARKET
     
     IA --> MEMORY
     
@@ -98,6 +94,17 @@ graph TB
 ### Lab 1: Financial Analyst
 **역할**: 개인 재무 상황 분석 및 위험 성향 평가
 
+```mermaid
+graph LR
+    INPUT[👤 사용자 입력<br/>나이, 투자경험<br/>투자금액, 목표금액] --> RUNTIME[🤖 Financial Analyst<br/>AgentCore Runtime]
+    RUNTIME --> CALC[🧮 Calculator 도구<br/>수익률 계산]
+    CALC --> RUNTIME
+    RUNTIME --> OUTPUT[📊 출력<br/>위험성향, 목표수익률<br/>추천 투자섹터]
+    
+    style RUNTIME fill:#e1f5fe
+    style CALC fill:#f0f4c3
+```
+
 **구조**:
 - **AgentCore Runtime**: 서버리스 에이전트 호스팅
 - **도구**: Calculator (정확한 수익률 계산)
@@ -121,6 +128,23 @@ graph TB
 
 ### Lab 2: Portfolio Architect
 **역할**: 실시간 ETF 데이터 기반 최적 포트폴리오 설계
+
+```mermaid
+graph LR
+    INPUT[📊 재무분석 결과<br/>위험성향, 목표수익률<br/>추천 섹터] --> RUNTIME[🤖 Portfolio Architect<br/>AgentCore Runtime]
+    RUNTIME --> GATEWAY[🌉 AgentCore Gateway<br/>MCP 도구 변환]
+    GATEWAY --> AUTH[🔐 Cognito JWT<br/>인증]
+    AUTH --> MCP[🔧 MCP Server Runtime<br/>yfinance 연동]
+    MCP --> YFINANCE[📊 yfinance API<br/>실시간 ETF 데이터]
+    YFINANCE --> MCP
+    MCP --> GATEWAY
+    GATEWAY --> RUNTIME
+    RUNTIME --> OUTPUT[📈 출력<br/>포트폴리오 배분<br/>성과 평가]
+    
+    style RUNTIME fill:#f3e5f5
+    style GATEWAY fill:#e8f5e8
+    style MCP fill:#fff3e0
+```
 
 **구조**:
 - **AgentCore Gateway**: 외부 API를 MCP 도구로 변환
@@ -150,6 +174,25 @@ graph TB
 
 ### Lab 3: Risk Manager
 **역할**: 뉴스 및 거시경제 데이터 기반 리스크 시나리오 분석
+
+```mermaid
+graph LR
+    INPUT[📈 포트폴리오 결과<br/>ETF 배분<br/>성과 평가] --> RUNTIME[🤖 Risk Manager<br/>AgentCore Runtime]
+    RUNTIME --> GATEWAY[🌉 AgentCore Gateway<br/>Lambda → MCP 변환]
+    GATEWAY --> AUTH[🔐 Cognito JWT<br/>인증]
+    AUTH --> LAMBDA[⚡ Lambda 함수<br/>데이터 조회 x3]
+    LAMBDA --> LAYER[📦 Lambda Layer<br/>yfinance 라이브러리]
+    LAYER --> YFINANCE[📊 yfinance API<br/>뉴스/시장/지정학적 데이터]
+    YFINANCE --> LAYER
+    LAYER --> LAMBDA
+    LAMBDA --> GATEWAY
+    GATEWAY --> RUNTIME
+    RUNTIME --> OUTPUT[⚠️ 출력<br/>2개 리스크 시나리오<br/>포트폴리오 조정 전략]
+    
+    style RUNTIME fill:#e8f5e8
+    style GATEWAY fill:#fff3e0
+    style LAMBDA fill:#fce4ec
+```
 
 **구조**:
 - **AgentCore Gateway**: Lambda 함수를 MCP 도구로 노출
@@ -185,6 +228,28 @@ graph TB
 ### Lab 4: Investment Advisor
 **역할**: 3개 에이전트 결과 통합 및 장기 메모리 관리
 
+```mermaid
+graph TB
+    INPUT[👤 사용자 입력<br/>투자 정보] --> RUNTIME[🤖 Investment Advisor<br/>AgentCore Runtime]
+    RUNTIME --> LANGGRAPH[📊 LangGraph 워크플로우<br/>순차 실행 관리]
+    
+    LANGGRAPH --> FA[💰 Financial Analyst<br/>Runtime 호출]
+    FA --> LANGGRAPH
+    LANGGRAPH --> PA[📈 Portfolio Architect<br/>Runtime 호출]
+    PA --> LANGGRAPH
+    LANGGRAPH --> RM[⚠️ Risk Manager<br/>Runtime 호출]
+    RM --> LANGGRAPH
+    
+    LANGGRAPH --> MEMORY[🧠 AgentCore Memory<br/>SUMMARY 전략]
+    MEMORY --> STORAGE[💾 장기 보존<br/>상담 히스토리 자동 요약]
+    
+    LANGGRAPH --> OUTPUT[📋 최종 출력<br/>종합 투자 가이드<br/>실시간 스트리밍]
+    
+    style RUNTIME fill:#fff3e0
+    style LANGGRAPH fill:#e1f5fe
+    style MEMORY fill:#fce4ec
+```
+
 **구조**:
 - **LangGraph**: 3개 에이전트 순차 실행 워크플로우
 - **AgentCore Memory**: SUMMARY 전략으로 상담 히스토리 자동 요약
@@ -209,25 +274,30 @@ graph TB
 
 ### AgentCore 서비스 활용
 
-**1. Runtime (서버리스 에이전트 호스팅)**
-- 각 에이전트를 독립적인 서버리스 함수로 배포
+**1. Runtime (Agent) - 에이전트 호스팅**
+- 각 AI 에이전트를 독립적인 서버리스 함수로 배포
 - 자동 스케일링 및 고가용성 보장
 - ECR 컨테이너 이미지 기반 배포
 
-**2. Gateway (API 통합 및 MCP 변환)**
-- 외부 API (yfinance)를 AI가 사용할 수 있는 MCP 도구로 변환
+**2. Runtime (MCP Server) - 데이터 서버 호스팅**
+- yfinance 기반 ETF 데이터 조회 서버를 서버리스로 배포
+- MCP 프로토콜로 AI 도구화
+- 실시간 금융 데이터 제공
+
+**3. Gateway - API 통합 및 MCP 변환**
+- 외부 API와 Lambda 함수를 AI가 사용할 수 있는 MCP 도구로 변환
 - Cognito JWT 인증으로 보안 강화
-- Lambda 함수를 MCP 도구로 노출
+- 복잡한 인프라를 간단한 AI 도구로 추상화
 
-**3. Tools (고급 분석 도구)**
-- Lambda Layer로 복잡한 라이브러리 (yfinance) 패키징
-- 웹 크롤링 및 실시간 데이터 조회 기능
-- 복잡한 수학적 계산 (몬테카를로 시뮬레이션) 수행
-
-**4. Memory (장기 메모리 및 개인화)**
+**4. Memory - 장기 메모리 및 개인화**
 - SUMMARY 전략으로 상담 세션 자동 요약
 - 사용자별 투자 히스토리 장기 보존
 - 개인화된 투자 서비스 제공 기반
+
+**5. Observability - 모니터링 및 추적**
+- 각 에이전트의 성능 및 사용량 모니터링
+- 실시간 로그 및 메트릭 수집
+- 시스템 최적화를 위한 인사이트 제공
 
 ### 데이터 흐름
 
@@ -291,7 +361,7 @@ python cleanup_all.py
 1. 각 에이전트 폴더의 `README.md` 참조
 2. 개별 배포 및 테스트로 기능 확인
 3. 코드 수정 후 개별 재배포
-4. `investment_advisor/test_investment_advisor.py`로 통합 테스트
+4. 통합 웹앱에서 전체 워크플로우 테스트
 
 ## 📊 실제 사용 예시
 
@@ -336,7 +406,7 @@ python cleanup_all.py
 
 ### 핵심 기술
 - **AI Framework**: Strands Agents SDK + LangGraph
-- **Infrastructure**: AWS Bedrock AgentCore (Runtime, Gateway, Tools, Memory)
+- **Infrastructure**: AWS Bedrock AgentCore (Runtime, Gateway, Memory, Observability)
 - **LLM**: Claude 3.7 Sonnet
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **Authentication**: Cognito JWT OAuth2
@@ -415,7 +485,7 @@ investment_advisor_strands/
 │       ├── 🚀 deploy_mcp.py       # MCP Server 배포
 │       └── 🔧 server.py           # ETF 데이터 조회 서버
 │
-├── 📂 risk_manager/               # Lab 3: 리스크 관리 (AgentCore Tools)
+├── 📂 risk_manager/               # Lab 3: 리스크 관리 (AgentCore Gateway)
 │   ├── 📄 README.md               # 상세 설명 및 사용법
 │   ├── 🚀 deploy.py               # 개별 배포 (4단계 통합)
 │   ├── 🌐 app.py                  # Streamlit 개별 테스트
@@ -429,7 +499,7 @@ investment_advisor_strands/
 │   ├── 🚀 deploy.py               # 개별 배포
 │   ├── 🌐 app.py                  # Streamlit 통합 웹앱 (메인)
 │   ├── 🤖 investment_advisor.py   # LangGraph 기반 통합 에이전트
-│   ├── 🧪 test_investment_advisor.py # 시스템 테스트
+│   
 │   └── 📂 agentcore_memory/       # AgentCore Memory
 │       └── 🚀 deploy_agentcore_memory.py # Memory 배포
 │
@@ -486,7 +556,6 @@ cd investment_advisor
 cd agentcore_memory && python deploy_agentcore_memory.py && cd ..  # Memory 먼저 배포
 python deploy.py                    # 통합 에이전트 배포
 streamlit run app.py               # 🎯 메인 통합 웹앱
-python test_investment_advisor.py  # 시스템 전체 테스트
 ```
 - **기능**: 전체 워크플로우 실행 → 3개 에이전트 순차 호출 → 최종 투자 가이드
 - **특징**: 실시간 스트리밍으로 모든 에이전트의 사고 과정 확인 + 상담 히스토리 관리

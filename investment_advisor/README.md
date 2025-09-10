@@ -34,10 +34,7 @@ graph TB
     end
     
     subgraph "외부 데이터 소스"
-        YFINANCE[yfinance API]
-        NEWS[뉴스 데이터]
-        MARKET[거시경제 지표]
-        GEO[지정학적 지표]
+        YFINANCE[yfinance API<br/>ETF/뉴스/시장/지정학적 데이터 통합]
     end
     
     INPUT --> UI
@@ -50,9 +47,7 @@ graph TB
     PA --> YFINANCE
     PA --> LANGGRAPH
     LANGGRAPH --> RM
-    RM --> NEWS
-    RM --> MARKET
-    RM --> GEO
+    RM --> YFINANCE
     RM --> LANGGRAPH
     
     LANGGRAPH --> MEMORY
@@ -205,7 +200,7 @@ investment_advisor/
 ├── investment_advisor.py    # LangGraph 기반 Multi-Agent 워크플로우
 ├── deploy.py               # AgentCore Runtime 배포 (다른 에이전트 ARN 자동 로드)
 ├── app.py                  # Streamlit 웹 앱 (실시간 스트리밍 + 히스토리)
-├── test_investment_advisor.py # 시스템 테스트 코드
+
 ├── cleanup.py              # 시스템 정리
 ├── requirements.txt        # Python 의존성
 └── agentcore_memory/       # AgentCore Memory

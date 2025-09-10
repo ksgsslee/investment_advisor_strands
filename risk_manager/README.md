@@ -1,6 +1,6 @@
 # Risk Manager
 
-**AWS Bedrock AgentCore Gateway + Tools**를 활용한 AI 리스크 관리사입니다.
+**AWS Bedrock AgentCore Gateway**를 활용한 AI 리스크 관리사입니다.
 
 ## 🎯 개요
 
@@ -42,9 +42,7 @@ graph TB
     end
     
     subgraph "외부 데이터"
-        YFINANCE[yfinance API]
-        NEWS[Yahoo Finance News]
-        MARKET[거시경제 지표]
+        YFINANCE[yfinance API<br/>뉴스/시장/지정학적 데이터 통합]
     end
     
     INPUT --> UI
@@ -57,8 +55,6 @@ graph TB
     TARGET --> LAMBDA
     LAMBDA --> LAYER
     LAYER --> YFINANCE
-    YFINANCE --> NEWS
-    YFINANCE --> MARKET
     
     style RUNTIME fill:#e1f5fe
     style AGENT fill:#f3e5f5
@@ -69,7 +65,7 @@ graph TB
 
 ### 기술 스택
 - **AI Framework**: Strands Agents SDK
-- **Infrastructure**: AWS Bedrock AgentCore Runtime + Gateway + Tools
+- **Infrastructure**: AWS Bedrock AgentCore Runtime + Gateway
   - Risk Manager Agent Runtime
   - MCP Gateway (Lambda 함수를 AI 도구로 노출)
   - Lambda Layer (yfinance 라이브러리 패키징)

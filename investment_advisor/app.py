@@ -234,7 +234,7 @@ def display_geopolitical_data(container, geopolitical_data):
                         if isinstance(info, dict) and 'value' in info:
                             description = info.get('description', key)
                             value = info['value']
-                            st.metric(description, f"${value}")
+                            st.metric(description, f"{value}")
                         else:
                             st.write(f"**{key}**: 데이터 없음")
                 

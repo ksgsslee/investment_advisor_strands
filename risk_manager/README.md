@@ -112,7 +112,14 @@ sequenceDiagram
     L-->>G: 시장 결과 반환
     G-->>A: 시장 데이터 제공
     
-    A->>A: 2개 시나리오 도출
+    A->>G: get_geopolitical_indicators 호출
+    G->>L: Lambda 함수 실행
+    L->>Y: 지역별 ETF 데이터 조회
+    Y-->>L: 지정학적 데이터 반환
+    L-->>G: 지정학적 결과 반환
+    G-->>A: 지정학적 데이터 제공
+    
+    A->>A: 3가지 데이터 종합하여 2개 시나리오 도출
     A->>A: 포트폴리오 조정 전략 수립
     A-->>R: 리스크 분석 완료
     R-->>S: 결과 반환 (스트리밍)
@@ -131,17 +138,21 @@ sequenceDiagram
 - 리스크 요인 및 시장 심리 분석
 
 ### 3. 거시경제 지표 모니터링
-- **get_market_data 도구**: 주요 경제 지표 실시간 조회
-  - 미국 달러 지수 (DX-Y.NYB)
-  - 미국 10년 국채 수익률 (^TNX)
-  - VIX 변동성 지수 (^VIX)
-  - WTI 원유 선물 가격 (CL=F)
+- **get_market_data 도구**: 주요 경제 지표 7개 실시간 조회
+  - 금리: 2년/10년 국채 수익률, 달러 지수
+  - 변동성/원자재: VIX, WTI 원유, 금 선물
+  - 주식: S&P 500 지수
 
-### 4. 시나리오 도출
-- **2개 핵심 시나리오**: 뉴스 + 시장 지표 기반 경제 상황 예측
+### 4. 지정학적 리스크 분석
+- **get_geopolitical_indicators 도구**: 주요 지역 ETF 5개 실시간 조회
+  - 아시아: 중국 A주, 일본, 한국 ETF
+  - 글로벌: 신흥국, 유럽 ETF
+
+### 5. 시나리오 도출
+- **2개 핵심 시나리오**: 뉴스 + 거시경제 + 지정학적 요인 종합 분석
 - 각 시나리오별 발생 확률 및 영향도 평가
 
-### 5. 포트폴리오 조정 전략
+### 6. 포트폴리오 조정 전략
 - **기존 ETF 유지**: 새로운 자산 추가 없이 비중만 조정
 - 시나리오별 최적 배분 비율 계산
 - 구체적인 조정 이유 및 실행 방안 제시
@@ -235,15 +246,22 @@ streamlit run app.py
 - **용도**: ETF별 리스크 요인 및 시장 심리 분석
 
 ### get_market_data()
-- **기능**: 주요 거시경제 지표 실시간 조회 (총 12개 지표)
-- **지표 카테고리**:
-  - **금리 지표**: 3개월/5년/10년/30년 국채 수익률 (수익률 곡선 분석)
-  - **통화 지표**: 달러 지수, 유로/달러 환율
-  - **변동성**: VIX 지수 (시장 공포 지수)
-  - **원자재**: WTI 원유, 금 선물 가격
-  - **주식 지수**: S&P 500, 나스닥 종합지수
-  - **디지털 자산**: 비트코인 (리스크 심리 측정)
-- **용도**: 종합적 거시경제 환경 분석 및 다각도 시나리오 도출
+- **기능**: 주요 거시경제 지표 실시간 조회 (7개 지표)
+- **지표 구성**:
+  - **금리 지표** (3개): 2년/10년 국채 수익률, 달러 지수
+  - **변동성/원자재** (3개): VIX, WTI 원유, 금 선물
+  - **주식 지수** (1개): S&P 500
+- **용도**: 거시경제 환경 분석 및 경제 시나리오 도출
+
+### get_geopolitical_indicators()
+- **기능**: 주요 지역 ETF 실시간 조회 (5개 지역)
+- **지역 구성**:
+  - **중국** (ASHR): 중국 A주 ETF
+  - **신흥국** (EEM): 신흥국 ETF
+  - **유럽** (VGK): 유럽 ETF
+  - **일본** (EWJ): 일본 ETF
+  - **한국** (EWY): 한국 ETF
+- **용도**: 지정학적 리스크 및 지역별 시장 상황 분석
 
 ## 🔧 커스터마이징
 
@@ -276,17 +294,13 @@ risk_manager/
 ├── requirements.txt        # Python 의존성
 ├── lambda_layer/           # Lambda Layer (yfinance 라이브러리)
 │   ├── deploy_lambda_layer.py    # Layer 배포 스크립트
-│   ├── layer-yfinance.zip        # yfinance 라이브러리 패키지
-│   └── layer_deployment_info.json # Layer 배포 정보
+│   └── layer-yfinance.zip        # yfinance 라이브러리 패키지
 ├── lambda/                 # Lambda 함수 (뉴스/시장 데이터 조회)
 │   ├── deploy_lambda.py          # Lambda 배포 스크립트
-│   ├── lambda_function.py        # 뉴스 및 시장 데이터 조회 함수
-│   └── lambda_deployment_info.json # Lambda 배포 정보
-├── gateway/                # MCP Gateway (Lambda를 AI 도구로 노출)
-│   ├── deploy_gateway.py         # Gateway 배포 스크립트
-│   ├── target_config.py          # MCP 도구 스키마 정의
-│   └── gateway_deployment_info.json # Gateway 배포 정보
-└── deployment_info.json    # Runtime 배포 정보
+│   └── lambda_function.py        # 뉴스 및 시장 데이터 조회 함수
+└── gateway/                # MCP Gateway (Lambda를 AI 도구로 노출)
+    ├── deploy_gateway.py         # Gateway 배포 스크립트
+    └── target_config.py          # MCP 도구 스키마 정의
 ```
 
 ## 🔗 전체 시스템 연동

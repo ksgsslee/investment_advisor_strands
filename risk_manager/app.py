@@ -190,8 +190,6 @@ def display_risk_analysis_result(container, analysis_content):
                 with col2:
                     st.markdown("**조정 이유 및 전략**")
                     st.info(scenario.get('reason', '근거 없음'))
-
-                container.divider()
         
     except Exception as e:
         container.error(f"리스크 분석 표시 오류: {str(e)}")

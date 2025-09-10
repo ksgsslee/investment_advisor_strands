@@ -59,13 +59,20 @@ def get_product_news(ticker, top_n=5):
 def get_market_data():
     """주요 거시경제 지표 데이터 조회"""
     try:
-        # 주요 거시경제 지표 정의
+        # 주요 거시경제 지표 정의 (7개)
         market_indicators = {
-            "us_dollar_index": {"ticker": "DX-Y.NYB", "description": "미국 달러 강세 지수"},
+            # 금리 지표 (3개)
+            "us_2y_treasury_yield": {"ticker": "^IRX", "description": "미국 2년 국채 수익률 (%)"},
             "us_10y_treasury_yield": {"ticker": "^TNX", "description": "미국 10년 국채 수익률 (%)"},
-            "us_2y_treasury_yield": {"ticker": "^IRX", "description": "미국 3개월 국채 수익률 (%)"},
-            "vix_volatility_index": {"ticker": "^VIX", "description": "VIX 변동성 지수"},
-            "crude_oil_price": {"ticker": "CL=F", "description": "WTI 원유 선물 가격 (USD/배럴)"}
+            "us_dollar_index": {"ticker": "DX-Y.NYB", "description": "미국 달러 강세 지수"},
+            
+            # 변동성 및 원자재 (3개)
+            "vix_volatility_index": {"ticker": "^VIX", "description": "VIX 변동성 지수 (공포 지수)"},
+            "crude_oil_price": {"ticker": "CL=F", "description": "WTI 원유 선물 가격 (USD/배럴)"},
+            "gold_price": {"ticker": "GC=F", "description": "금 선물 가격 (USD/온스)"},
+            
+            # 주식 지수 (1개)
+            "sp500_index": {"ticker": "^GSPC", "description": "S&P 500 지수"}
         }
         
         market_data = {}
@@ -101,6 +108,51 @@ def get_market_data():
     except Exception as e:
         return {"error": f"Error fetching market data: {str(e)}"}
 
+def get_geopolitical_indicators():
+    """지정학적 리스크 지표 데이터 조회"""
+    try:
+        # 지정학적 리스크 지표 정의 (주요 지역 ETF 5개)
+        geopolitical_indicators = {
+            "china_market": {"ticker": "ASHR", "description": "중국 A주 ETF"},
+            "emerging_markets": {"ticker": "EEM", "description": "신흥국 ETF"},
+            "europe_market": {"ticker": "VGK", "description": "유럽 ETF"},
+            "japan_market": {"ticker": "EWJ", "description": "일본 ETF"},
+            "korea_market": {"ticker": "EWY", "description": "한국 ETF"}
+        }
+        
+        geopolitical_data = {}
+        
+        # 각 지표별 데이터 조회
+        for key, info in geopolitical_indicators.items():
+            ticker_symbol = info["ticker"]
+            
+            try:
+                ticker = yf.Ticker(ticker_symbol)
+                info_data = ticker.info
+                
+                # 가격 정보 추출
+                market_price = (info_data.get('regularMarketPrice') or 
+                              info_data.get('regularMarketPreviousClose') or 
+                              info_data.get('previousClose') or 0.0)
+                
+                geopolitical_data[key] = {
+                    "description": info["description"],
+                    "value": round(float(market_price), 2),
+                    "ticker": ticker_symbol
+                }
+                
+            except:
+                geopolitical_data[key] = {
+                    "description": info["description"],
+                    "value": 0.0,
+                    "ticker": ticker_symbol
+                }
+        
+        return geopolitical_data
+        
+    except Exception as e:
+        return {"error": f"Error fetching geopolitical data: {str(e)}"}
+
 def lambda_handler(event, context):
     """AWS Lambda 메인 핸들러 함수"""
     try:
@@ -116,6 +168,9 @@ def lambda_handler(event, context):
                 
         elif function_name == 'get_market_data':
             output = get_market_data()
+            
+        elif function_name == 'get_geopolitical_indicators':
+            output = get_geopolitical_indicators()
                 
         else:
             output = {"error": f"Invalid function: {function_name}"}

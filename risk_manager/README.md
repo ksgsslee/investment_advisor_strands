@@ -1,443 +1,301 @@
 # Risk Manager
 
-포트폴리오 제안을 바탕으로 뉴스 기반 리스크 분석을 수행하고, 경제 시나리오에 따른 포트폴리오 조정 가이드를 제공하는 AI 에이전트입니다. **Planning 패턴**을 활용하여 **MCP(Model Context Protocol)**를 통해 외부 데이터와 연동하고, **AWS Bedrock AgentCore Runtime** 기반으로 서버리스 환경에서 실행되어 데이터 기반 리스크 관리 전략을 제공합니다.
+**AWS Bedrock AgentCore Gateway + Tools**를 활용한 AI 리스크 관리사입니다.
 
-## 🎯 핵심 기능
+## 🎯 개요
 
-### 뉴스 기반 리스크 분석
-- **실시간 뉴스 수집**: Portfolio Architect 결과의 각 ETF별 최신 뉴스 분석
-- **리스크 요인 식별**: 뉴스 데이터를 통한 잠재적 위험 요소 탐지
-- **시장 센티먼트 분석**: 뉴스 톤앤매너 기반 시장 심리 평가
+Portfolio Architect의 포트폴리오 설계 결과를 바탕으로 실시간 뉴스 및 거시경제 데이터를 분석하여 리스크 시나리오를 계획하고, 경제 상황별 포트폴리오 조정 전략을 제공하는 AI 에이전트입니다.
 
-### 경제 시나리오 플래닝
-- **2개 핵심 시나리오**: 발생 가능성이 높은 경제 상황 도출
-- **시나리오별 영향 분석**: 각 시나리오가 포트폴리오에 미치는 영향 평가
-- **동적 조정 전략**: 시나리오별 최적 자산 배분 재조정 방안
-
-### 시장 지표 통합 분석
-- **거시경제 지표**: 달러 지수, 국채 수익률, VIX 등 주요 지표 모니터링
-- **상관관계 분석**: 시장 지표와 포트폴리오 자산 간 연관성 분석
-- **조기 경보 시스템**: 리스크 신호 조기 탐지 및 알림
-
-### 포트폴리오 조정 가이드
-- **기존 자산 유지**: 새로운 자산 추가 없이 기존 ETF 비율만 조정
-- **리스크 최적화**: 각 시나리오별 리스크 대비 수익률 최적화
-- **실행 가능한 전략**: 구체적이고 실행 가능한 조정 방안 제시
+### 핵심 기능
+- **실시간 뉴스 분석**: 포트폴리오 ETF별 최신 뉴스 수집 및 리스크 요인 식별
+- **거시경제 지표 모니터링**: 달러지수, 국채수익률, VIX, 원유가격 등 주요 지표 추적
+- **시나리오 플래닝**: 2개 핵심 경제 시나리오 도출 및 포트폴리오 조정 전략 수립
+- **Planning Pattern**: 체계적인 워크플로우 기반 리스크 분석 및 대응 방안 제시
 
 ## 🏗️ 아키텍처
 
-### 전체 시스템 아키텍처
-
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        UI[Streamlit UI]
-        USER[Portfolio Architect 결과]
+    subgraph "사용자 인터페이스"
+        UI[Streamlit App]
+        INPUT[포트폴리오 설계 결과 입력]
     end
     
-    subgraph "AWS AgentCore Infrastructure"
-        RUNTIME[AgentCore Runtime]
+    subgraph "AWS Bedrock AgentCore"
+        RUNTIME[Risk Manager Runtime]
+        AGENT[Risk Manager Agent]
+    end
+    
+    subgraph "MCP Gateway (AgentCore Gateway)"
         GATEWAY[MCP Gateway]
-        LAYER[Lambda Layer]
+        TARGET[Gateway Target]
     end
     
-    subgraph "Authentication"
+    subgraph "Lambda 인프라"
+        LAYER[Lambda Layer<br/>yfinance 라이브러리]
+        LAMBDA[Lambda 함수<br/>뉴스/시장 데이터 조회]
+    end
+    
+    subgraph "인증 시스템"
         COGNITO[Cognito User Pool]
-        OAUTH[OAuth2 Client]
+        JWT[JWT OAuth2]
     end
     
-    subgraph "AI Agent Layer"
-        AGENT[Risk Manager Agent<br/>Claude 3.5 Sonnet]
+    subgraph "외부 데이터"
+        YFINANCE[yfinance API]
+        NEWS[Yahoo Finance News]
+        MARKET[거시경제 지표]
     end
     
-    subgraph "MCP Tools"
-        TOOL1[get_product_news]
-        TOOL2[get_market_data]
-    end
-    
-    subgraph "External Data"
-        NEWS[Yahoo Finance News API]
-        MARKET[Market Indicators API]
-    end
-    
-    USER --> UI
+    INPUT --> UI
     UI --> RUNTIME
     RUNTIME --> AGENT
-    AGENT --> GATEWAY
-    GATEWAY --> COGNITO
-    COGNITO --> OAUTH
-    GATEWAY --> TOOL1
-    GATEWAY --> TOOL2
-    TOOL1 --> NEWS
-    TOOL2 --> MARKET
-    LAYER --> GATEWAY
+    AGENT --> JWT
+    JWT --> COGNITO
+    COGNITO --> GATEWAY
+    GATEWAY --> TARGET
+    TARGET --> LAMBDA
+    LAMBDA --> LAYER
+    LAYER --> YFINANCE
+    YFINANCE --> NEWS
+    YFINANCE --> MARKET
+    
+    style RUNTIME fill:#e1f5fe
+    style AGENT fill:#f3e5f5
+    style GATEWAY fill:#e8f5e8
+    style LAMBDA fill:#fff3e0
+    style LAYER fill:#f1f8e9
 ```
 
-### MCP 연동 아키텍처
+### 기술 스택
+- **AI Framework**: Strands Agents SDK
+- **Infrastructure**: AWS Bedrock AgentCore Runtime + Gateway + Tools
+  - Risk Manager Agent Runtime
+  - MCP Gateway (Lambda 함수를 AI 도구로 노출)
+  - Lambda Layer (yfinance 라이브러리 패키징)
+  - Lambda 함수 (뉴스 및 거시경제 데이터 조회)
+- **LLM**: Claude 3.7 Sonnet (설정 가능)
+- **Data Source**: yfinance (실시간 뉴스 및 시장 데이터)
+- **Protocol**: MCP (Model Context Protocol)
+- **Authentication**: Cognito JWT OAuth2
+- **UI**: Streamlit
 
+### 처리 흐름
 ```mermaid
 sequenceDiagram
-    participant A as Risk Manager Agent
+    participant U as 사용자
+    participant S as Streamlit
+    participant R as AgentCore Runtime
+    participant A as Risk Manager
     participant G as MCP Gateway
-    participant T as MCP Tools
-    participant N as News/Market APIs
+    participant L as Lambda 함수
+    participant Y as yfinance
     
-    A->>G: OAuth2 인증
-    G->>A: Access Token
+    U->>S: 포트폴리오 설계 결과 입력
+    S->>R: 리스크 분석 요청
+    R->>A: 분석 시작
+    A->>A: 포트폴리오 ETF 식별
     
-    loop 포트폴리오 ETF별
+    loop 각 ETF별
         A->>G: get_product_news 호출
-        G->>T: 도구 실행
-        T->>N: 뉴스 데이터 조회
-        N->>T: 최신 뉴스 반환
-        T->>G: 결과 반환
-        G->>A: 뉴스 데이터 제공
+        G->>L: Lambda 함수 실행
+        L->>Y: 뉴스 데이터 조회
+        Y-->>L: ETF 뉴스 반환
+        L-->>G: 뉴스 결과 반환
+        G-->>A: 뉴스 데이터 제공
     end
     
     A->>G: get_market_data 호출
-    G->>T: 도구 실행
-    T->>N: 시장 지표 조회
-    N->>T: 거시경제 데이터 반환
-    T->>G: 결과 반환
-    G->>A: 시장 데이터 제공
+    G->>L: Lambda 함수 실행
+    L->>Y: 거시경제 지표 조회
+    Y-->>L: 시장 데이터 반환
+    L-->>G: 시장 결과 반환
+    G-->>A: 시장 데이터 제공
     
-    A->>A: 시나리오 플래닝 및 조정 전략 수립
+    A->>A: 2개 시나리오 도출
+    A->>A: 포트폴리오 조정 전략 수립
+    A-->>R: 리스크 분석 완료
+    R-->>S: 결과 반환 (스트리밍)
+    S-->>U: 시나리오별 시각화 표시
 ```
 
-### Agentic AI 패턴: Planning Pattern
+## 🔧 리스크 분석 프로세스
 
-```mermaid
-flowchart TD
-    INPUT[포트폴리오 제안 입력]
-    ANALYZE[포트폴리오 구성 분석]
-    NEWS[뉴스 데이터 수집]
-    MARKET[시장 지표 수집]
-    SCENARIO[시나리오 도출]
-    PLAN1[시나리오 1 조정 계획]
-    PLAN2[시나리오 2 조정 계획]
-    OUTPUT[리스크 관리 전략]
-    
-    INPUT --> ANALYZE
-    ANALYZE --> NEWS
-    ANALYZE --> MARKET
-    NEWS --> SCENARIO
-    MARKET --> SCENARIO
-    SCENARIO --> PLAN1
-    SCENARIO --> PLAN2
-    PLAN1 --> OUTPUT
-    PLAN2 --> OUTPUT
-```
+### 1. 포트폴리오 분석
+- 입력받은 포트폴리오 구성 (3개 ETF + 비중) 분석
+- 각 ETF의 특성 및 리스크 요인 식별
 
-### Strands Agent 구성
+### 2. 실시간 뉴스 수집
+- **get_product_news 도구**: 각 ETF별 최신 뉴스 5개 수집
+- 제목, 요약, 발행일 정보 추출
+- 리스크 요인 및 시장 심리 분석
 
-#### Risk Manager Agent
-- **역할**: 리스크 분석 및 시나리오 플래닝
-- **모델**: Claude 3.5 Sonnet
-- **온도**: 0.2 (분석적 사고와 창의적 시나리오 도출의 균형)
-- **도구**: MCP 클라이언트를 통한 뉴스 및 시장 데이터 접근
+### 3. 거시경제 지표 모니터링
+- **get_market_data 도구**: 주요 경제 지표 실시간 조회
+  - 미국 달러 지수 (DX-Y.NYB)
+  - 미국 10년 국채 수익률 (^TNX)
+  - VIX 변동성 지수 (^VIX)
+  - WTI 원유 선물 가격 (CL=F)
 
-#### MCP 도구 체인
-- **뉴스 분석**: ETF별 최신 뉴스 수집 및 분석
-- **시장 지표**: 거시경제 지표 실시간 모니터링
-- **동적 조정**: 시나리오별 포트폴리오 재배분 계획
+### 4. 시나리오 도출
+- **2개 핵심 시나리오**: 뉴스 + 시장 지표 기반 경제 상황 예측
+- 각 시나리오별 발생 확률 및 영향도 평가
 
-### AgentCore 구성요소
+### 5. 포트폴리오 조정 전략
+- **기존 ETF 유지**: 새로운 자산 추가 없이 비중만 조정
+- 시나리오별 최적 배분 비율 계산
+- 구체적인 조정 이유 및 실행 방안 제시
 
-#### Runtime
-- **실행 환경**: AWS Lambda 기반 서버리스
-- **환경변수**: MCP Gateway 연결 정보 자동 주입
-- **확장성**: 동시 다중 요청 처리 가능
+## 🚀 설치 및 실행
 
-#### Gateway
-- **프로토콜**: MCP (Model Context Protocol)
-- **인증**: OAuth2 Client Credentials Flow
-- **보안**: Cognito User Pool 기반 인증
-- **API**: RESTful API를 통한 도구 노출
-
-#### Lambda Layer
-- **의존성**: yfinance 라이브러리 (뉴스 및 시장 데이터 조회)
-- **독립성**: Risk Manager 전용 독립적인 Layer
-- **버전 관리**: 자체적인 의존성 버전 관리
-
-## 🚀 배포 및 실행
-
-### 사전 요구사항
-- AWS CLI 설정 및 인증
-- Docker 설치 (Gateway 및 Runtime 빌드용)
-- Python 3.9+ 환경
-- Bedrock 모델 접근 권한
-- yfinance.zip 파일 준비 (독립적인 Layer 배포)
-
-### 1. Lambda Layer 배포 (필수 선행)
+### 1. 환경 설정
 ```bash
+# 루트 폴더에서 의존성 설치
+cd ..
+pip install -r requirements.txt
+
+# AWS 자격 증명 설정
+aws configure
+
+# risk_manager 폴더로 이동
+cd risk_manager
+```
+
+### 2. 배포 (4단계 순차 배포)
+```bash
+# 1단계: Lambda Layer 배포 (yfinance 라이브러리)
 cd lambda_layer
-
-# yfinance.zip 파일이 없는 경우 생성
-mkdir python
-pip install yfinance pandas numpy -t python/
-zip -r yfinance.zip python/
-
-# yfinance 등 데이터 분석 라이브러리 Layer 생성 (독립적인 Layer)
 python deploy_lambda_layer.py
 
-# Layer 정보 확인
-cat layer_deployment_info.json
-```
-
-**Layer 구성요소:**
-- yfinance: 실시간 뉴스 및 시장 데이터 조회
-- pandas, numpy: 데이터 분석 및 처리
-- 독립적인 Risk Manager 전용 Layer
-
-### 2. Lambda 함수 배포 (필수)
-```bash
-cd lambda
-
-# 리스크 분석 Lambda 함수 배포
+# 2단계: Lambda 함수 배포 (뉴스/시장 데이터 조회)
+cd ../lambda
 python deploy_lambda.py
 
-# 배포 결과 확인
-cat lambda_deployment_info.json
-```
-
-**Lambda 구성요소:**
-- get_product_news: ETF별 최신 뉴스 조회 (상위 5개)
-- get_market_data: 주요 거시경제 지표 조회 (달러지수, 국채수익률, VIX, 원유)
-- 독립적인 yfinance Layer 사용
-
-### 3. Gateway 배포 (필수)
-```bash
-cd gateway
-
-# MCP Gateway 인프라 배포 (Lambda ARN 자동 로드)
+# 3단계: MCP Gateway 배포 (Lambda를 AI 도구로 노출)
+cd ../gateway
 python deploy_gateway.py
 
-# 배포 결과 확인
-cat gateway_deployment_info.json
-```
-
-**Gateway 구성요소:**
-- MCP 프로토콜 기반 도구 노출
-- Cognito OAuth2 인증 시스템
-- Lambda 함수를 AI 도구로 변환
-- 실시간 뉴스 및 시장 데이터 API 제공
-
-### 4. Runtime 배포
-```bash
-# Gateway 정보 자동 로드하여 Runtime 배포
+# 4단계: Risk Manager Runtime 배포
+cd ..
 python deploy.py
 
 # 배포 상태 확인
 cat deployment_info.json
 ```
 
-**Runtime 구성요소:**
-- Risk Manager Agent (Claude 3.5 Sonnet)
-- MCP 클라이언트 통합
-- 환경변수 자동 설정 (Gateway 연동 정보)
-
-### 5. Streamlit 앱 실행
+### 3. Streamlit 실습
 ```bash
-# 의존성 설치
-pip install streamlit boto3 plotly pandas
-
-# 웹 애플리케이션 실행
+# 웹 앱 실행
 streamlit run app.py
+
+# 브라우저에서 http://localhost:8501 접속
 ```
 
-### 6. 통합 테스트
-- Portfolio Architect에서 포트폴리오 설계 수행
-- 설계 결과를 Risk Manager에 입력
-- 실시간 뉴스 및 시장 데이터 수집 과정 확인
-- 2개 시나리오별 조정 전략 검증
+## 📊 사용 방법
 
-## 📊 상세 입력/출력 명세
+### 입력 정보 (Portfolio Architect 결과)
+- **포트폴리오 배분**: 3개 ETF와 각각의 투자 비중 (%)
+- **포트폴리오 구성 근거**: 투자 전략 및 ETF 선정 이유
+- **포트폴리오 평가 점수**: 수익성, 리스크 관리, 분산투자 완성도 (1-10점)
 
-### 입력 데이터 구조 (Portfolio Architect 결과)
-```json
-{
-  "portfolio_allocation": {
-    "QQQ": 60,
-    "SPY": 30,
-    "GLD": 10
-  },
-  "strategy": "고성장 기술주 중심의 공격적 포트폴리오로, 시장 전반의 익스포저와 위험 헤지를 결합한 전략",
-  "reason": "고객의 공격적인 위험 성향과 40%의 높은 목표 수익률을 달성하기 위해..."
-}
-```
-
-### MCP 도구 호출 과정
-1. **get_product_news 호출** (각 ETF별)
-   ```json
-   {
-     "ticker": "QQQ",
-     "news": [
-       {
-         "title": "Nasdaq 100 ETF Sees Strong Inflows Amid Tech Rally",
-         "summary": "Technology sector momentum continues...",
-         "publish_date": "2024-08-20"
-       }
-     ]
-   }
-   ```
-
-2. **get_market_data 호출**
-   ```json
-   {
-     "us_dollar_index": {
-       "description": "미국 달러 강세를 나타내는 지수",
-       "value": 103.45
-     },
-     "us_10y_treasury_yield": {
-       "description": "미국 10년 국채 수익률 (%)",
-       "value": 4.25
-     },
-     "vix_volatility_index": {
-       "description": "시장의 변동성을 나타내는 VIX 지수",
-       "value": 18.75
-     }
-   }
-   ```
-
-### 출력 데이터 구조
+### 출력 결과
 ```json
 {
   "scenario1": {
     "name": "테크 주도 경기 회복",
-    "description": "금리 인하와 함께 기술 섹터가 주도하는 경기 회복이 이루어지는 시나리오입니다...",
+    "description": "금리 인하와 함께 기술 섹터가 주도하는 경기 회복 시나리오",
+    "probability": "35%",
     "allocation_management": {
       "QQQ": 70,
       "SPY": 25,
       "GLD": 5
     },
-    "reason": "QQQ의 비중을 70%로 늘려 기술 섹터의 성장에 더 많이 노출시킵니다..."
+    "reason": "기술 섹터 성장에 더 많이 노출하여 수익 극대화"
   },
   "scenario2": {
     "name": "인플레이션 지속과 경기 둔화",
-    "description": "고금리가 지속되고 인플레이션 압력이 계속되는 가운데...",
+    "description": "고금리 지속 및 인플레이션 압력 하에서의 경기 둔화",
+    "probability": "25%",
     "allocation_management": {
       "QQQ": 40,
       "SPY": 40,
       "GLD": 20
     },
-    "reason": "QQQ의 비중을 40%로 줄이고 SPY를 40%로 늘려..."
+    "reason": "안전자산 비중 확대로 리스크 헤지 강화"
   }
 }
 ```
 
-## 🔧 고급 설정 및 커스터마이징
+## 🛠️ Lambda 도구 상세
 
-### 모델 및 에이전트 설정
+### get_product_news(ticker)
+- **기능**: 특정 ETF의 최신 뉴스 5개 조회
+- **데이터 소스**: yfinance API
+- **출력**: 제목, 요약, 발행일, 링크 정보
+- **용도**: ETF별 리스크 요인 및 시장 심리 분석
+
+### get_market_data()
+- **기능**: 주요 거시경제 지표 실시간 조회 (총 12개 지표)
+- **지표 카테고리**:
+  - **금리 지표**: 3개월/5년/10년/30년 국채 수익률 (수익률 곡선 분석)
+  - **통화 지표**: 달러 지수, 유로/달러 환율
+  - **변동성**: VIX 지수 (시장 공포 지수)
+  - **원자재**: WTI 원유, 금 선물 가격
+  - **주식 지수**: S&P 500, 나스닥 종합지수
+  - **디지털 자산**: 비트코인 (리스크 심리 측정)
+- **용도**: 종합적 거시경제 환경 분석 및 다각도 시나리오 도출
+
+## 🔧 커스터마이징
+
+### 모델 변경
 ```python
-# risk_manager.py에서 수정 가능
-
+# risk_manager.py
 class Config:
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-    TEMPERATURE = 0.2      # 분석적 사고와 창의적 시나리오의 균형
-    MAX_TOKENS = 4000      # 상세한 시나리오 분석을 위한 충분한 토큰
+    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # 원하는 모델로 변경
+    TEMPERATURE = 0.2
+    MAX_TOKENS = 4000
 ```
 
-### Lambda 함수 뉴스 및 시장 데이터 설정
+### 시장 지표 추가/수정
 ```python
-# lambda/lambda_function.py에서 수정 가능
-
-# 뉴스 조회 설정
-NEWS_TOP_N = 5  # ETF별 상위 5개 뉴스
-
-# 시장 지표 설정
+# lambda/lambda_function.py에서 MARKET_INDICATORS 딕셔너리 수정
 MARKET_INDICATORS = {
-    "us_dollar_index": {"ticker": "DX-Y.NYB", "description": "미국 달러 강세 지수"},
-    "us_10y_treasury_yield": {"ticker": "^TNX", "description": "미국 10년 국채 수익률"},
-    "us_2y_treasury_yield": {"ticker": "2YY=F", "description": "미국 2년 국채 수익률"},
-    "vix_volatility_index": {"ticker": "^VIX", "description": "VIX 변동성 지수"},
-    "crude_oil_price": {"ticker": "CL=F", "description": "WTI 원유 선물 가격"}
+    "new_indicator": {"ticker": "TICKER_SYMBOL", "description": "지표 설명"},
+    # ... 기존 지표들
 }
 ```
 
-### 시나리오 플래닝 로직
-- **시나리오 도출**: 뉴스 분석 + 시장 지표 기반 2개 핵심 시나리오
-- **조정 전략**: 기존 ETF 비율만 조정 (새로운 자산 추가 금지)
-- **리스크 관리**: 각 시나리오별 리스크 대비 수익률 최적화
-
-## 🔍 모니터링 및 운영
-
-### 성능 메트릭
-- **응답 시간**: 평균 20-40초 (뉴스 수집 + 시장 데이터 + 시나리오 분석)
-- **성공률**: 95%+ (정상 입력 및 네트워크 상태 기준)
-- **MCP 호출 성공률**: 98%+
-- **비용**: 요청당 약 $0.08-0.20 (Gateway + Runtime + 다중 도구 호출)
-
-### 로그 및 모니터링
-```bash
-# Runtime 로그 확인
-aws logs tail /aws/lambda/risk-manager-runtime --follow
-
-# Gateway 로그 확인  
-aws logs tail /aws/lambda/mcp-gateway-risk-manager --follow
-
-# API Gateway 메트릭 확인
-aws cloudwatch get-metric-statistics \
-  --namespace AWS/ApiGateway \
-  --metric-name Count \
-  --dimensions Name=ApiName,Value=mcp-gateway-risk-manager
-```
-
-### 문제 해결 가이드
-
-#### 배포 관련 문제
-- **Lambda 배포 실패**: yfinance.zip 파일 존재 여부, Layer 선행 배포 확인
-- **Gateway 배포 실패**: Lambda 선행 배포 여부, Cognito 권한 확인
-- **Runtime 배포 실패**: Gateway 선행 배포 여부, 환경변수 설정 확인
-
-#### 실행 시간 문제
-- **MCP 연결 실패**: Gateway URL, OAuth2 토큰 확인
-- **뉴스 조회 실패**: yfinance 네트워크 연결, ETF 티커 유효성 확인
-- **시장 데이터 조회 실패**: 시장 개장 시간, 지표 티커 유효성 확인
-- **시나리오 생성 실패**: 입력 데이터 형식, 모델 응답 확인
-
-#### 성능 최적화
-- **응답 시간 개선**: 병렬 도구 호출, 캐싱 활용
-- **비용 최적화**: 불필요한 뉴스 조회 최소화
-- **안정성 향상**: 재시도 로직, 오류 처리 강화
-
-## 📁 상세 프로젝트 구조
+## 📁 프로젝트 구조
 
 ```
 risk_manager/
-├── lambda_layer/             # Lambda Layer 구성요소 (yfinance 등)
-│   ├── deploy_lambda_layer.py # Layer 배포 스크립트 (Portfolio Architect 재사용 우선)
-│   ├── yfinance.zip         # yfinance, pandas, numpy 라이브러리 패키지
-│   └── layer_deployment_info.json    # Layer 배포 정보
-├── lambda/                   # Lambda 함수 구성요소 (뉴스 및 시장 데이터 조회)
-│   ├── deploy_lambda.py     # Lambda 배포 스크립트
-│   ├── lambda_function.py   # 뉴스 및 시장 데이터 조회 함수
-│   └── lambda_deployment_info.json  # Lambda 배포 정보
-├── gateway/                  # MCP Gateway 구성요소 (도구 노출)
-│   ├── deploy_gateway.py    # Gateway 배포 스크립트 (Lambda ARN 자동 로드)
-│   ├── target_config.py     # MCP 도구 스키마 정의
-│   ├── utils.py            # IAM, Cognito 관리 유틸리티
-│   └── gateway_deployment_info.json  # Gateway 배포 정보
-├── risk_manager.py         # 메인 에이전트 클래스 (MCP 클라이언트 통합)
-├── deploy.py               # Runtime 배포 스크립트 (Gateway 정보 자동 로드)
-├── app.py                  # Streamlit 웹 애플리케이션 (시나리오 시각화 포함)
-├── requirements.txt        # Runtime 의존성 (strands, mcp-client 등)
-├── __init__.py            # 패키지 초기화
-├── .bedrock_agentcore.yaml # AgentCore 설정
-├── Dockerfile             # Runtime 컨테이너
-└── deployment_info.json   # Runtime 배포 정보
+├── risk_manager.py         # 메인 에이전트 (AgentCore Runtime)
+├── deploy.py               # AgentCore Runtime 배포
+├── cleanup.py              # 시스템 정리
+├── app.py                  # Streamlit 웹 앱
+├── requirements.txt        # Python 의존성
+├── lambda_layer/           # Lambda Layer (yfinance 라이브러리)
+│   ├── deploy_lambda_layer.py    # Layer 배포 스크립트
+│   ├── layer-yfinance.zip        # yfinance 라이브러리 패키지
+│   └── layer_deployment_info.json # Layer 배포 정보
+├── lambda/                 # Lambda 함수 (뉴스/시장 데이터 조회)
+│   ├── deploy_lambda.py          # Lambda 배포 스크립트
+│   ├── lambda_function.py        # 뉴스 및 시장 데이터 조회 함수
+│   └── lambda_deployment_info.json # Lambda 배포 정보
+├── gateway/                # MCP Gateway (Lambda를 AI 도구로 노출)
+│   ├── deploy_gateway.py         # Gateway 배포 스크립트
+│   ├── target_config.py          # MCP 도구 스키마 정의
+│   └── gateway_deployment_info.json # Gateway 배포 정보
+└── deployment_info.json    # Runtime 배포 정보
 ```
 
-## 🔗 연관 프로젝트
+## 🔗 전체 시스템 연동
 
-이 프로젝트는 **Portfolio Architect**와 연동하여 완전한 투자 자문 시스템을 구성합니다:
+이 Risk Manager는 **AI 투자 어드바이저** 시스템의 세 번째 단계입니다:
 
-1. **Financial Analyst** (Reflection 패턴) → 개인 재무 분석 및 위험 성향 평가
-2. **Portfolio Architect** (Tool Use 패턴) → 실시간 데이터 기반 포트폴리오 설계
-3. **Risk Manager** (Planning 패턴) → 뉴스 기반 리스크 분석 및 시나리오 플래닝
+1. **Financial Analyst** → 재무 분석 및 위험 성향 평가
+2. **Portfolio Architect** → 실시간 ETF 데이터 기반 포트폴리오 설계
+3. **Risk Manager** (현재) → 뉴스 분석 및 리스크 시나리오 플래닝
+4. **Investment Advisor** → 전체 에이전트 통합 및 최종 리포트
 
-**통합 워크플로우:**
-- Financial Analyst에서 JSON 형태의 재무 분석 결과 생성
-- Portfolio Architect가 해당 결과를 입력받아 MCP 도구 활용하여 포트폴리오 구성
-- Risk Manager가 포트폴리오 결과를 입력받아 뉴스 및 시장 데이터 분석
-- 2개 경제 시나리오별 포트폴리오 조정 전략 제시
-- 실시간 리스크 모니터링 및 동적 조정 가이드 제공
+전체 시스템 실행은 `../investment_advisor/app.py`에서 가능합니다.

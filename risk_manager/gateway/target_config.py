@@ -36,6 +36,17 @@ TARGET_CONFIGURATION = {
                             "properties": {},
                             "required": []
                         }
+                    },
+                    
+                    # 지정학적 리스크 지표 조회 도구
+                    {
+                        "name": "get_geopolitical_indicators",
+                        "description": "중국, 신흥국, 유럽, 일본, 한국 등 주요 지역 ETF 데이터를 조회하여 지정학적 리스크를 분석합니다. 각 지역의 시장 상황과 지정학적 긴장도를 파악하기 위한 실시간 지역별 ETF 가격 데이터를 반환합니다.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        }
                     }
                 ]
             }

@@ -120,6 +120,34 @@ def display_market_data(container, market_data):
     except Exception as e:
         container.error(f"시장 데이터 표시 오류: {str(e)}")
 
+def display_geopolitical_data(container, geopolitical_data):
+    """지정학적 리스크 지표 데이터 표시"""
+    try:
+        if isinstance(geopolitical_data, str):
+            data = json.loads(geopolitical_data)
+        else:
+            data = geopolitical_data
+        
+        container.markdown("**🌍 주요 지역 ETF (지정학적 리스크)**")
+        
+        indicators = {k: v for k, v in data.items() if not k.startswith('_')}
+        
+        indicator_items = list(indicators.items())
+        for i in range(0, len(indicator_items), 3):
+            cols = container.columns(3)
+            for j, (key, info) in enumerate(indicator_items[i:i+3]):
+                if j < len(cols):
+                    with cols[j]:
+                        if isinstance(info, dict) and 'value' in info:
+                            description = info.get('description', key)
+                            value = info['value']
+                            st.metric(description, f"${value}")
+                        else:
+                            st.write(f"**{key}**: 데이터 없음")
+                
+    except Exception as e:
+        container.error(f"지정학적 데이터 표시 오류: {str(e)}")
+
 def display_risk_analysis_result(container, analysis_content):
     """최종 리스크 분석 결과 표시"""
     try:
@@ -216,7 +244,9 @@ def invoke_risk_manager(portfolio_data):
                             display_news_data(placeholder, body)
                         elif actual_tool_name == "get_market_data":
                             display_market_data(placeholder, body)
-                    
+                        elif actual_tool_name == "get_geopolitical_indicators":
+                            display_geopolitical_data(placeholder, body)
+
                     current_thinking = ""
                     if tool_use_id in tool_id_to_name:
                         del tool_id_to_name[tool_use_id]
@@ -276,7 +306,7 @@ submitted = st.button("리스크 분석 시작", use_container_width=True)
 if submitted:
     st.divider()
     
-    with st.spinner("AI 리스크 분석 중..."):
+    with st.spinner("Resoning..."):
         portfolio_dict = {
             "portfolio_allocation": {
                 ticker1: allocation1,

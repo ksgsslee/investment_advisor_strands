@@ -29,7 +29,6 @@ graph TB
         
         subgraph "Lab 2: Portfolio Architect"
             PA[📈 Portfolio Architect Runtime]
-            GATEWAY1[🌉 AgentCore Gateway]
             MCP_SERVER[🔧 MCP Server Runtime]
         end
         
@@ -57,8 +56,7 @@ graph TB
     LANGGRAPH --> RM
     
     FA --> CALC
-    PA --> GATEWAY1
-    GATEWAY1 --> COGNITO
+    PA --> COGNITO
     COGNITO --> MCP_SERVER
     MCP_SERVER --> YFINANCE
     
@@ -132,25 +130,22 @@ graph LR
 ```mermaid
 graph LR
     INPUT[📊 재무분석 결과<br/>위험성향, 목표수익률<br/>추천 섹터] --> RUNTIME[🤖 Portfolio Architect<br/>AgentCore Runtime]
-    RUNTIME --> GATEWAY[🌉 AgentCore Gateway<br/>MCP 도구 변환]
-    GATEWAY --> AUTH[🔐 Cognito JWT<br/>인증]
+    RUNTIME --> AUTH[🔐 Cognito JWT<br/>인증]
     AUTH --> MCP[🔧 MCP Server Runtime<br/>yfinance 연동]
     MCP --> YFINANCE[📊 yfinance API<br/>실시간 ETF 데이터]
     YFINANCE --> MCP
-    MCP --> GATEWAY
-    GATEWAY --> RUNTIME
+    MCP --> RUNTIME
     RUNTIME --> OUTPUT[📈 출력<br/>포트폴리오 배분<br/>성과 평가]
     
     style RUNTIME fill:#f3e5f5
-    style GATEWAY fill:#e8f5e8
-    style MCP fill:#fff3e0
+    style MCP fill:#e8f5e8
 ```
 
 **구조**:
-- **AgentCore Gateway**: 외부 API를 MCP 도구로 변환
-- **MCP Server**: yfinance API 연동 (별도 Runtime으로 배포)
+- **AgentCore Runtime**: 메인 포트폴리오 설계 에이전트
+- **MCP Server Runtime**: yfinance API 연동 (별도 Runtime으로 배포)
 - **도구**: `analyze_etf_performance`, `calculate_correlation`
-- **인증**: Cognito JWT OAuth2
+- **인증**: Cognito JWT OAuth2 (Runtime 간 직접 통신)
 
 **처리 과정**:
 1. Financial Analyst 결과를 바탕으로 5개 후보 ETF 선정
@@ -284,10 +279,10 @@ graph TB
 - MCP 프로토콜로 AI 도구화
 - 실시간 금융 데이터 제공
 
-**3. Gateway - API 통합 및 MCP 변환**
-- 외부 API와 Lambda 함수를 AI가 사용할 수 있는 MCP 도구로 변환
+**3. Gateway - Lambda 함수를 MCP 변환**
+- Lambda 함수를 AI가 사용할 수 있는 MCP 도구로 변환 (Risk Manager에서 사용)
 - Cognito JWT 인증으로 보안 강화
-- 복잡한 인프라를 간단한 AI 도구로 추상화
+- 복잡한 Lambda 인프라를 간단한 AI 도구로 추상화
 
 **4. Memory - 장기 메모리 및 개인화**
 - SUMMARY 전략으로 상담 세션 자동 요약
@@ -310,7 +305,7 @@ Financial Analyst (Runtime + OpenAI GPT-OSS 120B)
     ↓ (위험성향, 목표수익률)
 Portfolio Architect (Runtime + Gateway + Claude 4.0 Sonnet)
     ↓ (포트폴리오 배분)
-Risk Manager (Runtime + Gateway + Claude 3.5 Sonnet)
+Risk Manager (Runtime + Gateway + Claude 3.5 Sonnet v2)
     ↓ (리스크 시나리오)
 Investment Advisor (Memory 저장 + 최종 통합)
     ↓
@@ -411,8 +406,8 @@ python cleanup_all.py
 - **Infrastructure**: AWS Bedrock AgentCore (Runtime, Gateway, Memory, Observability)
 - **LLM**: 
   - Financial Analyst: OpenAI GPT-OSS 120B
-  - Portfolio Architect: Claude 4.0 Sonnet (global cross region)
-  - Risk Manager: Claude 3.5 Sonnet v2 (cross region)
+  - Portfolio Architect: Claude 4.0 Sonnet (global.anthropic.claude-sonnet-4-20250514-v1:0)
+  - Risk Manager: Claude 3.5 Sonnet v2 (us.anthropic.claude-3-5-sonnet-20241022-v2:0)
   - Investment Advisor: LangGraph 오케스트레이션 (LLM 없음, 다른 에이전트 호출)
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **Authentication**: Cognito JWT OAuth2
@@ -428,13 +423,12 @@ graph LR
             RT2[📦 Portfolio Architect Runtime]
             RT3[📦 Risk Manager Runtime]
             RT4[📦 Investment Advisor Runtime]
+            MCP[🔧 MCP Server Runtime]
             MEM[🧠 AgentCore Memory]
-            GW1[🌉 Gateway 1]
-            GW2[🌉 Gateway 2]
+            GW[🌉 Gateway (Risk Manager용)]
         end
         
         subgraph "지원 서비스"
-            MCP[🔧 MCP Server Runtime]
             LAM[⚡ Lambda 함수 x3]
             LAY[📦 Lambda Layer]
             COG[🔐 Cognito User Pool x2]
@@ -443,13 +437,12 @@ graph LR
     end
     
     RT1 --> ECR
-    RT2 --> GW1
-    RT3 --> GW2
+    RT2 --> COG
+    RT3 --> GW
     RT4 --> MEM
-    GW1 --> COG
-    GW2 --> COG
-    GW1 --> MCP
-    GW2 --> LAM
+    COG --> MCP
+    GW --> COG
+    GW --> LAM
     LAM --> LAY
     MCP --> ECR
     
@@ -461,8 +454,8 @@ graph LR
 ```
 
 **총 배포 리소스**: 
-- 🏗️ **AgentCore**: Runtime 4개 + Gateway 2개 + Memory 1개
-- ⚡ **Lambda**: 함수 3개 + Layer 1개 + MCP Server 1개
+- 🏗️ **AgentCore**: Runtime 5개 (Agent 4개 + MCP Server 1개) + Gateway 1개 + Memory 1개
+- ⚡ **Lambda**: 함수 3개 + Layer 1개
 - 🔐 **인증**: Cognito User Pool 2개
 - 📦 **컨테이너**: ECR Repository 5개
 
@@ -482,7 +475,7 @@ investment_advisor_strands/
 │   ├── 🌐 app.py                  # Streamlit 개별 테스트
 │   └── 🤖 financial_analyst.py    # 메인 에이전트
 │
-├── 📂 portfolio_architect/         # Lab 2: 포트폴리오 설계 (AgentCore Gateway)
+├── 📂 portfolio_architect/         # Lab 2: 포트폴리오 설계 (AgentCore Runtime + MCP Server)
 │   ├── 📄 README.md               # 상세 설명 및 사용법
 │   ├── 🚀 deploy.py               # 개별 배포
 │   ├── 🌐 app.py                  # Streamlit 개별 테스트
@@ -541,6 +534,7 @@ python deploy.py                    # 메인 에이전트 배포
 streamlit run app.py               # 개별 테스트 웹앱
 ```
 - **기능**: 재무 분석 결과 입력 → ETF 분석 → 포트폴리오 설계
+- **구조**: Runtime 간 직접 MCP 통신 (Gateway 없음)
 - **도구**: 몬테카를로 시뮬레이션 + 상관관계 분석 과정 실시간 확인
 
 #### Lab 3: Risk Manager

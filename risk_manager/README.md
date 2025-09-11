@@ -70,7 +70,7 @@ graph TB
   - MCP Gateway (Lambda 함수를 AI 도구로 노출)
   - Lambda Layer (yfinance 라이브러리 패키징)
   - Lambda 함수 (뉴스 및 거시경제 데이터 조회)
-- **LLM**: Claude 3.7 Sonnet (설정 가능)
+- **LLM**: Claude 3.5 Sonnet v2 (cross region)
 - **Data Source**: yfinance (실시간 뉴스 및 시장 데이터)
 - **Protocol**: MCP (Model Context Protocol)
 - **Authentication**: Cognito JWT OAuth2
@@ -265,7 +265,7 @@ streamlit run app.py
 ```python
 # risk_manager.py
 class Config:
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # 원하는 모델로 변경
+    MODEL_ID = "cross-region.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude 3.5 Sonnet v2 (cross region)
     TEMPERATURE = 0.2
     MAX_TOKENS = 4000
 ```

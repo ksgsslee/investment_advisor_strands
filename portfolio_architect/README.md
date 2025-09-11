@@ -60,7 +60,7 @@ graph TB
 - **Infrastructure**: AWS Bedrock AgentCore Runtime (서버리스)
   - Portfolio Architect Agent Runtime
   - MCP Server Runtime (ETF 데이터 조회)
-- **LLM**: Claude 3.7 Sonnet (설정 가능)
+- **LLM**: Claude 4.0 Sonnet (global cross region)
 - **Data Source**: yfinance (실시간 ETF 데이터)
 - **Protocol**: MCP (Model Context Protocol)
 - **Authentication**: Cognito JWT
@@ -196,7 +196,7 @@ sequenceDiagram
 ```python
 # portfolio_architect.py
 class Config:
-    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # 원하는 모델로 변경
+    MODEL_ID = "global.anthropic.claude-sonnet-4-20250514-v1:0"  # Claude 4.0 Sonnet (global cross region)
     TEMPERATURE = 0.3
     MAX_TOKENS = 3000
 ```

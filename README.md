@@ -304,13 +304,15 @@ graph TB
 ```
 사용자 입력
     ↓
-Financial Analyst (Runtime)
+Investment Advisor (LangGraph 오케스트레이션)
+    ↓
+Financial Analyst (Runtime + OpenAI GPT-OSS 120B)
     ↓ (위험성향, 목표수익률)
-Portfolio Architect (Gateway + MCP Server)
+Portfolio Architect (Runtime + Gateway + Claude 4.0 Sonnet)
     ↓ (포트폴리오 배분)
-Risk Manager (Gateway + Lambda)
+Risk Manager (Runtime + Gateway + Claude 3.5 Sonnet)
     ↓ (리스크 시나리오)
-Investment Advisor (Memory + LangGraph)
+Investment Advisor (Memory 저장 + 최종 통합)
     ↓
 최종 투자 가이드 + 자동 요약 저장
 ```
@@ -409,9 +411,9 @@ python cleanup_all.py
 - **Infrastructure**: AWS Bedrock AgentCore (Runtime, Gateway, Memory, Observability)
 - **LLM**: 
   - Financial Analyst: OpenAI GPT-OSS 120B
-  - Portfolio Architect: Claude 3.7 Sonnet
-  - Risk Manager: Claude 3.7 Sonnet
-  - Investment Advisor: Claude 3.7 Sonnet (다른 에이전트 호출)
+  - Portfolio Architect: Claude 4.0 Sonnet (global cross region)
+  - Risk Manager: Claude 3.5 Sonnet v2 (cross region)
+  - Investment Advisor: LangGraph 오케스트레이션 (LLM 없음, 다른 에이전트 호출)
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **Authentication**: Cognito JWT OAuth2
 - **UI**: Streamlit (실시간 스트리밍 지원)

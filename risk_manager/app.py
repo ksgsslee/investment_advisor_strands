@@ -304,7 +304,7 @@ submitted = st.button("리스크 분석 시작", use_container_width=True)
 if submitted:
     st.divider()
     
-    with st.spinner("Resoning..."):
+    with st.spinner("AI 분석 중..."):
         portfolio_dict = {
             "portfolio_allocation": {
                 ticker1: allocation1,

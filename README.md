@@ -8,72 +8,7 @@
 
 ## 🏗️ 전체 시스템 아키텍처
 
-```mermaid
-graph TB
-    subgraph "사용자 인터페이스"
-        USER[👤 사용자]
-        WEB[🌐 Streamlit 웹앱]
-    end
-    
-    subgraph "AWS Bedrock AgentCore"
-        subgraph "Lab 4: Investment Advisor"
-            IA[🤖 Investment Advisor Runtime]
-            MEMORY[🧠 AgentCore Memory<br/>SUMMARY 전략]
-            LANGGRAPH[📊 LangGraph 워크플로우]
-        end
-        
-        subgraph "Lab 1: Financial Analyst"
-            FA[💰 Financial Analyst Runtime]
-            CALC[🧮 Calculator 도구]
-        end
-        
-        subgraph "Lab 2: Portfolio Architect"
-            PA[📈 Portfolio Architect Runtime]
-            MCP_SERVER[🔧 MCP Server Runtime]
-        end
-        
-        subgraph "Lab 3: Risk Manager"
-            RM[⚠️ Risk Manager Runtime]
-            GATEWAY2[🌉 AgentCore Gateway]
-            LAMBDA[⚡ Lambda 함수들]
-            LAYER[📦 Lambda Layer]
-        end
-    end
-    
-    subgraph "외부 데이터"
-        YFINANCE[📊 yfinance API<br/>ETF/뉴스/시장 데이터 통합]
-    end
-    
-    subgraph "인증 시스템"
-        COGNITO[🔐 Cognito User Pools]
-    end
-    
-    USER --> WEB
-    WEB --> IA
-    IA --> LANGGRAPH
-    LANGGRAPH --> FA
-    LANGGRAPH --> PA
-    LANGGRAPH --> RM
-    
-    FA --> CALC
-    PA --> COGNITO
-    COGNITO --> MCP_SERVER
-    MCP_SERVER --> YFINANCE
-    
-    RM --> GATEWAY2
-    GATEWAY2 --> COGNITO
-    COGNITO --> LAMBDA
-    LAMBDA --> LAYER
-    LAYER --> YFINANCE
-    
-    IA --> MEMORY
-    
-    style IA fill:#e1f5fe
-    style FA fill:#f3e5f5
-    style PA fill:#e8f5e8
-    style RM fill:#fff3e0
-    style MEMORY fill:#fce4ec
-```
+![전체 시스템 아키텍처](static/investment_advisor.png)
 
 ### 📋 전체 워크플로우
 
@@ -303,7 +238,7 @@ Investment Advisor (LangGraph 오케스트레이션)
     ↓
 Financial Analyst (Runtime + OpenAI GPT-OSS 120B)
     ↓ (위험성향, 목표수익률)
-Portfolio Architect (Runtime + Gateway + Claude 4.0 Sonnet)
+Portfolio Architect (Runtime + MCP Server + Claude 4.0 Sonnet)
     ↓ (포트폴리오 배분)
 Risk Manager (Runtime + Gateway + Claude 3.5 Sonnet v2)
     ↓ (리스크 시나리오)

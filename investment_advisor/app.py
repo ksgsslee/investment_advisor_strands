@@ -29,15 +29,16 @@ menu = st.sidebar.selectbox(
 # 배포 정보 로드 (환경변수 우선, 없으면 로컬 JSON 파일)
 def load_deployment_info():
     """환경변수 또는 로컬 JSON 파일에서 배포 정보 로드"""
-    # 환경변수에서 먼저 시도
+    # 환경변수에서 먼저 시도 (Docker 컨테이너 환경)
     agent_arn = os.getenv("INVESTMENT_ADVISOR_ARN")
     memory_id = os.getenv("MEMORY_ID") 
     region = os.getenv("AWS_REGION")
     
     if agent_arn and memory_id and region:
-        return agent_arn, memory_id, region
+        # Docker 환경: static 폴더 경로 설정
+        return agent_arn, memory_id, region, "static"
     
-    # 환경변수가 없으면 로컬 JSON 파일에서 로드
+    # 환경변수가 없으면 로컬 JSON 파일에서 로드 (로컬 개발 환경)
     try:
         with open(Path(__file__).parent / "deployment_info.json") as f:
             deployment_info = json.load(f)
@@ -48,13 +49,14 @@ def load_deployment_info():
             memory_info = json.load(f)
         memory_id = memory_info["memory_id"]
         
-        return agent_arn, memory_id, region
+        # 로컬 환경: static 폴더 경로 설정
+        return agent_arn, memory_id, region, "../static"
         
     except Exception as e:
         st.error(f"배포 정보를 찾을 수 없습니다. 환경변수(INVESTMENT_ADVISOR_ARN, MEMORY_ID, AWS_REGION)를 설정하거나 deploy.py를 먼저 실행해주세요. 오류: {e}")
         st.stop()
 
-AGENT_ARN, MEMORY_ID, REGION = load_deployment_info()
+AGENT_ARN, MEMORY_ID, REGION, STATIC_PATH = load_deployment_info()
 
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 memory_client = MemoryClient(region_name=REGION)
@@ -579,7 +581,7 @@ def load_long_term_summaries():
 # 메뉴별 UI 구성
 if menu == "🤖 새로운 투자 상담":
     with st.expander("🏗️ Investment Advisor 아키텍처", expanded=True):
-        st.image(os.path.join("../static/investment_advisor.png"))
+        st.image(os.path.join(STATIC_PATH, "investment_advisor.png"))
 
 
     st.markdown("**투자자 정보 입력**")

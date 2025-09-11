@@ -26,20 +26,35 @@ menu = st.sidebar.selectbox(
     ["🤖 새로운 투자 상담", "📚 상담 히스토리 (Long-term Memory)"]
 )
 
-# 배포 정보 로드
-try:
-    with open(Path(__file__).parent / "deployment_info.json") as f:
-        deployment_info = json.load(f)
-    AGENT_ARN = deployment_info["agent_arn"]
-    REGION = deployment_info["region"]
+# 배포 정보 로드 (환경변수 우선, 없으면 로컬 JSON 파일)
+def load_deployment_info():
+    """환경변수 또는 로컬 JSON 파일에서 배포 정보 로드"""
+    # 환경변수에서 먼저 시도
+    agent_arn = os.getenv("INVESTMENT_ADVISOR_ARN")
+    memory_id = os.getenv("MEMORY_ID") 
+    region = os.getenv("AWS_REGION")
     
-    with open(Path(__file__).parent / "agentcore_memory" / "deployment_info.json") as f:
-        memory_info = json.load(f)
-    MEMORY_ID = memory_info["memory_id"]
+    if agent_arn and memory_id and region:
+        return agent_arn, memory_id, region
     
-except Exception:
-    st.error("배포 정보를 찾을 수 없습니다. deploy.py를 먼저 실행해주세요.")
-    st.stop()
+    # 환경변수가 없으면 로컬 JSON 파일에서 로드
+    try:
+        with open(Path(__file__).parent / "deployment_info.json") as f:
+            deployment_info = json.load(f)
+        agent_arn = deployment_info["agent_arn"]
+        region = deployment_info["region"]
+        
+        with open(Path(__file__).parent / "agentcore_memory" / "deployment_info.json") as f:
+            memory_info = json.load(f)
+        memory_id = memory_info["memory_id"]
+        
+        return agent_arn, memory_id, region
+        
+    except Exception as e:
+        st.error(f"배포 정보를 찾을 수 없습니다. 환경변수(INVESTMENT_ADVISOR_ARN, MEMORY_ID, AWS_REGION)를 설정하거나 deploy.py를 먼저 실행해주세요. 오류: {e}")
+        st.stop()
+
+AGENT_ARN, MEMORY_ID, REGION = load_deployment_info()
 
 agentcore_client = boto3.client('bedrock-agentcore', region_name=REGION)
 memory_client = MemoryClient(region_name=REGION)
@@ -563,7 +578,7 @@ def load_long_term_summaries():
 
 # 메뉴별 UI 구성
 if menu == "🤖 새로운 투자 상담":
-    with st.expander("🏗️ Investment Advisor 아키텍처", expanded=False):
+    with st.expander("🏗️ Investment Advisor 아키텍처", expanded=True):
         st.image(os.path.join("../static/investment_advisor.png"))
 
 

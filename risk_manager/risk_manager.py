@@ -19,7 +19,7 @@ app = BedrockAgentCoreApp()
 
 class Config:
     """Risk Manager 설정"""
-    MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
     TEMPERATURE = 0.2
     MAX_TOKENS = 4000
 

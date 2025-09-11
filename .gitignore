@@ -247,5 +247,13 @@ Thumbs.db
 
 # AgentCore Runtime
 .bedrock_agentcore.yaml
-Dockerfile
-.dockerignore
+financial_analyst/Dockerfile
+financial_analyst/.dockerignore
+portfolio_architect/Dockerfile
+portfolio_architect/.dockerignore
+portfolio_architect/mcp_server/Dockerfile
+portfolio_architect/mcp_server/.dockerignore
+risk_manager/Dockerfile
+risk_manager/.dockerignore
+investment_advisor/Dockerfile
+investment_advisor/.dockerignore

@@ -110,27 +110,6 @@
 
 ![Investment Advisor](static/investment_advisor.png)
 
-graph TB
-    INPUT[👤 사용자 입력<br/>투자 정보] --> RUNTIME[🤖 Investment Advisor<br/>AgentCore Runtime]
-    RUNTIME --> LANGGRAPH[📊 LangGraph 워크플로우<br/>순차 실행 관리]
-    
-    LANGGRAPH --> FA[💰 Financial Analyst<br/>Runtime 호출]
-    FA --> LANGGRAPH
-    LANGGRAPH --> PA[📈 Portfolio Architect<br/>Runtime 호출]
-    PA --> LANGGRAPH
-    LANGGRAPH --> RM[⚠️ Risk Manager<br/>Runtime 호출]
-    RM --> LANGGRAPH
-    
-    LANGGRAPH --> MEMORY[🧠 AgentCore Memory<br/>SUMMARY 전략]
-    MEMORY --> STORAGE[💾 장기 보존<br/>상담 히스토리 자동 요약]
-    
-    LANGGRAPH --> OUTPUT[📋 최종 출력<br/>종합 투자 가이드<br/>실시간 스트리밍]
-    
-    style RUNTIME fill:#fff3e0
-    style LANGGRAPH fill:#e1f5fe
-    style MEMORY fill:#fce4ec
-```
-
 **구조**:
 - **LangGraph**: 3개 에이전트 순차 실행 워크플로우
 - **AgentCore Memory**: SUMMARY 전략으로 상담 히스토리 자동 요약

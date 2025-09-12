@@ -45,9 +45,9 @@ if st.sidebar.button("🔄 새 세션 시작"):
 def load_deployment_info():
     """환경변수 또는 로컬 JSON 파일에서 배포 정보 로드"""
     # 환경변수에서 먼저 시도 (Docker 컨테이너 환경)
-    agent_arn = os.getenv("INVESTMENT_ADVISOR_ARN")
-    memory_id = os.getenv("MEMORY_ID") 
-    region = os.getenv("AWS_REGION")
+    agent_arn = os.getenv("BWB_INVESTMENT_ADVISOR_ARN")
+    memory_id = os.getenv("BWB_MEMORY_ID") 
+    region = os.getenv("BWB_AWS_REGION")
     
     if agent_arn and memory_id and region:
         # Docker 환경: static 폴더 경로 설정

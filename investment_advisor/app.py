@@ -206,7 +206,7 @@ def display_news_data(container, news_data):
             container.dataframe(
                 news_df[['publish_date', 'title', 'summary']],
                 hide_index=True,
-                width='stretch'
+                use_container_width=True
             )
         else:
             for i, news_item in enumerate(news_list[:5], 1):

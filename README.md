@@ -1,6 +1,6 @@
 # 🤖 AI 투자 어드바이저
 
-**AWS Bedrock AgentCore**를 활용한 Multi-Agent 투자 자문 시스템
+**AWS Bedrock AgentCore & Strands Agent * LangGraph**를 활용한 Multi-Agent 투자 자문 시스템
 
 ## 🎯 시스템 개요
 

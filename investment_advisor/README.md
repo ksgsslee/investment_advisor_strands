@@ -13,54 +13,7 @@
 
 ## 🏗️ 아키텍처
 
-```mermaid
-graph TB
-    subgraph "사용자 인터페이스"
-        UI[Streamlit App]
-        INPUT[투자자 정보 입력]
-        HISTORY[상담 히스토리 조회]
-    end
-    
-    subgraph "AWS Bedrock AgentCore"
-        RUNTIME[Investment Advisor Runtime]
-        LANGGRAPH[LangGraph 워크플로우]
-        MEMORY[AgentCore Memory<br/>SUMMARY 전략]
-    end
-    
-    subgraph "3개 전문 에이전트 Runtime"
-        FA[Financial Analyst<br/>Calculator 도구]
-        PA[Portfolio Architect<br/>MCP Server 연동]
-        RM[Risk Manager<br/>MCP Gateway 연동]
-    end
-    
-    subgraph "외부 데이터 소스"
-        YFINANCE[yfinance API<br/>ETF/뉴스/시장/지정학적 데이터 통합]
-    end
-    
-    INPUT --> UI
-    UI --> RUNTIME
-    RUNTIME --> LANGGRAPH
-    
-    LANGGRAPH --> FA
-    FA --> LANGGRAPH
-    LANGGRAPH --> PA
-    PA --> YFINANCE
-    PA --> LANGGRAPH
-    LANGGRAPH --> RM
-    RM --> YFINANCE
-    RM --> LANGGRAPH
-    
-    LANGGRAPH --> MEMORY
-    MEMORY --> HISTORY
-    HISTORY --> UI
-    
-    style RUNTIME fill:#e1f5fe
-    style LANGGRAPH fill:#f3e5f5
-    style MEMORY fill:#e8f5e8
-    style FA fill:#fff3e0
-    style PA fill:#f1f8e9
-    style RM fill:#fce4ec
-```
+![Investment Advisor](../static/investment_advisor.png)
 
 ### LangGraph 워크플로우 구조
 ```python

@@ -13,32 +13,9 @@
 
 ## 🏗️ 아키텍처
 
-```mermaid
-graph TB
-    subgraph "사용자 인터페이스"
-        UI[Streamlit App]
-        INPUT[투자자 정보 입력]
-    end
-    
-    subgraph "AWS Bedrock AgentCore Runtime"
-        RUNTIME[Financial Analyst Runtime]
-        AGENT[Financial Analyst Agent]
-        CALC[Calculator Tool]
-    end
-    
-    INPUT --> UI
-    UI --> RUNTIME
-    RUNTIME --> AGENT
-    AGENT --> CALC
-    CALC --> AGENT
-    AGENT --> RUNTIME
-    RUNTIME --> UI
-    UI --> INPUT
-    
-    style RUNTIME fill:#e1f5fe
-    style AGENT fill:#f3e5f5
-    style CALC fill:#e8f5e8
-```
+
+![전체 시스템 아키텍처](../static/financial_analyst.png)
+
 
 ### 기술 스택
 - **AI Framework**: Strands Agents SDK

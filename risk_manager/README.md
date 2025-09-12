@@ -14,54 +14,7 @@ Portfolio Architect의 포트폴리오 설계 결과를 바탕으로 실시간 �
 
 ## 🏗️ 아키텍처
 
-```mermaid
-graph TB
-    subgraph "사용자 인터페이스"
-        UI[Streamlit App]
-        INPUT[포트폴리오 설계 결과 입력]
-    end
-    
-    subgraph "AWS Bedrock AgentCore"
-        RUNTIME[Risk Manager Runtime]
-        AGENT[Risk Manager Agent]
-    end
-    
-    subgraph "MCP Gateway (AgentCore Gateway)"
-        GATEWAY[MCP Gateway]
-        TARGET[Gateway Target]
-    end
-    
-    subgraph "Lambda 인프라"
-        LAYER[Lambda Layer<br/>yfinance 라이브러리]
-        LAMBDA[Lambda 함수<br/>뉴스/시장 데이터 조회]
-    end
-    
-    subgraph "인증 시스템"
-        COGNITO[Cognito User Pool]
-        JWT[JWT OAuth2]
-    end
-    
-    subgraph "외부 데이터"
-        YFINANCE[yfinance API<br/>뉴스/시장/지정학적 데이터 통합]
-    end
-    
-    INPUT --> UI
-    UI --> RUNTIME
-    RUNTIME --> AGENT
-    AGENT --> JWT
-    JWT --> COGNITO
-    COGNITO --> GATEWAY
-    GATEWAY --> TARGET
-    TARGET --> LAMBDA
-    LAMBDA --> LAYER
-    LAYER --> YFINANCE
-    
-    style RUNTIME fill:#e1f5fe
-    style AGENT fill:#f3e5f5
-    style GATEWAY fill:#e8f5e8
-    style LAMBDA fill:#fff3e0
-    style LAYER fill:#f1f8e9
-```
+![전체 시스템 아키텍처](../static/risk_manager.png)
 
 ### 기술 스택
 - **AI Framework**: Strands Agents SDK

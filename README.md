@@ -10,33 +10,12 @@
 
 ![전체 시스템 아키텍처](static/investment_advisor.png)
 
-### 📋 전체 워크플로우
-
-```
-사용자 입력 → Financial Analyst → Portfolio Architect → Risk Manager → Investment Advisor → 최종 보고서
-```
-
-1. **사용자가 투자 정보 입력** (나이, 투자금액, 목표금액, 경험 등)
-2. **Financial Analyst**가 재무 상황 분석 및 위험 성향 평가
-3. **Portfolio Architect**가 실시간 ETF 데이터로 포트폴리오 설계
-4. **Risk Manager**가 뉴스/시장 데이터로 리스크 시나리오 분석
-5. **Investment Advisor**가 모든 결과를 통합하여 최종 투자 가이드 생성
-
 ## 🏗️ 에이전트별 상세 구조
 
 ### Lab 1: Financial Analyst
 **역할**: 개인 재무 상황 분석 및 위험 성향 평가
 
-```mermaid
-graph LR
-    INPUT[👤 사용자 입력<br/>나이, 투자경험<br/>투자금액, 목표금액] --> RUNTIME[🤖 Financial Analyst<br/>AgentCore Runtime]
-    RUNTIME --> CALC[🧮 Calculator 도구<br/>수익률 계산]
-    CALC --> RUNTIME
-    RUNTIME --> OUTPUT[📊 출력<br/>위험성향, 목표수익률<br/>추천 투자섹터]
-    
-    style RUNTIME fill:#e1f5fe
-    style CALC fill:#f0f4c3
-```
+![Financial Analyst](static/financial_analyst.png)
 
 **구조**:
 - **AgentCore Runtime**: 서버리스 에이전트 호스팅
@@ -62,19 +41,7 @@ graph LR
 ### Lab 2: Portfolio Architect
 **역할**: 실시간 ETF 데이터 기반 최적 포트폴리오 설계
 
-```mermaid
-graph LR
-    INPUT[📊 재무분석 결과<br/>위험성향, 목표수익률<br/>추천 섹터] --> RUNTIME[🤖 Portfolio Architect<br/>AgentCore Runtime]
-    RUNTIME --> AUTH[🔐 Cognito JWT<br/>인증]
-    AUTH --> MCP[🔧 MCP Server Runtime<br/>yfinance 연동]
-    MCP --> YFINANCE[📊 yfinance API<br/>실시간 ETF 데이터]
-    YFINANCE --> MCP
-    MCP --> RUNTIME
-    RUNTIME --> OUTPUT[📈 출력<br/>포트폴리오 배분<br/>성과 평가]
-    
-    style RUNTIME fill:#f3e5f5
-    style MCP fill:#e8f5e8
-```
+![Portfolio Architect](static/portfolio_architect.png)
 
 **구조**:
 - **AgentCore Runtime**: 메인 포트폴리오 설계 에이전트
@@ -105,24 +72,7 @@ graph LR
 ### Lab 3: Risk Manager
 **역할**: 뉴스 및 거시경제 데이터 기반 리스크 시나리오 분석
 
-```mermaid
-graph LR
-    INPUT[📈 포트폴리오 결과<br/>ETF 배분<br/>성과 평가] --> RUNTIME[🤖 Risk Manager<br/>AgentCore Runtime]
-    RUNTIME --> GATEWAY[🌉 AgentCore Gateway<br/>Lambda → MCP 변환]
-    GATEWAY --> AUTH[🔐 Cognito JWT<br/>인증]
-    AUTH --> LAMBDA[⚡ Lambda 함수<br/>데이터 조회 x3]
-    LAMBDA --> LAYER[📦 Lambda Layer<br/>yfinance 라이브러리]
-    LAYER --> YFINANCE[📊 yfinance API<br/>뉴스/시장/지정학적 데이터]
-    YFINANCE --> LAYER
-    LAYER --> LAMBDA
-    LAMBDA --> GATEWAY
-    GATEWAY --> RUNTIME
-    RUNTIME --> OUTPUT[⚠️ 출력<br/>2개 리스크 시나리오<br/>포트폴리오 조정 전략]
-    
-    style RUNTIME fill:#e8f5e8
-    style GATEWAY fill:#fff3e0
-    style LAMBDA fill:#fce4ec
-```
+![Risk Manager](static/risk_manager.png)
 
 **구조**:
 - **AgentCore Gateway**: Lambda 함수를 MCP 도구로 노출
@@ -158,7 +108,8 @@ graph LR
 ### Lab 4: Investment Advisor
 **역할**: 3개 에이전트 결과 통합 및 장기 메모리 관리
 
-```mermaid
+![Investment Advisor](static/investment_advisor.png)
+
 graph TB
     INPUT[👤 사용자 입력<br/>투자 정보] --> RUNTIME[🤖 Investment Advisor<br/>AgentCore Runtime]
     RUNTIME --> LANGGRAPH[📊 LangGraph 워크플로우<br/>순차 실행 관리]

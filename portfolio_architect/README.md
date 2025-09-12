@@ -14,46 +14,7 @@ Financial Analyst의 재무 분석 결과를 바탕으로 실시간 ETF 데이�
 
 ## 🏗️ 아키텍처
 
-```mermaid
-graph TB
-    subgraph "사용자 인터페이스"
-        UI[Streamlit App]
-        INPUT[재무 분석 결과 입력]
-    end
-    
-    subgraph "AWS Bedrock AgentCore"
-        RUNTIME[Portfolio Architect Runtime]
-        AGENT[Portfolio Architect Agent]
-    end
-    
-    subgraph "MCP Server (AgentCore Runtime)"
-        MCP[MCP Server Runtime]
-        YFINANCE[yfinance API]
-        TOOLS[ETF 분석 도구들]
-    end
-    
-    subgraph "인증"
-        COGNITO[Cognito JWT Auth]
-    end
-    
-    INPUT --> UI
-    UI --> RUNTIME
-    RUNTIME --> AGENT
-    AGENT --> COGNITO
-    COGNITO --> MCP
-    MCP --> YFINANCE
-    MCP --> TOOLS
-    TOOLS --> MCP
-    MCP --> AGENT
-    AGENT --> RUNTIME
-    RUNTIME --> UI
-    UI --> INPUT
-    
-    style RUNTIME fill:#e1f5fe
-    style AGENT fill:#f3e5f5
-    style MCP fill:#e8f5e8
-    style COGNITO fill:#fff3e0
-```
+![전체 시스템 아키텍처](../static/portfolio_architect.png)
 
 ### 기술 스택
 - **AI Framework**: Strands Agents SDK

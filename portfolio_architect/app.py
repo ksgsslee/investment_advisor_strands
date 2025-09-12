@@ -131,7 +131,7 @@ def display_correlation_analysis(container, correlation_data):
             )
             
             fig.update_traces(texttemplate="%{z:.2f}", textfont_size=12)
-            container.plotly_chart(fig, use_container_width=True)
+            container.plotly_chart(fig, width='stretch')
             
             # 상관관계 해석
             container.markdown("**상관관계 해석**")
@@ -201,7 +201,7 @@ def display_etf_analysis_result(container, etf_data):
                 showlegend=False
             )
             
-            container.plotly_chart(fig, use_container_width=True)
+            container.plotly_chart(fig, width='stretch')
         
     except Exception as e:
         container.error(f"ETF 분석 결과 표시 오류: {e}")
@@ -299,7 +299,7 @@ key_sectors = st.multiselect(
 )
 summary = st.text_area("종합 총평", value="높은 목표 수익률을 위해 공격적 투자 전략이 필요합니다.")
 
-if st.button("분석 시작", use_container_width=True):
+if st.button("분석 시작", width='stretch'):
     financial_analysis = {
         "risk_profile": risk_profile,
         "risk_profile_reason": risk_profile_reason,

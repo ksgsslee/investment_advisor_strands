@@ -200,7 +200,7 @@ preferred_sectors = st.multiselect(
     default=["성장주 (기술/바이오)"]
 )
 
-submitted = st.button("분석 시작", use_container_width=True)
+submitted = st.button("분석 시작", width='stretch')
 
 if submitted:
     # 나이 범위를 숫자로 변환

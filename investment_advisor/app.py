@@ -135,7 +135,7 @@ def display_etf_analysis_result(container, etf_data):
                 showlegend=False
             )
             
-            container.plotly_chart(fig, use_container_width=True)
+            container.plotly_chart(fig, width='stretch')
         
     except Exception as e:
         container.error(f"ETF 분석 결과 표시 오류: {e}")
@@ -170,7 +170,7 @@ def display_correlation_analysis(container, correlation_data):
             )
             
             fig.update_traces(texttemplate="%{z:.2f}", textfont_size=12)
-            container.plotly_chart(fig, use_container_width=True)
+            container.plotly_chart(fig, width='stretch')
             
             container.markdown("**상관관계 해석**")
             container.info("""
@@ -206,7 +206,7 @@ def display_news_data(container, news_data):
             container.dataframe(
                 news_df[['publish_date', 'title', 'summary']],
                 hide_index=True,
-                use_container_width=True
+                width='stretch'
             )
         else:
             for i, news_item in enumerate(news_list[:5], 1):
@@ -385,7 +385,7 @@ def display_risk_analysis_result(container, analysis_content):
                             textinfo='label+percent'
                         )])
                         fig.update_layout(height=400, title=f"시나리오 {i} 포트폴리오")
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                 
                 with col2:
                     st.markdown("**조정 이유 및 전략**")
@@ -673,7 +673,7 @@ if menu == "🤖 새로운 투자 상담":
         default=["성장주 (기술/바이오)"]
     )
 
-    submitted = st.button("분석 시작", use_container_width=True)
+    submitted = st.button("분석 시작", width='stretch')
 
     if submitted:
         # 기존 세션 사용 (페이지 로드 시 이미 생성됨)
@@ -709,7 +709,7 @@ elif menu == "📚 상담 히스토리 (Long-term Memory)":
     st.markdown("### 📚 현재 세션 투자 상담 요약")
     st.info(f"현재 세션 **{st.session_state.current_session_id}**의 AgentCore SUMMARY 전략 자동 요약을 확인할 수 있습니다.")
     
-    if st.button("🔄 요약 새로고침", use_container_width=True):
+    if st.button("🔄 요약 새로고침", width='stretch'):
         st.rerun()
     
     with st.spinner("현재 세션의 Long-term Memory 로딩 중..."):

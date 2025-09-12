@@ -116,18 +116,17 @@
 - **에이전트 호출**: 다른 3개 에이전트의 Runtime을 직접 호출
 
 **처리 과정**:
-1. **LangGraph 워크플로우 시작**: 사용자 입력으로 상태 초기화
-2. **순차 에이전트 실행**:
+1. **순차 에이전트 실행**:
    - `financial_node` → Financial Analyst Runtime 호출
    - `portfolio_node` → Portfolio Architect Runtime 호출  
    - `risk_node` → Risk Manager Runtime 호출
-3. **실시간 스트리밍**: 각 에이전트의 사고 과정과 도구 사용을 실시간 표시
-4. **메모리 저장**: 각 에이전트 결과를 세션별 대화 이벤트로 저장
-5. **자동 요약**: SUMMARY 전략이 전체 상담 세션을 자동 요약하여 장기 보존
+2. **실시간 스트리밍**: 각 에이전트의 사고 과정과 도구 사용을 실시간 표시
+3. **메모리 저장**: 각 에이전트 결과를 세션별 대화 이벤트로 저장
+4. **자동 요약**: SUMMARY 전략이 전체 상담 세션을 Topic별로 구조화하여 요약
 
 **메모리 구조**:
 - **Short-term**: 각 에이전트 결과를 세션별 대화로 저장 (7일)
-- **Long-term**: SUMMARY 전략이 전체 세션을 자동 요약 (영구 보존)
+- **Long-term**: SUMMARY 전략이 Topic별로 구조화된 요약 생성 (영구 보존)
 - **네임스페이스**: `investment/session/{sessionId}` 구조
 
 ## � 기술 적 구현 세부사항

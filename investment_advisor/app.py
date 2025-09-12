@@ -10,6 +10,7 @@ import boto3
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
+from datetime import datetime
 from pathlib import Path
 from bedrock_agentcore.memory import MemoryClient
 
@@ -20,11 +21,25 @@ st.set_page_config(
 )
 st.title("🤖 Investment Advisor")
 
+# 세션 관리 초기화 - 페이지 로드 시 자동 생성
+if 'current_session_id' not in st.session_state:
+    st.session_state.current_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
 # 사이드바 메뉴
 menu = st.sidebar.selectbox(
     "메뉴 선택",
     ["🤖 새로운 투자 상담", "📚 상담 히스토리 (Long-term Memory)"]
 )
+
+# 사이드바에 세션 정보 표시
+st.sidebar.divider()
+st.sidebar.success(f"**현재 세션**: {st.session_state.current_session_id}")
+st.sidebar.caption("페이지 로드 시 자동 생성됨")
+
+# 세션 초기화 버튼
+if st.sidebar.button("🔄 새 세션 시작"):
+    st.session_state.current_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    st.rerun()
 
 # 배포 정보 로드 (환경변수 우선, 없으면 로컬 JSON 파일)
 def load_deployment_info():
@@ -380,13 +395,19 @@ def display_risk_analysis_result(container, analysis_content):
     except Exception as e:
         container.error(f"리스크 분석 표시 오류: {str(e)}")
 
-def invoke_investment_advisor(input_data):
-    """Investment Advisor 호출"""
+def invoke_investment_advisor(input_data, session_id):
+    """Investment Advisor 호출 - 세션 ID 전달"""
     try:
+        # 세션 ID를 payload에 포함
+        payload_data = {
+            "input_data": input_data,
+            "session_id": session_id
+        }
+        
         response = agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=AGENT_ARN,
             qualifier="DEFAULT",
-            payload=json.dumps({"input_data": input_data})
+            payload=json.dumps(payload_data)
         )
         
         progress_container = st.container()
@@ -533,50 +554,50 @@ def invoke_investment_advisor(input_data):
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-def load_long_term_summaries():
-    """Long-term Memory에서 요약 데이터 로드 - retrieve_memories 사용"""
+def load_current_session_summary():
+    """현재 세션의 Long-term Memory 요약 로드"""
     try:
-        # SUMMARY 전략이 생성한 Long-term Memory 조회
+        # 현재 세션의 SUMMARY 전략 결과 조회
+        current_session = st.session_state.current_session_id
+        session_namespace = f"investment/session/{current_session}"
+        
         response = memory_client.retrieve_memories(
             memory_id=MEMORY_ID,
-            namespace="investment/session",
-            query="investment consultation summary"  # 투자 상담 요약 검색
+            namespace=session_namespace,
+            query="investment consultation summary"
         )
         
-        summaries = []
-        for record in response:
-            # content 추출 (간단화)
-            content = record.get('content', {})
+        if response and len(response) > 0:
+            # 가장 최신 요약 반환
+            latest_record = response[0]
+            
+            # content 추출
+            content = latest_record.get('content', {})
             content_text = content.get('text', str(content)) if isinstance(content, dict) else str(content)
             
-            # timestamp 추출 (간단화)
-            timestamp = record.get('createdAt', record.get('created_at', 'Unknown'))
+            # timestamp 추출
+            timestamp = latest_record.get('createdAt', latest_record.get('created_at', 'Unknown'))
             timestamp_str = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
             
-            summaries.append({
-                'session_id': record.get('memoryRecordId', 'Unknown'),
+            return {
+                'session_id': current_session,
                 'timestamp': timestamp_str,
                 'content': content_text,
-                'namespaces': record.get('namespaces', [])
-            })
-
-        # 시간순으로 정렬 (최신순)
-        summaries.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        
-        return summaries[:10]  # 최대 10개만 반환
+                'found': True
+            }
+        else:
+            return {
+                'session_id': current_session,
+                'found': False
+            }
         
     except Exception as e:
-        st.error(f"Long-term Memory 조회 실패: {e}")
-        st.error(f"오류 상세: {str(e)}")
-        
-        # 디버깅을 위해 MemoryClient의 사용 가능한 메서드 표시
-        try:
-            available_methods = [method for method in dir(memory_client) if not method.startswith('_')]
-            st.info(f"사용 가능한 MemoryClient 메서드들: {', '.join(available_methods)}")
-        except:
-            pass
-            
-        return []
+        st.error(f"현재 세션 Memory 조회 실패: {e}")
+        return {
+            'session_id': st.session_state.current_session_id,
+            'found': False,
+            'error': str(e)
+        }
 
 # 메뉴별 UI 구성
 if menu == "🤖 새로운 투자 상담":
@@ -655,6 +676,8 @@ if menu == "🤖 새로운 투자 상담":
     submitted = st.button("분석 시작", use_container_width=True)
 
     if submitted:
+        # 기존 세션 사용 (페이지 로드 시 이미 생성됨)
+        
         age_number = int(age.split('-')[0]) + 2
         
         experience_mapping = {
@@ -673,68 +696,69 @@ if menu == "🤖 새로운 투자 상담":
         }
         
         st.divider()
-        
         with st.spinner("AI 분석 중..."):
-            result = invoke_investment_advisor(input_data)
+            result = invoke_investment_advisor(
+                input_data, 
+                st.session_state.current_session_id
+            )
             
             if result['status'] == 'error':
                 st.error(f"❌ 분석 중 오류: {result.get('error', 'Unknown error')}")
 
 elif menu == "📚 상담 히스토리 (Long-term Memory)":
-    st.markdown("### 📚 투자 상담 히스토리")
-    st.info("AgentCore SUMMARY 전략이 자동으로 생성한 투자 상담 요약을 확인할 수 있습니다.")
+    st.markdown("### 📚 현재 세션 투자 상담 요약")
+    st.info(f"현재 세션 **{st.session_state.current_session_id}**의 AgentCore SUMMARY 전략 자동 요약을 확인할 수 있습니다.")
     
-    if st.button("🔄 히스토리 새로고침", use_container_width=True):
+    if st.button("🔄 요약 새로고침", use_container_width=True):
         st.rerun()
     
-    with st.spinner("Long-term Memory에서 요약 데이터 로딩 중..."):
-        summaries = load_long_term_summaries()
+    with st.spinner("현재 세션의 Long-term Memory 로딩 중..."):
+        summary_data = load_current_session_summary()
     
-    if not summaries:
-        st.warning("아직 저장된 투자 상담 히스토리가 없습니다.")
-        st.markdown("새로운 투자 상담을 진행하면 자동으로 요약이 생성됩니다.")
+    if not summary_data['found']:
+        if 'error' in summary_data:
+            st.error(f"요약 조회 중 오류 발생: {summary_data['error']}")
+        else:
+            st.warning("현재 세션의 투자 상담 요약이 아직 생성되지 않았습니다.")
+            st.markdown("""
+            **요약 생성 조건:**
+            - 투자 상담을 완료해야 합니다 (3개 에이전트 모두 실행)
+            - AgentCore SUMMARY 전략이 자동으로 요약을 생성합니다
+            - 요약 생성까지 몇 분 정도 소요될 수 있습니다
+            """)
     else:
-        for i, summary in enumerate(summaries, 1):
-            timestamp = summary['timestamp']
-            # 시간 표시를 더 읽기 쉽게 포맷
-            try:
-                from datetime import datetime
-                if isinstance(timestamp, str) and 'T' in timestamp:
-                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    time_display = dt.strftime('%Y-%m-%d %H:%M')
-                else:
-                    time_display = str(timestamp)
-            except:
+        # 시간 표시를 더 읽기 쉽게 포맷
+        timestamp = summary_data['timestamp']
+        try:
+            if isinstance(timestamp, str) and 'T' in timestamp:
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                time_display = dt.strftime('%Y-%m-%d %H:%M:%S')
+            else:
                 time_display = str(timestamp)
+        except:
+            time_display = str(timestamp)
+        
+        content = summary_data['content']
+        
+        # XML 형태의 summary를 간단하게 처리
+        if isinstance(content, str):
+            st.markdown("## 📋 투자 상담 요약")
             
-            # 네임스페이스에서 session ID 추출 (마지막 / 부분)
-            session_display = summary['session_id']
-            if summary.get('namespaces'):
-                namespace = summary['namespaces'][0] if isinstance(summary['namespaces'], list) else str(summary['namespaces'])
-                if '/' in namespace:
-                    session_display = namespace.split('/')[-1]
+            # XML에서 topic들을 추출해서 표시
+            import re
+            topics = re.findall(r'<topic name="([^"]+)">\s*(.*?)\s*</topic>', content, re.DOTALL)
             
-            with st.expander(f"📋 {time_display} - Session: {session_display}"):
-                st.markdown("**투자 상담 요약 (AgentCore SUMMARY 자동 생성)**")
-                content = summary['content']
-                
-                # XML 형태의 summary를 더 읽기 쉽게 처리
-                if isinstance(content, str) and '<summary>' in content:
-                    # XML에서 topic들을 추출해서 표시
-                    import re
-                    topics = re.findall(r'<topic name="([^"]+)">\s*(.*?)\s*</topic>', content, re.DOTALL)
-                    
-                    if topics:
-                        for topic_name, topic_content in topics:
-                            st.markdown(f"**📌 {topic_name}**")
-                            # HTML 엔티티 디코딩
-                            clean_content = topic_content.replace('&quot;', '"').replace('&#39;', "'")
-                            st.write(clean_content.strip())
-                            st.write("")  # 빈 줄 추가
-                    else:
-                        # XML 파싱 실패 시 원본 표시
-                        st.text(content)
-                else:
-                    # 일반 텍스트 처리
-                    content_str = str(content)
-                    st.markdown(content_str)
+            if topics:
+                for topic_name, topic_content in topics:
+                    st.subheader(f"📌 {topic_name}")
+                    # HTML 엔티티 디코딩
+                    clean_content = topic_content.replace('&quot;', '"').replace('&#39;', "'")
+                    st.write(clean_content.strip())
+                    st.divider()
+            else:
+                # XML 파싱 실패 시 원본 표시
+                st.text(content)
+        else:
+            # 일반 텍스트 처리
+            st.markdown("## 📋 투자 상담 요약")
+            st.write(content)

@@ -116,7 +116,7 @@ class AgentClient:
                 ]
             )
             
-            print(f"💾 {agent_type} 이벤트 저장 완료")
+            print(f"💾 {agent_type} 이벤트 저장 완료 (Session: {session_id})")
             
         except Exception as e:
             print(f"❌ Memory 저장 실패 ({agent_type}): {e}")
@@ -193,9 +193,11 @@ class InvestmentAdvisor:
     def __init__(self):
         self.graph = create_graph()
     
-    async def run_consultation(self, user_input):
+    async def run_consultation(self, user_input, session_id=None):
         """투자 상담 실행"""
-        session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Streamlit에서 전달받은 세션 ID 사용, 없으면 기본값 생성
+        if not session_id:
+            session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         initial_state = {
             "user_input": user_input,
@@ -219,7 +221,9 @@ async def investment_advisor_entrypoint(payload):
         advisor = InvestmentAdvisor()
     
     user_input = payload.get("input_data")
-    async for chunk in advisor.run_consultation(user_input):
+    session_id = payload.get("session_id")
+    
+    async for chunk in advisor.run_consultation(user_input, session_id):
         yield chunk
 
 if __name__ == "__main__":

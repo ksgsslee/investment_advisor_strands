@@ -1,9 +1,7 @@
-# Strands Agents
+# Core AI/Agent Framework
 strands-agents
 strands-agents-tools
 bedrock-agentcore-starter-toolkit
-
-# Langgraph
 langgraph
 
 # MCP (Model Context Protocol)
@@ -18,9 +16,8 @@ numpy
 streamlit
 plotly
 
-# AWS (for future use)
+# AWS
 boto3
 
-# Utilities
-python-dotenv
+# HTTP Requests
 requests

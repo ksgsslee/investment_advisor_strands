@@ -70,7 +70,7 @@ graph TB
   - MCP Gateway (Lambda 함수를 AI 도구로 노출)
   - Lambda Layer (yfinance 라이브러리 패키징)
   - Lambda 함수 (뉴스 및 거시경제 데이터 조회)
-- **LLM**: Claude 3.5 Sonnet v2 (cross region)
+- **LLM**: Claude 3.7 Sonnet (cross region)
 - **Data Source**: yfinance (실시간 뉴스 및 시장 데이터)
 - **Protocol**: MCP (Model Context Protocol)
 - **Authentication**: Cognito JWT OAuth2
@@ -168,7 +168,7 @@ aws configure
 cd risk_manager
 ```
 
-### 2. 배포 (4단계 순차 배포)
+### 2. 배포 (4단계 순차 배포 필수)
 ```bash
 # 1단계: Lambda Layer 배포 (yfinance 라이브러리)
 cd lambda_layer
@@ -189,6 +189,8 @@ python deploy.py
 # 배포 상태 확인
 cat deployment_info.json
 ```
+
+**⚠️ 주의**: 각 단계는 순서대로 실행해야 하며, 이전 단계가 완료된 후 다음 단계를 진행해야 합니다.
 
 ### 3. Streamlit 실습
 ```bash
@@ -244,16 +246,16 @@ streamlit run app.py
 ### get_market_data()
 - **기능**: 주요 거시경제 지표 실시간 조회 (7개 지표)
 - **지표 구성**:
-  - **금리 지표** (3개): 2년/10년 국채 수익률, 달러 지수
-  - **변동성/원자재** (3개): VIX, WTI 원유, 금 선물
-  - **주식 지수** (1개): S&P 500
+  - **금리 지표** (3개): 미국 2년 국채 수익률, 미국 10년 국채 수익률, 미국 달러 강세 지수
+  - **변동성/원자재** (3개): VIX 변동성 지수, WTI 원유 선물 가격, 금 선물 가격
+  - **주식 지수** (1개): S&P 500 지수
 - **용도**: 거시경제 환경 분석 및 경제 시나리오 도출
 
 ### get_geopolitical_indicators()
 - **기능**: 주요 지역 ETF 실시간 조회 (5개 지역)
 - **지역 구성**:
   - **중국** (ASHR): 중국 A주 ETF
-  - **신흥국** (EEM): 신흥국 ETF
+  - **신흥국** (EEM): 신흥국 ETF  
   - **유럽** (VGK): 유럽 ETF
   - **일본** (EWJ): 일본 ETF
   - **한국** (EWY): 한국 ETF
@@ -265,7 +267,7 @@ streamlit run app.py
 ```python
 # risk_manager.py
 class Config:
-    MODEL_ID = "cross-region.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude 3.5 Sonnet v2 (cross region)
+    MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"  # Claude 3.7 Sonnet (us region)
     TEMPERATURE = 0.2
     MAX_TOKENS = 4000
 ```
@@ -284,7 +286,7 @@ MARKET_INDICATORS = {
 ```
 risk_manager/
 ├── risk_manager.py         # 메인 에이전트 (AgentCore Runtime)
-├── deploy.py               # AgentCore Runtime 배포
+├── deploy.py               # Risk Manager Runtime 배포 (4단계 중 마지막)
 ├── cleanup.py              # 시스템 정리
 ├── app.py                  # Streamlit 웹 앱
 ├── requirements.txt        # Python 의존성

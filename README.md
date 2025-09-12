@@ -240,7 +240,7 @@ Financial Analyst (Runtime + OpenAI GPT-OSS 120B)
     ↓ (위험성향, 목표수익률)
 Portfolio Architect (Runtime + MCP Server + Claude 4.0 Sonnet)
     ↓ (포트폴리오 배분)
-Risk Manager (Runtime + Gateway + Claude 3.5 Sonnet v2)
+Risk Manager (Runtime + Gateway + Claude 3.7 Sonnet)
     ↓ (리스크 시나리오)
 Investment Advisor (Memory 저장 + 최종 통합)
     ↓
@@ -290,10 +290,11 @@ python cleanup_all.py
 4. `cd ../risk_manager` - 리스크 분석 과정 학습
 
 ### 시나리오 3: 개발 및 커스터마이징
-1. 각 에이전트 폴더의 `README.md` 참조
-2. 개별 배포 및 테스트로 기능 확인
-3. 코드 수정 후 개별 재배포
+1. 각 에이전트 폴더의 `README.md` 참조하여 상세 구조 파악
+2. 개별 배포 및 테스트로 기능 확인 (`deployment_info.json` 파일로 배포 상태 확인)
+3. 코드 수정 후 개별 재배포 (각 폴더의 `deploy.py` 실행)
 4. 통합 웹앱에서 전체 워크플로우 테스트
+5. `shared/` 폴더의 공통 유틸리티 함수 활용하여 새로운 에이전트 개발
 
 ## 📊 실제 사용 예시
 
@@ -342,7 +343,7 @@ python cleanup_all.py
 - **LLM**: 
   - Financial Analyst: OpenAI GPT-OSS 120B
   - Portfolio Architect: Claude 4.0 Sonnet (global.anthropic.claude-sonnet-4-20250514-v1:0)
-  - Risk Manager: Claude 3.5 Sonnet v2 (us.anthropic.claude-3-5-sonnet-20241022-v2:0)
+  - Risk Manager: Claude 3.7 Sonnet (us.anthropic.claude-3-7-sonnet-20250219-v1:0)
   - Investment Advisor: LangGraph 오케스트레이션 (LLM 없음, 다른 에이전트 호출)
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **Authentication**: Cognito JWT OAuth2
@@ -475,11 +476,11 @@ streamlit run app.py               # 개별 테스트 웹앱
 #### Lab 3: Risk Manager
 ```bash
 cd risk_manager
-# 4단계 순차 배포 (또는 python deploy.py로 통합 실행)
+# 4단계 순차 배포 (필수)
 cd lambda_layer && python deploy_lambda_layer.py && cd ..
 cd lambda && python deploy_lambda.py && cd ..
 cd gateway && python deploy_gateway.py && cd ..
-python deploy.py                    # 메인 에이전트 배포
+python deploy.py                    # Risk Manager Runtime 배포
 streamlit run app.py               # 개별 테스트 웹앱
 ```
 - **기능**: 포트폴리오 입력 → 뉴스/시장 데이터 분석 → 리스크 시나리오

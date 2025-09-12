@@ -361,7 +361,7 @@ graph LR
             RT4[📦 Investment Advisor Runtime]
             MCP[🔧 MCP Server Runtime]
             MEM[🧠 AgentCore Memory]
-            GW[🌉 Gateway (Risk Manager용)]
+            GW[🌉 Gateway for Risk Manager]
         end
         
         subgraph "지원 서비스"

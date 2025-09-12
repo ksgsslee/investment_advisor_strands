@@ -179,28 +179,46 @@ Investment Advisor (Memory 저장 + 최종 통합)
 
 ## 🚀 빠른 시작
 
-### 1. 환경 설정
+### 1. 사전 요구사항
+
+#### AWS Bedrock Model Access 설정 (필수)
+이 프로젝트는 다음 Bedrock 모델들에 대한 액세스 권한이 필요합니다:
+
+- **OpenAI GPT-OSS 120B** (`openai.gpt-oss-120b-1:0`) - Financial Analyst용
+- **Claude 4.0 Sonnet** (`global.anthropic.claude-sonnet-4-20250514-v1:0`) - Portfolio Architect용  
+- **Claude 3.7 Sonnet** (`us.anthropic.claude-3-7-sonnet-20250219-v1:0`) - Risk Manager용
+
+**모델 액세스 요청 방법:**
+1. AWS 콘솔에서 **Amazon Bedrock** 서비스로 이동
+2. 좌측 메뉴에서 **Model access** 클릭
+3. 위 3개 모델에 대해 **Request model access** 클릭
+4. 승인 완료까지 대기 (보통 몇 분 소요)
+
+#### 리전 설정
+모든 리소스는 **us-west-2** 리전에 배포됩니다. `config.py` 파일에서 변경 가능합니다.
+
+### 2. 환경 설정
 ```bash
 git clone <repository-url>
 cd investment_advisor_strands
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-aws configure
+aws configure  # us-west-2 리전 설정 권장
 ```
 
-### 2. 전체 배포 (권장)
+### 3. 전체 배포 (권장)
 ```bash
 python deploy_all.py
 ```
 
-### 3. 웹 앱 실행
+### 4. 웹 앱 실행
 ```bash
 cd investment_advisor && streamlit run app.py
 ```
 브라우저에서 `http://localhost:8501` 접속
 
-### 4. 전체 정리
+### 5. 전체 정리
 ```bash
 python cleanup_all.py
 ```
@@ -225,6 +243,42 @@ python cleanup_all.py
 3. 코드 수정 후 개별 재배포 (각 폴더의 `deploy.py` 실행)
 4. 통합 웹앱에서 전체 워크플로우 테스트
 5. `shared/` 폴더의 공통 유틸리티 함수 활용하여 새로운 에이전트 개발
+
+## ⚙️ 설정 변경
+
+### 리전 및 공통 설정 변경
+모든 배포 스크립트는 루트의 `config.py` 파일에서 공통 설정을 가져옵니다:
+
+```python
+# config.py
+class Config:
+    # AWS 리전 설정 (모든 에이전트에서 공통 사용)
+    REGION = "us-west-2"  # 원하는 리전으로 변경
+    
+    # 에이전트별 이름 설정
+    FINANCIAL_ANALYST_NAME = "financial_analyst"
+    PORTFOLIO_ARCHITECT_NAME = "portfolio_architect"
+    # ... 기타 설정들
+```
+
+**설정 변경 후 재배포:**
+```bash
+# 전체 재배포
+python cleanup_all.py  # 기존 리소스 정리
+python deploy_all.py   # 새 설정으로 재배포
+
+# 또는 개별 재배포
+cd financial_analyst && python deploy.py
+```
+
+### Bedrock 모델 변경
+각 에이전트의 메인 파일에서 모델 ID를 변경할 수 있습니다:
+
+```python
+# financial_analyst/financial_analyst.py
+class Config:
+    MODEL_ID = "openai.gpt-oss-120b-1:0"  # 다른 모델로 변경 가능
+```
 
 ## 🔧 기술 스택 및 아키텍처
 
@@ -336,6 +390,7 @@ investment_advisor_strands/
 │
 ├── 🚀 deploy_all.py               # 🎯 전체 시스템 한번에 배포
 ├── 🧹 cleanup_all.py              # 🎯 전체 시스템 한번에 정리
+├── ⚙️ config.py                   # 🎯 전체 프로젝트 공통 설정 (리전, 이름 등)
 ├── 📋 requirements.txt            # Python 의존성
 └── 📄 README.md                   # 이 파일
 ```

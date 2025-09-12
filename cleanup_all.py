@@ -5,6 +5,7 @@ cleanup_all.py - 전체 시스템 정리
 
 import subprocess
 import sys
+from config import Config
 
 def run_cmd(cmd, cwd=None):
     """명령어 실행"""
@@ -23,6 +24,7 @@ def cleanup_step(name, commands):
 
 def main():
     print("🧹 AI 투자 어드바이저 시스템 정리")
+    print(f"📍 정리 대상 리전: {Config.REGION}")
     
     response = input("정말로 모든 리소스를 삭제하시겠습니까? (y/N): ")
     if response.lower() != 'y':

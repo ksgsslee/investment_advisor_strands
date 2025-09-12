@@ -6,6 +6,7 @@ deploy_all.py - 전체 시스템 배포
 import subprocess
 import sys
 from pathlib import Path
+from config import Config
 
 def run_cmd(cmd, cwd=None):
     """명령어 실행"""
@@ -29,6 +30,8 @@ def deploy_step(name, commands):
 
 def main():
     print("🚀 AI 투자 어드바이저 시스템 배포")
+    print(f"📍 배포 리전: {Config.REGION}")
+    print(f"🏗️ 에이전트 구성: {Config.FINANCIAL_ANALYST_NAME}, {Config.PORTFOLIO_ARCHITECT_NAME}, {Config.RISK_MANAGER_NAME}, {Config.INVESTMENT_ADVISOR_NAME}")
     
     # AWS 확인
     if not run_cmd("aws sts get-caller-identity"):

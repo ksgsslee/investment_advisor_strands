@@ -13,17 +13,20 @@ import sys
 from pathlib import Path
 from target_config import TARGET_CONFIGURATION
 
-# shared 모듈 경로 추가
-shared_path = Path(__file__).parent.parent.parent / "shared"
-sys.path.insert(0, str(shared_path))
+# 공통 설정 및 shared 모듈 경로 추가
+root_path = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_path))
+sys.path.insert(0, str(root_path / "shared"))
+
+from config import Config as GlobalConfig
 from cognito_utils import get_or_create_user_pool, get_or_create_resource_server, get_or_create_m2m_client
 from gateway_utils import create_agentcore_gateway_role, create_gateway, create_gateway_target
 
 class Config:
     """Gateway 배포 설정"""
-    REGION = "us-west-2"
-    GATEWAY_NAME = "gateway-risk-manager"
-    TARGET_NAME = "target-risk-manager"
+    REGION = GlobalConfig.REGION
+    GATEWAY_NAME = GlobalConfig.GATEWAY_NAME
+    TARGET_NAME = GlobalConfig.TARGET_NAME
 
 def load_lambda_info():
     """Lambda 배포 정보 로드"""

@@ -7,12 +7,18 @@ Investment Advisor용 Memory 생성 및 배포 정보 저장
 
 import json
 import time
+import sys
 from pathlib import Path
 from bedrock_agentcore.memory import MemoryClient
 
+# 공통 설정 경로 추가
+root_path = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_path))
+from config import Config as GlobalConfig
+
 class Config:
-    REGION = "us-west-2"
-    MEMORY_NAME = "InvestmentAdvisor_Memory"
+    REGION = GlobalConfig.REGION
+    MEMORY_NAME = GlobalConfig.MEMORY_NAME
 
 def deploy_memory():
     """AgentCore Memory 생성"""

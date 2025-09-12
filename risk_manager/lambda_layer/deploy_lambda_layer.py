@@ -9,12 +9,18 @@ import boto3
 import json
 import time
 import os
+import sys
 from pathlib import Path
+
+# 공통 설정 경로 추가
+root_path = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_path))
+from config import Config as GlobalConfig
 
 class Config:
     """Lambda Layer 배포 설정"""
-    REGION = "us-west-2"
-    LAYER_NAME = "layer-yfinance"
+    REGION = GlobalConfig.REGION
+    LAYER_NAME = GlobalConfig.LAMBDA_LAYER_NAME
 
 def setup_s3_bucket():
     """S3 버킷 설정"""

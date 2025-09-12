@@ -10,15 +10,18 @@ import json
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
-# shared 모듈 경로 추가
-shared_path = Path(__file__).parent.parent / "shared"
-sys.path.insert(0, str(shared_path))
+# 공통 설정 및 shared 모듈 경로 추가
+root_path = Path(__file__).parent.parent
+sys.path.insert(0, str(root_path))
+sys.path.insert(0, str(root_path / "shared"))
+
+from config import Config as GlobalConfig
 from runtime_utils import create_agentcore_runtime_role
 
 class Config:
     """Investment Advisor 배포 설정"""
-    REGION = "us-west-2"
-    AGENT_NAME = "investment_advisor"
+    REGION = GlobalConfig.REGION
+    AGENT_NAME = GlobalConfig.INVESTMENT_ADVISOR_NAME
 
 def load_agent_arns():
     """다른 에이전트들의 배포 정보 로드"""

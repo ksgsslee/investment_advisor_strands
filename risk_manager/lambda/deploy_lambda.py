@@ -10,12 +10,18 @@ import zipfile
 import json
 import os
 import time
+import sys
 from pathlib import Path
+
+# 공통 설정 경로 추가
+root_path = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_path))
+from config import Config as GlobalConfig
 
 class Config:
     """Lambda 배포 설정"""
-    REGION = 'us-west-2'
-    FUNCTION_NAME = 'lambda-agentcore-risk-manager'
+    REGION = GlobalConfig.REGION
+    FUNCTION_NAME = GlobalConfig.LAMBDA_FUNCTION_NAME
 
 def create_lambda_package():
     """Lambda 함수 패키징"""

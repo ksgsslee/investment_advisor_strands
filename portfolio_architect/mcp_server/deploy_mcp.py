@@ -12,16 +12,19 @@ import json
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
 
-# shared 모듈 경로 추가
-shared_path = Path(__file__).parent.parent.parent / "shared"
-sys.path.insert(0, str(shared_path))
+# 공통 설정 및 shared 모듈 경로 추가
+root_path = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_path))
+sys.path.insert(0, str(root_path / "shared"))
+
+from config import Config as GlobalConfig
 from cognito_utils import get_or_create_user_pool, get_or_create_resource_server, get_or_create_m2m_client
 from runtime_utils import create_agentcore_runtime_role
 
 class Config:
     """MCP Server 배포 설정"""
-    REGION = "us-west-2"
-    MCP_SERVER_NAME = "mcp_server"
+    REGION = GlobalConfig.REGION
+    MCP_SERVER_NAME = GlobalConfig.MCP_SERVER_NAME
 
 def setup_cognito_auth():
     """Cognito 인증 설정"""

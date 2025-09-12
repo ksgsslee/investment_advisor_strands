@@ -1,10 +1,10 @@
-# 🤖 AI 투자 어드바이저
+# 🤖 Agentic AI 투자 어드바이저
 
-**AWS Bedrock AgentCore & Strands Agent * LangGraph**를 활용한 Multi-Agent 투자 자문 시스템
+**AWS Bedrock AgentCore & Strands Agent & LangGraph**를 활용한 Agentic AI 투자 어드바이저
 
 ## 🎯 시스템 개요
 
-개인 맞춤형 투자 포트폴리오를 제안하는 4개의 전문 AI 에이전트가 협업하는 엔터프라이즈급 투자 자문 시스템입니다.
+개인 맞춤형 투자 포트폴리오를 제안하는 4개의 전문 AI 에이전트가 협업하는 프로덕션 레벨 투자 자문 시스템입니다.
 
 ## 🏗️ 전체 시스템 아키텍처
 

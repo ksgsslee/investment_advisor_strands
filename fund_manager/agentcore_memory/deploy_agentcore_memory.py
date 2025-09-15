@@ -2,7 +2,7 @@
 deploy_agentcore_memory.py
 
 AgentCore Memory 배포 스크립트
-Investment Advisor용 Memory 생성 및 배포 정보 저장
+Fund Manager용 Memory 생성 및 배포 정보 저장
 """
 
 import json
@@ -40,13 +40,13 @@ def deploy_memory():
             
             memory = memory_client.create_memory_and_wait(
                 name=Config.MEMORY_NAME,
-                description="Investment Advisor - Session-based conversation summary",
+                description="Fund Manager - Session-based conversation summary",
                 strategies=[
                     {
                         StrategyType.SUMMARY.value: {
-                            "name": "InvestmentSessionSummary",
-                            "description": "Auto-summarizes entire investment consultation session",
-                            "namespaces": ["investment/session/{sessionId}"]
+                            "name": "FundManagerSessionSummary",
+                            "description": "Auto-summarizes entire fund management consultation session",
+                            "namespaces": ["fund_management/session/{sessionId}"]
                         }
                     }
                 ],

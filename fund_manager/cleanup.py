@@ -1,7 +1,7 @@
 """
 cleanup.py
 
-Investment Advisor 시스템 정리 스크립트
+Fund Manager 시스템 정리 스크립트
 모든 AWS 리소스 삭제 및 정리
 """
 
@@ -15,12 +15,12 @@ def load_deployment_info():
     """배포 정보 로드"""
     current_dir = Path(__file__).parent
     
-    # Investment Advisor 정보
-    advisor_info = None
-    advisor_file = current_dir / "deployment_info.json"
-    if advisor_file.exists():
-        with open(advisor_file) as f:
-            advisor_info = json.load(f)
+    # Fund Manager 정보
+    fund_manager_info = None
+    fund_manager_file = current_dir / "deployment_info.json"
+    if fund_manager_file.exists():
+        with open(fund_manager_file) as f:
+            fund_manager_info = json.load(f)
     
     # Memory 정보
     memory_info = None
@@ -29,7 +29,7 @@ def load_deployment_info():
         with open(memory_file) as f:
             memory_info = json.load(f)
     
-    return advisor_info, memory_info
+    return fund_manager_info, memory_info
 
 def delete_runtime(agent_arn, region):
     """Runtime 삭제"""
@@ -113,12 +113,12 @@ def cleanup_local_files():
         print("📁 삭제할 로컬 파일이 없습니다.")
 
 def main():
-    print("🧹 Investment Advisor 시스템 정리")
+    print("🧹 Fund Manager 시스템 정리")
     
     # 배포 정보 로드
-    advisor_info, memory_info = load_deployment_info()
+    fund_manager_info, memory_info = load_deployment_info()
     
-    if not advisor_info and not memory_info:
+    if not fund_manager_info and not memory_info:
         print("⚠️ 배포 정보가 없습니다.")
         return
     
@@ -130,19 +130,19 @@ def main():
     
     print("\n🗑️ AWS 리소스 삭제 중...")
     
-    # 1. Investment Advisor Runtime 삭제
-    if advisor_info and 'agent_arn' in advisor_info:
-        region = advisor_info.get('region', 'us-west-2')
-        delete_runtime(advisor_info['agent_arn'], region)
+    # 1. Fund Manager Runtime 삭제
+    if fund_manager_info and 'agent_arn' in fund_manager_info:
+        region = fund_manager_info.get('region', 'us-west-2')
+        delete_runtime(fund_manager_info['agent_arn'], region)
     
     # 2. ECR 리포지토리 삭제
-    if advisor_info and 'ecr_repo_name' in advisor_info and advisor_info['ecr_repo_name']:
-        region = advisor_info.get('region', 'us-west-2')
-        delete_ecr_repo(advisor_info['ecr_repo_name'], region)
+    if fund_manager_info and 'ecr_repo_name' in fund_manager_info and fund_manager_info['ecr_repo_name']:
+        region = fund_manager_info.get('region', 'us-west-2')
+        delete_ecr_repo(fund_manager_info['ecr_repo_name'], region)
     
     # 3. IAM 역할 삭제
-    if advisor_info and 'iam_role_name' in advisor_info:
-        delete_iam_role(advisor_info['iam_role_name'])
+    if fund_manager_info and 'iam_role_name' in fund_manager_info:
+        delete_iam_role(fund_manager_info['iam_role_name'])
     
     # 4. AgentCore Memory 삭제
     if memory_info and 'memory_id' in memory_info:

@@ -1,7 +1,7 @@
 """
-investment_advisor.py
+fund_manager.py
 
-LangGraph 기반 Investment Advisor
+LangGraph 기반 Fund Manager
 AgentCore Memory의 SUMMARY 전략을 활용한 자동 요약 시스템
 """
 
@@ -20,10 +20,10 @@ from bedrock_agentcore.memory import MemoryClient
 app = BedrockAgentCoreApp()
 
 class Config:
-    """Investment Advisor 설정"""
+    """Fund Manager 설정"""
     REGION = "us-west-2"
 
-class InvestmentState(TypedDict):
+class FundManagerState(TypedDict):
     user_input: Dict[str, Any]
     session_id: str
     financial_analysis: str
@@ -66,7 +66,7 @@ class AgentClient:
     
     def _load_memory_id(self):
         """Memory ID 로드"""
-        memory_id = os.getenv("INVESTMENT_MEMORY_ID")
+        memory_id = os.getenv("FUND_MEMORY_ID")
         if memory_id:
             return memory_id
         
@@ -108,7 +108,7 @@ class AgentClient:
             
             self.memory_client.create_event(
                 memory_id=self.memory_id,
-                actor_id="investment_user",
+                actor_id="fund_manager_user",
                 session_id=session_id,
                 messages=[
                     (f"{agent_type} 분석 요청: {input_text}", "USER"),
@@ -176,7 +176,7 @@ def risk_node(state: InvestmentState):
 
 
 def create_graph():
-    workflow = StateGraph(InvestmentState)
+    workflow = StateGraph(FundManagerState)
     
     workflow.add_node("financial", financial_node)
     workflow.add_node("portfolio", portfolio_node)
@@ -189,12 +189,12 @@ def create_graph():
     
     return workflow.compile()
 
-class InvestmentAdvisor:
+class FundManager:
     def __init__(self):
         self.graph = create_graph()
     
     async def run_consultation(self, user_input, session_id=None):
-        """투자 상담 실행"""
+        """펀드 매니징 실행"""
         # Streamlit에서 전달받은 세션 ID 사용, 없으면 기본값 생성
         if not session_id:
             session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -212,18 +212,18 @@ class InvestmentAdvisor:
         for chunk in self.graph.stream(initial_state, config=config, stream_mode="custom"):
             yield chunk
 
-advisor = None
+fund_manager = None
 
 @app.entrypoint
-async def investment_advisor_entrypoint(payload):
-    global advisor
-    if advisor is None:
-        advisor = InvestmentAdvisor()
+async def fund_manager_entrypoint(payload):
+    global fund_manager
+    if fund_manager is None:
+        fund_manager = FundManager()
     
     user_input = payload.get("input_data")
     session_id = payload.get("session_id")
     
-    async for chunk in advisor.run_consultation(user_input, session_id):
+    async for chunk in fund_manager.run_consultation(user_input, session_id):
         yield chunk
 
 if __name__ == "__main__":

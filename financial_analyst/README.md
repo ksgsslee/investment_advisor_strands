@@ -132,11 +132,11 @@ financial_analyst/
 
 ## 🔗 전체 시스템 연동
 
-이 Financial Analyst는 **AI 투자 어드바이저** 시스템의 첫 번째 단계입니다:
+이 Financial Analyst는 **AI 펀드 매니저** 시스템의 첫 번째 단계입니다:
 
 1. **Financial Analyst** (현재) → 재무 분석 및 위험 성향 평가
 2. **Portfolio Architect** → 실시간 ETF 데이터 기반 포트폴리오 설계  
 3. **Risk Manager** → 뉴스 분석 및 리스크 시나리오 플래닝
-4. **Investment Advisor** → 전체 에이전트 통합 및 최종 리포트
+4. **Fund Manager** → 전체 에이전트 통합 및 최종 리포트
 
-전체 시스템 실행은 `../investment_advisor/app.py`에서 가능합니다.
+전체 시스템 실행은 `../fund_manager/app.py`에서 가능합니다.

@@ -1,14 +1,14 @@
-# 🤖 Agentic AI 투자 어드바이저
+# 🤖 Agentic AI 펀드 매니저
 
-**AWS Bedrock AgentCore & Strands Agent & LangGraph**를 활용한 Agentic AI 투자 어드바이저
+**AWS Bedrock AgentCore & Strands Agent & LangGraph**를 활용한 Agentic AI 펀드 매니저
 
 ## 🎯 시스템 개요
 
-개인 맞춤형 투자 포트폴리오를 제안하는 4개의 전문 AI 에이전트가 협업하는 프로덕션 레벨 투자 자문 시스템입니다.
+개인 맞춤형 투자 포트폴리오를 제안하는 4개의 전문 AI 에이전트가 협업하는 프로덕션 레벨 펀드 매니저 시스템입니다.
 
 ## 🏗️ 전체 시스템 아키텍처
 
-![전체 시스템 아키텍처](static/investment_advisor.png)
+![전체 시스템 아키텍처](static/fund_manager.png)
 
 ## 🏗️ 에이전트별 상세 구조
 
@@ -105,10 +105,10 @@
 }
 ```
 
-### Lab 4: Investment Advisor
+### Lab 4: Fund Manager
 **역할**: 3개 에이전트 결과 통합 및 장기 메모리 관리
 
-![Investment Advisor](static/investment_advisor.png)
+![Fund Manager](static/fund_manager.png)
 
 **구조**:
 - **LangGraph**: 3개 에이전트 순차 실행 워크플로우
@@ -127,7 +127,7 @@
 **메모리 구조**:
 - **Short-term**: 각 에이전트 결과를 세션별 대화로 저장 (7일)
 - **Long-term**: SUMMARY 전략이 Topic별로 구조화된 요약 생성 (영구 보존)
-- **네임스페이스**: `investment/session/{sessionId}` 구조
+- **네임스페이스**: `fund_management/session/{sessionId}` 구조
 
 ## � 기술 적 구현 세부사항
 
@@ -163,7 +163,7 @@
 ```
 사용자 입력
     ↓
-Investment Advisor (LangGraph 오케스트레이션)
+Fund Manager (LangGraph 오케스트레이션)
     ↓
 Financial Analyst (Runtime + OpenAI GPT-OSS 120B)
     ↓ (위험성향, 목표수익률)
@@ -171,7 +171,7 @@ Portfolio Architect (Runtime + MCP Server + Claude 4.0 Sonnet)
     ↓ (포트폴리오 배분)
 Risk Manager (Runtime + Gateway + Claude 3.7 Sonnet)
     ↓ (리스크 시나리오)
-Investment Advisor (Memory 저장 + 최종 통합)
+Fund Manager (Memory 저장 + 최종 통합)
     ↓
 최종 투자 가이드 + 자동 요약 저장
 ```
@@ -199,7 +199,7 @@ Investment Advisor (Memory 저장 + 최종 통합)
 ### 2. 환경 설정
 ```bash
 git clone <repository-url>
-cd investment_advisor_strands
+cd fund_manager_strands
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -213,7 +213,7 @@ python deploy_all.py
 
 ### 4. 웹 앱 실행
 ```bash
-cd investment_advisor && streamlit run app.py
+cd fund_manager && streamlit run app.py
 ```
 브라우저에서 `http://localhost:8501` 접속
 
@@ -226,7 +226,7 @@ python cleanup_all.py
 
 ### 시나리오 1: 전체 시스템 체험 (권장)
 1. `python deploy_all.py` - 전체 시스템 배포
-2. `cd investment_advisor && streamlit run app.py` - 통합 웹앱 실행
+2. `cd fund_manager && streamlit run app.py` - 통합 웹앱 실행
 3. 투자 정보 입력 후 4개 에이전트의 협업 과정 실시간 확인
 4. 상담 히스토리에서 자동 요약된 과거 상담 기록 확인
 
@@ -288,7 +288,7 @@ class Config:
   - Financial Analyst: OpenAI GPT-OSS 120B
   - Portfolio Architect: Claude 4.0 Sonnet (global.anthropic.claude-sonnet-4-20250514-v1:0)
   - Risk Manager: Claude 3.7 Sonnet (us.anthropic.claude-3-7-sonnet-20250219-v1:0)
-  - Investment Advisor: LangGraph 오케스트레이션 (LLM 없음, 다른 에이전트 호출)
+  - Fund Manager: LangGraph 오케스트레이션 (LLM 없음, 다른 에이전트 호출)
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **Authentication**: Cognito JWT OAuth2
 - **UI**: Streamlit (실시간 스트리밍 지원)
@@ -302,7 +302,7 @@ graph LR
             RT1[📦 Financial Analyst Runtime]
             RT2[📦 Portfolio Architect Runtime]
             RT3[📦 Risk Manager Runtime]
-            RT4[📦 Investment Advisor Runtime]
+            RT4[📦 Fund Manager Runtime]
             MCP[🔧 MCP Server Runtime]
             MEM[🧠 AgentCore Memory]
             GW[🌉 Gateway for Risk Manager]
@@ -348,7 +348,7 @@ graph LR
 ## 📁 프로젝트 구조 및 개별 테스트
 
 ```
-investment_advisor_strands/
+fund_manager_strands/
 ├── 📂 financial_analyst/           # Lab 1: 재무 분석 (AgentCore Runtime)
 │   ├── 📄 README.md               # 상세 설명 및 사용법
 │   ├── 🚀 deploy.py               # 개별 배포
@@ -373,11 +373,11 @@ investment_advisor_strands/
 │   ├── 📂 lambda/                 # Lambda 함수 (데이터 조회)
 │   └── 📂 gateway/                # MCP Gateway (Lambda → MCP 도구)
 │
-├── 📂 investment_advisor/         # Lab 4: 통합 자문 (AgentCore Memory)
+├── 📂 fund_manager/               # Lab 4: 통합 자문 (AgentCore Memory)
 │   ├── 📄 README.md               # 상세 설명 및 사용법
 │   ├── 🚀 deploy.py               # 개별 배포
 │   ├── 🌐 app.py                  # Streamlit 통합 웹앱 (메인)
-│   ├── 🤖 investment_advisor.py   # LangGraph 기반 통합 에이전트
+│   ├── 🤖 fund_manager.py         # LangGraph 기반 통합 에이전트
 │   
 │   └── 📂 agentcore_memory/       # AgentCore Memory
 │       └── 🚀 deploy_agentcore_memory.py # Memory 배포
@@ -431,9 +431,9 @@ streamlit run app.py               # 개별 테스트 웹앱
 - **기능**: 포트폴리오 입력 → 뉴스/시장 데이터 분석 → 리스크 시나리오
 - **도구**: 실시간 뉴스, 거시경제 지표, 지정학적 데이터 수집 과정 확인
 
-#### Lab 4: Investment Advisor (통합 시스템)
+#### Lab 4: Fund Manager (통합 시스템)
 ```bash
-cd investment_advisor
+cd fund_manager
 cd agentcore_memory && python deploy_agentcore_memory.py && cd ..  # Memory 먼저 배포
 python deploy.py                    # 통합 에이전트 배포
 streamlit run app.py               # 🎯 메인 통합 웹앱

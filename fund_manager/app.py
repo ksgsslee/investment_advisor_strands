@@ -1,6 +1,6 @@
 """
-Investment Advisor Streamlit 앱
-Multi-Agent 투자 자문 시스템 웹 인터페이스
+Fund Manager Streamlit 앱
+Multi-Agent 펀드 매니저 시스템 웹 인터페이스
 """
 
 import streamlit as st
@@ -15,11 +15,11 @@ from pathlib import Path
 from bedrock_agentcore.memory import MemoryClient
 
 st.set_page_config(
-    page_title="🤖 Investment Advisor",
+    page_title="🤖 Fund Manager",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-st.title("🤖 Investment Advisor")
+st.title("🤖 Fund Manager")
 
 # 세션 관리 초기화 - 페이지 로드 시 자동 생성
 if 'current_session_id' not in st.session_state:
@@ -28,7 +28,7 @@ if 'current_session_id' not in st.session_state:
 # 사이드바 메뉴
 menu = st.sidebar.selectbox(
     "메뉴 선택",
-    ["🤖 새로운 투자 상담", "📚 상담 히스토리 (Long-term Memory)"]
+    ["🤖 새로운 펀드 매니징", "📚 상담 히스토리 (Long-term Memory)"]
 )
 
 # 사이드바에 세션 정보 표시
@@ -45,7 +45,7 @@ if st.sidebar.button("🔄 새 세션 시작"):
 def load_deployment_info():
     """환경변수 또는 로컬 JSON 파일에서 배포 정보 로드"""
     # 환경변수에서 먼저 시도 (Docker 컨테이너 환경)
-    agent_arn = os.getenv("BWB_INVESTMENT_ADVISOR_ARN")
+    agent_arn = os.getenv("BWB_FUND_MANAGER_ARN")
     memory_id = os.getenv("BWB_MEMORY_ID") 
     region = os.getenv("BWB_AWS_REGION")
     
@@ -68,7 +68,7 @@ def load_deployment_info():
         return agent_arn, memory_id, region, "../static"
         
     except Exception as e:
-        st.error(f"배포 정보를 찾을 수 없습니다. 환경변수(INVESTMENT_ADVISOR_ARN, MEMORY_ID, AWS_REGION)를 설정하거나 deploy.py를 먼저 실행해주세요. 오류: {e}")
+        st.error(f"배포 정보를 찾을 수 없습니다. 환경변수(FUND_MANAGER_ARN, MEMORY_ID, AWS_REGION)를 설정하거나 deploy.py를 먼저 실행해주세요. 오류: {e}")
         st.stop()
 
 AGENT_ARN, MEMORY_ID, REGION, STATIC_PATH = load_deployment_info()
@@ -395,8 +395,8 @@ def display_risk_analysis_result(container, analysis_content):
     except Exception as e:
         container.error(f"리스크 분석 표시 오류: {str(e)}")
 
-def invoke_investment_advisor(input_data, session_id):
-    """Investment Advisor 호출 - 세션 ID 전달"""
+def invoke_fund_manager(input_data, session_id):
+    """Fund Manager 호출 - 세션 ID 전달"""
     try:
         # 세션 ID를 payload에 포함
         payload_data = {
@@ -559,12 +559,12 @@ def load_current_session_summary():
     try:
         # 현재 세션의 SUMMARY 전략 결과 조회
         current_session = st.session_state.current_session_id
-        session_namespace = f"investment/session/{current_session}"
+        session_namespace = f"fund_management/session/{current_session}"
         
         response = memory_client.retrieve_memories(
             memory_id=MEMORY_ID,
             namespace=session_namespace,
-            query="investment consultation summary"
+            query="fund management consultation summary"
         )
         
         if response and len(response) > 0:
@@ -600,9 +600,9 @@ def load_current_session_summary():
         }
 
 # 메뉴별 UI 구성
-if menu == "🤖 새로운 투자 상담":
-    with st.expander("🏗️ Investment Advisor 아키텍처", expanded=True):
-        st.image(os.path.join(STATIC_PATH, "investment_advisor.png"))
+if menu == "🤖 새로운 펀드 매니징":
+    with st.expander("🏗️ Fund Manager 아키텍처", expanded=True):
+        st.image(os.path.join(STATIC_PATH, "fund_manager.png"))
 
 
     st.markdown("**투자자 정보 입력**")
@@ -697,7 +697,7 @@ if menu == "🤖 새로운 투자 상담":
         
         st.divider()
         with st.spinner("AI 분석 중..."):
-            result = invoke_investment_advisor(
+            result = invoke_fund_manager(
                 input_data, 
                 st.session_state.current_session_id
             )
@@ -719,10 +719,10 @@ elif menu == "📚 상담 히스토리 (Long-term Memory)":
         if 'error' in summary_data:
             st.error(f"요약 조회 중 오류 발생: {summary_data['error']}")
         else:
-            st.warning("현재 세션의 투자 상담 요약이 아직 생성되지 않았습니다.")
+            st.warning("현재 세션의 펀드 매니징 요약이 아직 생성되지 않았습니다.")
             st.markdown("""
             **요약 생성 조건:**
-            - 투자 상담을 완료해야 합니다 (3개 에이전트 모두 실행)
+            - 펀드 매니징을 완료해야 합니다 (3개 에이전트 모두 실행)
             - AgentCore SUMMARY 전략이 자동으로 요약을 생성합니다
             - 요약 생성까지 몇 분 정도 소요될 수 있습니다
             """)
@@ -760,5 +760,5 @@ elif menu == "📚 상담 히스토리 (Long-term Memory)":
                 st.text(content)
         else:
             # 일반 텍스트 처리
-            st.markdown("## 📋 투자 상담 요약")
+            st.markdown("## 📋 펀드 매니징 요약")
             st.write(content)

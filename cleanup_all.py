@@ -23,7 +23,7 @@ def cleanup_step(name, commands):
         run_cmd(cmd, cwd)
 
 def main():
-    print("🧹 AI 투자 어드바이저 시스템 정리")
+    print("🧹 AI 펀드 매니저 시스템 정리")
     print(f"📍 정리 대상 리전: {Config.REGION}")
     
     response = input("정말로 모든 리소스를 삭제하시겠습니까? (y/N): ")
@@ -33,8 +33,8 @@ def main():
     
     # 정리 단계 (역순)
     steps = [
-        ("Lab 4: Investment Advisor", [
-            ("python cleanup.py", "investment_advisor")
+        ("Lab 4: Fund Manager", [
+            ("python cleanup.py", "fund_manager")
         ]),
         ("Lab 3: Risk Manager", [
             ("python cleanup.py", "risk_manager")

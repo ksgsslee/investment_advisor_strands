@@ -1,5 +1,5 @@
 # requirements.txt
-# Investment Advisor AgentCore Runtime 의존성
+# Fund Manager AgentCore Runtime 의존성
 
 # Langgraph
 langgraph

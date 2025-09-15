@@ -1,7 +1,7 @@
 """
 deploy.py
 
-Investment Advisor AgentCore Runtime 배포 스크립트
+Fund Manager AgentCore Runtime 배포 스크립트
 """
 
 import sys
@@ -19,9 +19,9 @@ from config import Config as GlobalConfig
 from runtime_utils import create_agentcore_runtime_role
 
 class Config:
-    """Investment Advisor 배포 설정"""
+    """Fund Manager 배포 설정"""
     REGION = GlobalConfig.REGION
-    AGENT_NAME = GlobalConfig.INVESTMENT_ADVISOR_NAME
+    AGENT_NAME = GlobalConfig.FUND_MANAGER_NAME
 
 def load_agent_arns():
     """다른 에이전트들의 배포 정보 로드"""
@@ -76,8 +76,8 @@ def load_memory_info():
         return memory_id
 
 def create_iam_role_with_agent_permissions():
-    """Investment Advisor용 IAM 역할 생성 (다른 에이전트 호출 권한 포함)"""
-    print("🔐 Investment Advisor IAM 역할 생성 중...")
+    """Fund Manager용 IAM 역할 생성 (다른 에이전트 호출 권한 포함)"""
+    print("🔐 Fund Manager IAM 역할 생성 중...")
     
     # 기본 AgentCore Runtime 역할 생성
     iam_role = create_agentcore_runtime_role(Config.AGENT_NAME, Config.REGION)
@@ -108,7 +108,8 @@ def _add_agent_call_permissions(role_name):
                 "Resource": [
                     f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/financial_analyst-*",
                     f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/portfolio_architect-*",
-                    f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/risk_manager-*"
+                    f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/risk_manager-*",
+                    f"arn:aws:bedrock-agentcore:{Config.REGION}:{account_id}:runtime/fund_manager-*"
                 ]
             }
         ]
@@ -117,16 +118,16 @@ def _add_agent_call_permissions(role_name):
     try:
         iam_client.put_role_policy(
             PolicyDocument=json.dumps(additional_policy),
-            PolicyName="InvestmentAdvisorAgentCallsPolicy",
+            PolicyName="FundManagerAgentCallsPolicy",
             RoleName=role_name
         )
         print("✅ 다른 에이전트 호출 권한 추가 완료")
     except Exception as e:
         print(f"⚠️ 추가 권한 설정 오류: {e}")
 
-def deploy_investment_advisor(agent_arns, memory_id):
-    """Investment Advisor Runtime 배포"""
-    print("🎯 Investment Advisor 배포 중...")
+def deploy_fund_manager(agent_arns, memory_id):
+    """Fund Manager Runtime 배포"""
+    print("🎯 Fund Manager 배포 중...")
     
     # IAM 역할 생성 (권한 포함)
     role_arn, iam_role_name = create_iam_role_with_agent_permissions()
@@ -135,7 +136,7 @@ def deploy_investment_advisor(agent_arns, memory_id):
     current_dir = Path(__file__).parent
     runtime = Runtime()
     runtime.configure(
-        entrypoint=str(current_dir / "investment_advisor.py"),
+        entrypoint=str(current_dir / "fund_manager.py"),
         execution_role=role_arn,
         auto_create_ecr=True,
         requirements_file=str(current_dir / "requirements.txt"),
@@ -148,7 +149,7 @@ def deploy_investment_advisor(agent_arns, memory_id):
         "FINANCIAL_ANALYST_ARN": agent_arns["financial_analyst"],
         "PORTFOLIO_ARCHITECT_ARN": agent_arns["portfolio_architect"],
         "RISK_MANAGER_ARN": agent_arns["risk_manager"],
-        "INVESTMENT_MEMORY_ID": memory_id,
+        "FUND_MEMORY_ID": memory_id,
         "AWS_REGION": Config.REGION
     }
     
@@ -203,7 +204,7 @@ def save_deployment_info(advisor_info, agent_arns):
 
 def main():
     try:
-        print("🎯 Investment Advisor Runtime 배포")
+        print("🎯 Fund Manager Runtime 배포")
         
         # 다른 에이전트 ARN 로드
         agent_arns = load_agent_arns()
@@ -211,15 +212,15 @@ def main():
         # AgentCore Memory 정보 로드
         memory_id = load_memory_info()
         
-        # Investment Advisor 배포
-        advisor_info = deploy_investment_advisor(agent_arns, memory_id)
+        # Fund Manager 배포
+        fund_manager_info = deploy_fund_manager(agent_arns, memory_id)
         
         # 배포 정보 저장
-        info_file = save_deployment_info(advisor_info, agent_arns)
+        info_file = save_deployment_info(fund_manager_info, agent_arns)
         
         print(f"\n🎉 배포 완료!")
         print(f"📄 배포 정보: {info_file}")
-        print(f"🔗 Investment Advisor ARN: {advisor_info['agent_arn']}")
+        print(f"🔗 Fund Manager ARN: {fund_manager_info['agent_arn']}")
         
         return 0
         

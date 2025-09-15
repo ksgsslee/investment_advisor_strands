@@ -15,7 +15,7 @@ class Config:
     FINANCIAL_ANALYST_NAME = "financial_analyst"
     PORTFOLIO_ARCHITECT_NAME = "portfolio_architect"
     RISK_MANAGER_NAME = "risk_manager"
-    INVESTMENT_ADVISOR_NAME = "investment_advisor"
+    FUND_MANAGER_NAME = "fund_manager"
     
     # MCP Server 설정
     MCP_SERVER_NAME = "mcp_server"
@@ -29,4 +29,4 @@ class Config:
     LAMBDA_LAYER_NAME = "layer-yfinance"
     
     # Memory 설정
-    MEMORY_NAME = "InvestmentAdvisor_Memory"
+    MEMORY_NAME = "FundManager_Memory"

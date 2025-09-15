@@ -1,24 +1,24 @@
-# Investment Advisor
+# Fund Manager
 
-**LangGraph + AgentCore Memory 기반 Multi-Agent 투자 자문 시스템**
+**LangGraph + AgentCore Memory 기반 Multi-Agent 펀드 매니저 시스템**
 
-3개의 전문 AI 에이전트가 LangGraph 워크플로우로 협업하여 종합적인 투자 분석을 제공하고, AgentCore Memory를 통해 상담 히스토리를 자동으로 관리하는 엔터프라이즈급 투자 자문 시스템입니다.
+3개의 전문 AI 에이전트가 LangGraph 워크플로우로 협업하여 종합적인 투자 분석을 제공하고, AgentCore Memory를 통해 상담 히스토리를 자동으로 관리하는 엔터프라이즈급 펀드 매니저 시스템입니다.
 
 ## 🎯 핵심 기능
 
 - **LangGraph 워크플로우**: 3개 에이전트의 순차적 협업 시스템
 - **실시간 스트리밍**: 각 에이전트의 사고 과정과 도구 사용을 실시간 시각화
 - **AgentCore Memory**: SUMMARY 전략으로 상담 히스토리 자동 요약 및 영구 보존
-- **완전 자동화**: 사용자 입력만으로 전체 투자 자문 프로세스 완료
+- **완전 자동화**: 사용자 입력만으로 전체 펀드 매니징 프로세스 완료
 
 ## 🏗️ 아키텍처
 
-![Investment Advisor](../static/investment_advisor.png)
+![Fund Manager](../static/fund_manager.png)
 
 ### LangGraph 워크플로우 구조
 ```python
-# investment_advisor.py의 핵심 구조
-workflow = StateGraph(InvestmentState)
+# fund_manager.py의 핵심 구조
+workflow = StateGraph(FundManagerState)
 
 # 3개 노드 정의
 workflow.add_node("financial", financial_node)      # 재무 분석
@@ -65,13 +65,13 @@ cd ../gateway && python deploy_gateway.py
 cd .. && python deploy.py
 ```
 
-### 2. Investment Advisor 배포
+### 2. Fund Manager 배포
 ```bash
 # Memory 먼저 배포
-cd investment_advisor/agentcore_memory
+cd fund_manager/agentcore_memory
 python deploy_agentcore_memory.py
 
-# Investment Advisor Runtime 배포
+# Fund Manager Runtime 배포
 cd .. && python deploy.py
 
 # Streamlit 앱 실행
@@ -117,7 +117,7 @@ streamlit run app.py
 
 ### 설정 변경
 ```python
-# investment_advisor.py
+# fund_manager.py
 class Config:
     REGION = "us-west-2"  # AWS 리전 변경
 ```
@@ -135,7 +135,7 @@ memory_client.search(memory_id=memory_id, query="investment analysis summary")
 
 ### 로그 확인
 ```bash
-aws logs tail /aws/lambda/investment-advisor-runtime --follow
+aws logs tail /aws/lambda/fund-manager-runtime --follow
 ```
 
 ### 성능 메트릭
@@ -150,8 +150,8 @@ aws logs tail /aws/lambda/investment-advisor-runtime --follow
 ## 📁 프로젝트 구조
 
 ```
-investment_advisor/
-├── investment_advisor.py    # LangGraph 기반 Multi-Agent 워크플로우
+fund_manager/
+├── fund_manager.py         # LangGraph 기반 Multi-Agent 워크플로우
 ├── deploy.py               # AgentCore Runtime 배포 (다른 에이전트 ARN 자동 로드)
 ├── app.py                  # Streamlit 웹 앱 (실시간 스트리밍 + 히스토리)
 
@@ -164,12 +164,12 @@ investment_advisor/
 
 ## 🔗 전체 시스템 연동
 
-이 Investment Advisor는 **AI 투자 어드바이저** 시스템의 최종 통합 단계입니다:
+이 Fund Manager는 **AI 펀드 매니저** 시스템의 최종 통합 단계입니다:
 
 1. **Financial Analyst** → Calculator 도구로 정확한 재무 분석
 2. **Portfolio Architect** → MCP Server로 실시간 ETF 데이터 기반 포트폴리오 설계
 3. **Risk Manager** → MCP Gateway로 뉴스/시장/지정학적 리스크 분석
-4. **Investment Advisor** (현재) → LangGraph로 3개 에이전트 통합 + Memory 자동 요약
+4. **Fund Manager** (현재) → LangGraph로 3개 에이전트 통합 + Memory 자동 요약
 
 ## 🎉 주요 장점
 
@@ -179,4 +179,4 @@ investment_advisor/
 - **지능형 메모리**: SUMMARY 전략으로 상담 히스토리 자동 요약 및 영구 보존
 - **엔터프라이즈급**: 각 에이전트가 독립 배포되어 확장성과 유지보수성 확보
 
-Investment Advisor는 **LangGraph + AgentCore Memory**를 활용한 차세대 Multi-Agent 투자 자문 시스템으로, 3개 전문 에이전트의 협업을 통해 은행급 투자 서비스를 제공합니다! 🚀
+Fund Manager는 **LangGraph + AgentCore Memory**를 활용한 차세대 Multi-Agent 펀드 매니저 시스템으로, 3개 전문 에이전트의 협업을 통해 은행급 투자 서비스를 제공합니다! 🚀

@@ -205,8 +205,7 @@ def display_news_data(container, news_data):
         if not news_df.empty and all(col in news_df.columns for col in ['publish_date', 'title', 'summary']):
             container.dataframe(
                 news_df[['publish_date', 'title', 'summary']],
-                hide_index=True,
-                width="stretch"
+                hide_index=True
             )
         else:
             for i, news_item in enumerate(news_list[:5], 1):

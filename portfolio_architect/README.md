@@ -74,17 +74,8 @@ streamlit run app.py
 - **종합 총평**: 투자 전략 요약
 
 ### 출력 결과
-```json
-{
-  "portfolio_allocation": {"QQQ": 50, "SPY": 30, "BND": 20},
-  "reason": "기술주 중심 성장 전략. (QQQ: 나스닥 100 기술주 ETF), (SPY: S&P 500 대형주 ETF), (BND: 미국 채권 ETF)",
-  "portfolio_scores": {
-    "profitability": {"score": 8, "reason": "목표 수익률 달성 가능성 높음"},
-    "risk_management": {"score": 7, "reason": "적정 변동성 수준"},
-    "diversification": {"score": 9, "reason": "낮은 상관관계로 우수한 분산투자"}
-  }
-}
-```
+![Portfolio Architect Output](../static/portfolio_architect_output.png)
+
 
 ### 처리 흐름
 ```mermaid

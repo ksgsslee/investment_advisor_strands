@@ -37,32 +37,7 @@ Portfolio Architect의 포트폴리오 설계 결과를 바탕으로 실시간 �
 - **포트폴리오 평가 점수**: 수익성, 리스크 관리, 분산투자 완성도 (1-10점)
 
 ### 출력 결과
-```json
-{
-  "scenario1": {
-    "name": "테크 주도 경기 회복",
-    "description": "금리 인하와 함께 기술 섹터가 주도하는 경기 회복 시나리오",
-    "probability": "35%",
-    "allocation_management": {
-      "QQQ": 70,
-      "SPY": 25,
-      "GLD": 5
-    },
-    "reason": "기술 섹터 성장에 더 많이 노출하여 수익 극대화"
-  },
-  "scenario2": {
-    "name": "인플레이션 지속과 경기 둔화",
-    "description": "고금리 지속 및 인플레이션 압력 하에서의 경기 둔화",
-    "probability": "25%",
-    "allocation_management": {
-      "QQQ": 40,
-      "SPY": 40,
-      "GLD": 20
-    },
-    "reason": "안전자산 비중 확대로 리스크 헤지 강화"
-  }
-}
-```
+![Risk Manager Output](../static/risk_manager_output.png)
 
 ### 처리 흐름
 ```mermaid

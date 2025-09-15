@@ -106,30 +106,7 @@ streamlit run app.py
 - **관심 분야**: 10개 투자 섹터 중 복수 선택
 
 ### 출력 결과
-```json
-{
-  "financial_analysis": {
-    "risk_profile": "공격적",
-    "required_annual_return_rate": 40.0,
-    "key_sectors": ["성장주", "기술주", "글로벌 주식"]
-  },
-  "portfolio_design": {
-    "portfolio_allocation": {"QQQ": 50, "SPY": 30, "GLD": 20},
-    "portfolio_scores": {
-      "profitability": {"score": 8},
-      "risk_management": {"score": 7},
-      "diversification": {"score": 9}
-    }
-  },
-  "risk_scenarios": {
-    "scenario1": {
-      "name": "테크 주도 경기 회복",
-      "probability": "35%",
-      "allocation_management": {"QQQ": 70, "SPY": 25, "GLD": 5}
-    }
-  }
-}
-```
+![Fund Manager Output](../static/fund_manager_output.png)
 
 ### 처리 흐름
 ```mermaid

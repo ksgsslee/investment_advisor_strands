@@ -125,7 +125,7 @@ class AgentClient:
 
 agent_client = AgentClient()
 
-def financial_node(state: InvestmentState):
+def financial_node(state: FundManagerState):
     """재무 분석 노드"""
     writer = get_stream_writer()
     writer({"type": "node_start", "agent_name": "financial", "session_id": state["session_id"]})
@@ -141,7 +141,7 @@ def financial_node(state: InvestmentState):
     state["financial_analysis"] = result
     return state
 
-def portfolio_node(state: InvestmentState):
+def portfolio_node(state: FundManagerState):
     """포트폴리오 노드"""
     writer = get_stream_writer()
     writer({"type": "node_start", "agent_name": "portfolio", "session_id": state["session_id"]})
@@ -157,7 +157,7 @@ def portfolio_node(state: InvestmentState):
     state["portfolio_recommendation"] = result
     return state
 
-def risk_node(state: InvestmentState):
+def risk_node(state: FundManagerState):
     """리스크 분석 노드"""
     writer = get_stream_writer()
     writer({"type": "node_start", "agent_name": "risk", "session_id": state["session_id"]})

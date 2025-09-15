@@ -255,5 +255,5 @@ portfolio_architect/mcp_server/Dockerfile
 portfolio_architect/mcp_server/.dockerignore
 risk_manager/Dockerfile
 risk_manager/.dockerignore
-investment_advisor/Dockerfile
-investment_advisor/.dockerignore
+fund_manager/Dockerfile
+fund_manager/.dockerignore

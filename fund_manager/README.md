@@ -109,7 +109,7 @@ streamlit run app.py
 - 전체 투자 상담 세션을 자동 요약
 - Short-term: 각 에이전트 결과를 세션별 대화로 저장 (7일)
 - Long-term: SUMMARY 전략이 전체 세션을 자동 요약하여 영구 보존
-- 네임스페이스: `investment/session/{sessionId}` 구조
+- 네임스페이스: `fund_management/session/{sessionId}` 구조
 
 
 
@@ -128,7 +128,7 @@ class Config:
 memory_client.get_events(memory_id=memory_id, session_id=session_id)
 
 # Long-term: SUMMARY 조회
-memory_client.search(memory_id=memory_id, query="investment analysis summary")
+memory_client.search(memory_id=memory_id, query="fund management analysis summary")
 ```
 
 ## 🔍 모니터링

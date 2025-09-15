@@ -53,7 +53,7 @@ def display_calculator_result(trace_container, tool_input, result_text):
     trace_container.markdown("**Calculator 도구로 계산된 수익률**")
     trace_container.code(f"Input: {tool_input}\n\n{result_text}", language="text")
 
-def invoke_financial_advisor(input_data):
+def invoke_financial_analyst(input_data):
     """AgentCore Runtime 호출"""
     try:
         response = agentcore_client.invoke_agent_runtime(
@@ -230,7 +230,7 @@ if submitted:
     
     with st.spinner("AI 분석 중..."):
         try:
-            result = invoke_financial_advisor(input_data)
+            result = invoke_financial_analyst(input_data)
             
             if result['status'] == 'error':
                 st.error(f"❌ 분석 중 오류가 발생했습니다: {result.get('error', 'Unknown error')}")

@@ -67,15 +67,7 @@ streamlit run app.py
 - **관심 분야**: 10개 투자 섹터 중 복수 선택
 
 ### 출력 결과
-```json
-{
-  "risk_profile": "공격적",
-  "risk_profile_reason": "35세, 10년 경험으로 높은 위험 감수 능력",
-  "required_annual_return_rate": 40.0,
-  "key_sectors": ["성장주", "암호화폐", "글로벌 주식"],
-  "summary": "40% 목표 수익률 달성을 위한 공격적 투자 전략 필요"
-}
-```
+![Financial Analyst Output](../static/financial_analyst_output.png)
 
 ### 처리 흐름
 ```mermaid

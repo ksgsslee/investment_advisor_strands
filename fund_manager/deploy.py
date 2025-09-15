@@ -183,15 +183,15 @@ def deploy_fund_manager(agent_arns, memory_id):
         "ecr_repo_name": ecr_repo_name
     }
 
-def save_deployment_info(advisor_info, agent_arns):
+def save_deployment_info(fund_manager_info, agent_arns):
     """배포 정보 저장"""
     deployment_info = {
         "agent_name": Config.AGENT_NAME,
-        "agent_arn": advisor_info["agent_arn"],
-        "agent_id": advisor_info["agent_id"],
+        "agent_arn": fund_manager_info["agent_arn"],
+        "agent_id": fund_manager_info["agent_id"],
         "region": Config.REGION,
-        "iam_role_name": advisor_info["iam_role_name"],
-        "ecr_repo_name": advisor_info.get("ecr_repo_name"),
+        "iam_role_name": fund_manager_info["iam_role_name"],
+        "ecr_repo_name": fund_manager_info.get("ecr_repo_name"),
         "dependent_agents": agent_arns,
         "deployed_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }

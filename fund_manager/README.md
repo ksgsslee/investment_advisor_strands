@@ -179,4 +179,4 @@ fund_manager/
 - **지능형 메모리**: SUMMARY 전략으로 상담 히스토리 자동 요약 및 영구 보존
 - **엔터프라이즈급**: 각 에이전트가 독립 배포되어 확장성과 유지보수성 확보
 
-Fund Manager는 **LangGraph + AgentCore Memory**를 활용한 차세대 Multi-Agent 펀드 매니저 시스템으로, 3개 전문 에이전트의 협업을 통해 은행급 투자 서비스를 제공합니다! 🚀
+Fund Manager는 **LangGraph + AgentCore Memory**를 활용한 차세대 Multi-Agent 펀드 매니저 시스템으로, 3개 전문 에이전트의 협업을 통해 은행급 펀드 매니징 서비스를 제공합니다! 🚀

@@ -373,7 +373,7 @@ fund_manager_strands/
 │   ├── 📂 lambda/                 # Lambda 함수 (데이터 조회)
 │   └── 📂 gateway/                # MCP Gateway (Lambda → MCP 도구)
 │
-├── 📂 fund_manager/               # Lab 4: 통합 자문 (AgentCore Memory)
+├── 📂 fund_manager/               # Lab 4: 통합 매니징 (AgentCore Memory)
 │   ├── 📄 README.md               # 상세 설명 및 사용법
 │   ├── 🚀 deploy.py               # 개별 배포
 │   ├── 🌐 app.py                  # Streamlit 통합 웹앱 (메인)

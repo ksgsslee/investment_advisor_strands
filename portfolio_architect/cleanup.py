@@ -81,20 +81,62 @@ def delete_cognito_resources(user_pool_id, region):
     try:
         cognito = boto3.client('cognito-idp', region_name=region)
         
-        # 클라이언트들 삭제
-        clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id)
-        for client in clients['UserPoolClients']:
-            cognito.delete_user_pool_client(
-                UserPoolId=user_pool_id,
-                ClientId=client['ClientId']
-            )
+        print(f"🔍 Cognito User Pool 삭제 시작: {user_pool_id}")
         
-        # User Pool 삭제
+        # 1. User Pool Domain 삭제 (있는 경우)
+        try:
+            domain_prefix = user_pool_id.replace("_", "").lower()
+            cognito.delete_user_pool_domain(
+                Domain=domain_prefix,
+                UserPoolId=user_pool_id
+            )
+            print(f"✅ User Pool Domain 삭제: {domain_prefix}")
+            time.sleep(2)  # Domain 삭제 대기
+        except Exception as e:
+            print(f"ℹ️ User Pool Domain 삭제 스킵 (없거나 이미 삭제됨): {e}")
+        
+        # 2. Resource Server들 삭제
+        try:
+            resource_servers = cognito.list_resource_servers(
+                UserPoolId=user_pool_id,
+                MaxResults=50  # maxResults 파라미터 명시적으로 설정
+            )
+            for server in resource_servers['ResourceServers']:
+                cognito.delete_resource_server(
+                    UserPoolId=user_pool_id,
+                    Identifier=server['Identifier']
+                )
+                print(f"✅ Resource Server 삭제: {server['Identifier']}")
+        except Exception as e:
+            print(f"ℹ️ Resource Server 삭제 스킵: {e}")
+        
+        # 3. 클라이언트들 삭제
+        try:
+            clients = cognito.list_user_pool_clients(
+                UserPoolId=user_pool_id,
+                MaxResults=50  # maxResults 파라미터 명시적으로 설정
+            )
+            for client in clients['UserPoolClients']:
+                cognito.delete_user_pool_client(
+                    UserPoolId=user_pool_id,
+                    ClientId=client['ClientId']
+                )
+                print(f"✅ User Pool Client 삭제: {client['ClientId']}")
+        except Exception as e:
+            print(f"ℹ️ User Pool Client 삭제 스킵: {e}")
+        
+        # 4. User Pool 삭제
+        time.sleep(3)  # 리소스 정리 대기
         cognito.delete_user_pool(UserPoolId=user_pool_id)
-        print(f"✅ Cognito User Pool 삭제: {user_pool_id} (리전: {region})")
+        print(f"✅ Cognito User Pool 삭제 완료: {user_pool_id} (리전: {region})")
+        return True
+        
+    except cognito.exceptions.ResourceNotFoundException:
+        print(f"ℹ️ Cognito User Pool이 이미 삭제됨: {user_pool_id}")
         return True
     except Exception as e:
         print(f"⚠️ Cognito 삭제 실패: {e}")
+        print(f"💡 수동 삭제 필요: AWS 콘솔에서 User Pool {user_pool_id}를 확인하세요.")
         return False
 
 def cleanup_local_files():

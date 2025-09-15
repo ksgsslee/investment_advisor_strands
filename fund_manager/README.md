@@ -1,11 +1,12 @@
 # Fund Manager
 
-**LangGraph + AgentCore Memory 기반 Multi-Agent 펀드 매니저 시스템**
+**LangGraph + AgentCore Memory**를 활용한 AI 펀드 매니저입니다.
 
-3개의 전문 AI 에이전트가 LangGraph 워크플로우로 협업하여 종합적인 투자 분석을 제공하고, AgentCore Memory를 통해 상담 히스토리를 자동으로 관리하는 엔터프라이즈급 펀드 매니저 시스템입니다.
+## 🎯 개요
 
-## 🎯 핵심 기능
+3개의 전문 AI 에이전트(Financial Analyst, Portfolio Architect, Risk Manager)를 LangGraph 워크플로우로 통합하여 종합적인 투자 분석을 제공하고, AgentCore Memory를 통해 상담 히스토리를 자동으로 관리하는 AI 에이전트입니다.
 
+### 핵심 기능
 - **LangGraph 워크플로우**: 3개 에이전트의 순차적 협업 시스템
 - **실시간 스트리밍**: 각 에이전트의 사고 과정과 도구 사용을 실시간 시각화
 - **AgentCore Memory**: SUMMARY 전략으로 상담 히스토리 자동 요약 및 영구 보존
@@ -39,20 +40,27 @@ workflow.add_edge("risk", END)
 - **Data Sources**: yfinance (실시간 ETF/뉴스/시장 데이터)
 - **UI**: Streamlit
 
-### 에이전트 워크플로우
+## 🚀 설치 및 실행
 
-1. **Financial Analyst** → 재무 분석 및 위험 성향 평가 (Calculator 도구)
-2. **Portfolio Architect** → 실시간 ETF 데이터 기반 포트폴리오 설계 (MCP Server)
-3. **Risk Manager** → 뉴스 기반 리스크 분석 및 시나리오 플래닝 (MCP Gateway)
+### 1. 환경 설정
+```bash
+# 루트 폴더에서 의존성 설치
+cd ..
+pip install -r requirements.txt
 
-## 🚀 배포 및 실행
+# AWS 자격 증명 설정
+aws configure
 
-### 1. 사전 요구사항
+# fund_manager 폴더로 이동
+cd fund_manager
+```
+
+### 2. 사전 요구사항
 모든 개별 에이전트가 먼저 배포되어 있어야 합니다:
 
 ```bash
 # 1. Financial Analyst
-cd financial_analyst && python deploy.py
+cd ../financial_analyst && python deploy.py
 
 # 2. Portfolio Architect (MCP Server 포함)
 cd ../portfolio_architect/mcp_server && python deploy_mcp.py
@@ -65,43 +73,85 @@ cd ../gateway && python deploy_gateway.py
 cd .. && python deploy.py
 ```
 
-### 2. Fund Manager 배포
+### 3. 배포
 ```bash
-# Memory 먼저 배포
-cd fund_manager/agentcore_memory
+# Memory 먼저 배포 (필수)
+cd agentcore_memory
 python deploy_agentcore_memory.py
 
 # Fund Manager Runtime 배포
-cd .. && python deploy.py
+cd ..
+python deploy.py
 
-# Streamlit 앱 실행
+# 배포 상태 확인
+cat deployment_info.json
+```
+
+### 4. Streamlit 실습
+```bash
+# 웹 앱 실행
 streamlit run app.py
+
+# 브라우저에서 http://localhost:8501 접속
 ```
 
 ## 📊 사용 방법
 
-### 새로운 투자 상담
-1. 투자자 정보 입력 (나이, 투자 경험, 투자 금액, 목표 금액 등)
-2. LangGraph 워크플로우 실행 (3개 에이전트 순차 실행)
-3. 실시간 모니터링 (각 에이전트의 사고 과정과 도구 사용 확인)
-4. 종합 결과 확인 (재무 분석 → 포트폴리오 설계 → 리스크 시나리오)
-
-### 상담 히스토리
-- AgentCore SUMMARY 전략이 자동으로 생성한 투자 상담 요약 확인
-- Topic별로 구분된 요약 내용을 깔끔하게 표시
-
-## 📋 입력/출력
-
 ### 입력 정보
-- 투자 가능 금액, 목표 금액 (억원 단위)
-- 나이, 투자 경험 연수
-- 투자 목적, 관심 투자 분야
+- **투자 가능 금액**: 억원 단위 (예: 0.5 = 5천만원)
+- **목표 금액**: 1년 후 목표 금액
+- **나이**: 연령대 선택
+- **투자 경험**: 주식 투자 경험 연수
+- **투자 목적**: 단기 수익, 노후 준비 등
+- **관심 분야**: 10개 투자 섹터 중 복수 선택
+
+### 출력 결과
+```json
+{
+  "financial_analysis": {
+    "risk_profile": "공격적",
+    "required_annual_return_rate": 40.0,
+    "key_sectors": ["성장주", "기술주", "글로벌 주식"]
+  },
+  "portfolio_design": {
+    "portfolio_allocation": {"QQQ": 50, "SPY": 30, "GLD": 20},
+    "portfolio_scores": {
+      "profitability": {"score": 8},
+      "risk_management": {"score": 7},
+      "diversification": {"score": 9}
+    }
+  },
+  "risk_scenarios": {
+    "scenario1": {
+      "name": "테크 주도 경기 회복",
+      "probability": "35%",
+      "allocation_management": {"QQQ": 70, "SPY": 25, "GLD": 5}
+    }
+  }
+}
+```
 
 ### 처리 흐름
-1. **Financial Analyst**: Calculator로 수익률 계산 → 위험 성향 평가
-2. **Portfolio Architect**: MCP Server로 ETF 분석 → 포트폴리오 배분
-3. **Risk Manager**: MCP Gateway로 뉴스/시장 데이터 분석 → 리스크 시나리오
-4. **Memory**: SUMMARY 전략으로 상담 세션 자동 요약
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant F as Fund Manager
+    participant FA as Financial Analyst
+    participant PA as Portfolio Architect
+    participant RM as Risk Manager
+    participant M as Memory
+    
+    U->>F: 투자자 정보 입력
+    F->>FA: 재무 분석 요청
+    FA-->>F: 위험 성향 + 목표 수익률
+    F->>PA: 포트폴리오 설계 요청
+    PA-->>F: 포트폴리오 배분 + 평가
+    F->>RM: 리스크 분석 요청
+    RM-->>F: 리스크 시나리오 + 조정 전략
+    F->>M: 상담 세션 저장
+    M-->>F: 자동 요약 생성
+    F-->>U: 종합 투자 가이드
+```
 
 ## 🧠 AgentCore Memory 시스템
 

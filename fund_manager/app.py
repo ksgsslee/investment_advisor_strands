@@ -15,11 +15,11 @@ from pathlib import Path
 from bedrock_agentcore.memory import MemoryClient
 
 st.set_page_config(
-    page_title="🤖 Fund Manager",
+    page_title="🤖 Agentic AI Fund Manager",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-st.title("🤖 Fund Manager")
+st.title("🤖 Agentic AI Fund Manager")
 
 # 세션 관리 초기화 - 페이지 로드 시 자동 생성
 if 'current_session_id' not in st.session_state:

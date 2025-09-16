@@ -28,5 +28,5 @@ ENTRYPOINT [ "streamlit", "run", "app.py", \
              "--browser.serverAddress", "0.0.0.0", \
              "--server.enableCORS", "false", \
              "--server.enableXsrfProtection", "false", \
-             "--server.baseUrlPath", "/ia", \
+             "--server.baseUrlPath", "/fm", \
              "--server.port", "80"]

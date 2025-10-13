@@ -200,7 +200,34 @@ def create_gateway(gateway_name, role_arn, auth_components, region):
         description=f'{gateway_name} - MCP Gateway for AI agent integration'
     )
     
-    print(f"✅ Gateway 생성 완료: {gateway['gatewayId']}")
+    gateway_id = gateway['gatewayId']
+    print(f"✅ Gateway 생성 시작: {gateway_id}")
+    
+    # Gateway가 READY 상태가 될 때까지 대기
+    print("⏳ Gateway가 READY 상태가 될 때까지 대기 중...")
+    max_attempts = 60  # 최대 5분 대기
+    for attempt in range(max_attempts):
+        try:
+            response = gateway_client.get_gateway(gatewayIdentifier=gateway_id)
+            status = response['status']
+            
+            if status == 'READY':
+                print(f"✅ Gateway READY 상태 확인: {gateway_id}")
+                break
+            elif status in ['CREATE_FAILED', 'DELETE_FAILED']:
+                raise Exception(f"Gateway 생성 실패: {status}")
+            
+            if attempt % 6 == 0:  # 30초마다 상태 출력
+                print(f"   상태: {status} ({attempt * 5}초 경과)")
+            
+            time.sleep(5)
+        except Exception as e:
+            if attempt == max_attempts - 1:
+                raise Exception(f"Gateway 상태 확인 실패: {str(e)}")
+            time.sleep(5)
+    else:
+        raise Exception("Gateway READY 상태 대기 시간 초과")
+    
     return gateway
 
 
